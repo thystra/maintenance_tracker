@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+	<id>maintenance_tracker</id>
+	<name>Maintenance Tracker</name>
+	<summary>Track maintenance, usage, service history, and ownership costs</summary>
+	<description><![CDATA[
+Track recurring maintenance for vehicles, homes, tools, health equipment, and
+other assets. Record meter readings, service history, costs, parts, receipts,
+and reminders while keeping the data in your Nextcloud.
+	]]></description>
+	<version>0.1.0</version>
+	<licence>AGPL-3.0-or-later</licence>
+	<author homepage="https://github.com/thystra">Alan Johnson</author>
+	<namespace>MaintenanceTracker</namespace>
+	<category>organization</category>
+	<website>https://github.com/thystra/maintenance_tracker</website>
+	<bugs>https://github.com/thystra/maintenance_tracker/issues</bugs>
+	<repository>https://github.com/thystra/maintenance_tracker</repository>
+	<dependencies>
+		<php min-version="8.2" max-version="8.5" min-int-size="64"/>
+		<nextcloud min-version="34" max-version="34"/>
+		<database>pgsql</database>
+		<database>mysql</database>
+		<database>sqlite</database>
+	</dependencies>
+	<navigations>
+		<navigation>
+			<id>maintenance_tracker</id>
+			<name>Maintenance Tracker</name>
+			<route>maintenance_tracker.page.index</route>
+			<icon>app.svg</icon>
+			<type>link</type>
+		</navigation>
+	</navigations>
+</info>

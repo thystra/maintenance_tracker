@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "id": "org.argentwolf.maintenance.generic-car",
+  "version": "0.1.0",
+  "name": "Generic passenger vehicle",
+  "category": "vehicle",
+  "description": "A conservative starter profile for a passenger vehicle. It intentionally avoids engine, fuel-filter, and propulsion-specific assumptions. Verify every interval against the vehicle manufacturer.",
+  "dataLicense": "CC0-1.0",
+  "provenance": {
+    "author": "Maintenance Tracker contributors",
+    "sourceUrl": "https://github.com/thystra/maintenance_tracker"
+  },
+  "applicability": {
+    "tags": [
+      "car",
+      "vehicle",
+      "generic"
+    ]
+  },
+  "meters": [
+    {
+      "key": "odometer",
+      "name": "Odometer",
+      "dimension": "distance",
+      "displayUnit": "mi",
+      "monotonic": true
+    }
+  ],
+  "components": [
+    {
+      "key": "tire",
+      "name": "Tire",
+      "quantity": 4,
+      "enabledByDefault": true,
+      "notes": "The installer creates one component instance per tire so service history can differ.",
+      "compatiblePartKeys": []
+    },
+    {
+      "key": "wiper_blade",
+      "name": "Front wiper blade",
+      "quantity": 2,
+      "enabledByDefault": true,
+      "compatiblePartKeys": []
+    },
+    {
+      "key": "cabin_filter",
+      "name": "Cabin air filter",
+      "quantity": 1,
+      "enabledByDefault": false,
+      "notes": "Enable only when fitted and use the manufacturer's interval.",
+      "compatiblePartKeys": []
+    }
+  ],
+  "parts": [],
+  "maintenancePlans": [
+    {
+      "key": "inspect_tires",
+      "title": "Inspect tires and pressure",
+      "kind": "inspection",
+      "componentKey": "tire",
+      "enabledByDefault": true,
+      "combination": "any",
+      "instructions": "Inspect condition, pressure, tread, and visible damage. Use the vehicle manufacturer's pressure specification.",
+      "triggers": [
+        {
+          "type": "calendar",
+          "interval": {
+            "value": 1,
+            "unit": "month"
+          }
+        }
+      ],
+      "compatiblePartKeys": []
+    },
+    {
+      "key": "rotate_tires",
+      "title": "Review tire rotation",
+      "kind": "maintenance",
+      "componentKey": "tire",
+      "enabledByDefault": true,
+      "combination": "any",
+      "instructions": "Use the pattern and interval specified by the vehicle and tire manufacturers.",
+      "triggers": [
+        {
+          "type": "meter",
+          "meterKey": "odometer",
+          "interval": {
+            "value": 7500,
+            "unit": "mi"
+          }
+        },
+        {
+          "type": "calendar",
+          "interval": {
+            "value": 12,
+            "unit": "month"
+          }
+        }
+      ],
+      "compatiblePartKeys": []
+    },
+    {
+      "key": "inspect_wipers",
+      "title": "Inspect wiper blades",
+      "kind": "inspection",
+      "componentKey": "wiper_blade",
+      "enabledByDefault": true,
+      "combination": "any",
+      "triggers": [
+        {
+          "type": "calendar",
+          "interval": {
+            "value": 6,
+            "unit": "month"
+          }
+        }
+      ],
+      "compatiblePartKeys": []
+    },
+    {
+      "key": "registration",
+      "title": "Renew registration",
+      "kind": "administration",
+      "enabledByDefault": true,
+      "combination": "any",
+      "notes": "Adjust the due date and renewal details for the applicable jurisdiction.",
+      "triggers": [
+        {
+          "type": "calendar",
+          "interval": {
+            "value": 1,
+            "unit": "year"
+          }
+        }
+      ],
+      "compatiblePartKeys": []
+    },
+    {
+      "key": "replace_cabin_filter",
+      "title": "Review cabin air filter replacement",
+      "kind": "maintenance",
+      "componentKey": "cabin_filter",
+      "enabledByDefault": false,
+      "combination": "any",
+      "instructions": "Enable only when the vehicle has this component. Replace according to manufacturer guidance and operating conditions.",
+      "triggers": [
+        {
+          "type": "calendar",
+          "interval": {
+            "value": 1,
+            "unit": "year"
+          }
+        },
+        {
+          "type": "meter",
+          "meterKey": "odometer",
+          "interval": {
+            "value": 15000,
+            "unit": "mi"
+          }
+        }
+      ],
+      "compatiblePartKeys": []
+    }
+  ]
+}

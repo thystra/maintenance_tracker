@@ -1,0 +1,50 @@
+{
+	"name": "thystra/maintenance-tracker",
+	"description": "Maintenance, usage, cost, and mileage tracking for Nextcloud",
+	"type": "nextcloud-app",
+	"license": "AGPL-3.0-or-later",
+	"authors": [
+		{
+			"name": "Alan Johnson",
+			"homepage": "https://github.com/thystra"
+		}
+	],
+	"autoload": {
+		"psr-4": {
+			"OCA\\MaintenanceTracker\\": "lib/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"OCA\\MaintenanceTracker\\Tests\\": "tests/"
+		}
+	},
+	"scripts": {
+		"lint": "find appinfo lib templates tests -name '*.php' -print0 | xargs -0 -n1 php -l",
+		"test:unit": "phpunit -c tests/phpunit.xml --colors=always --fail-on-warning --fail-on-risky",
+		"test": [
+			"@lint",
+			"@test:unit"
+		]
+	},
+	"require": {
+		"php": ">=8.2 <8.6"
+	},
+	"require-dev": {
+		"nextcloud/ocp": "dev-stable34",
+		"phpunit/phpunit": "^11.5 || ^12.0",
+		"roave/security-advisories": "dev-latest"
+	},
+	"config": {
+		"allow-plugins": {
+			"composer/package-versions-deprecated": true
+		},
+		"optimize-autoloader": true,
+		"sort-packages": true,
+		"platform": {
+			"php": "8.2.0"
+		}
+	},
+	"minimum-stability": "dev",
+	"prefer-stable": true
+}

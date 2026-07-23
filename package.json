@@ -1,0 +1,50 @@
+{
+	"name": "maintenance_tracker",
+	"version": "0.1.0",
+	"private": true,
+	"license": "AGPL-3.0-or-later",
+	"type": "module",
+	"scripts": {
+		"build": "npm run clean:build && vite build",
+		"clean:build": "node scripts/clean-build.mjs",
+		"dev": "npm run clean:build && vite --mode development build",
+		"lint": "eslint src scripts eslint.config.mjs stylelint.config.mjs vite.config.ts package.json",
+		"stylelint": "stylelint \"src/**/*.{vue,scss,css}\"",
+		"typecheck": "vue-tsc --noEmit",
+		"validate:profiles": "node scripts/validate-profiles.mjs",
+		"watch": "npm run clean:build && vite --mode development build --watch"
+	},
+	"browserslist": [
+		"extends @nextcloud/browserslist-config"
+	],
+	"dependencies": {
+		"@nextcloud/axios": "^2.5.0",
+		"@nextcloud/router": "^3.0.1",
+		"@nextcloud/vue": "^9.9.0",
+		"vue": "^3.5.35"
+	},
+	"devDependencies": {
+		"@nextcloud/browserslist-config": "^3.1.2",
+		"@nextcloud/eslint-config": "^9.0.1",
+		"@nextcloud/stylelint-config": "^3.2.2",
+		"@nextcloud/vite-config": "^2.5.4",
+		"@vue/tsconfig": "^0.9.1",
+		"ajv": "^8.17.1",
+		"ajv-formats": "^3.0.1",
+		"eslint": "^10.6.0",
+		"stylelint": "^17.9.1",
+		"typescript": "^5.9.3",
+		"vite": "^7.3.6",
+		"vue-tsc": "^3.0.5"
+	},
+	"engines": {
+		"node": "^24.0.0",
+		"npm": "^11.3.0"
+	},
+	"allowScripts": {
+		"@parcel/watcher@2.6.0": true,
+		"core-js@3.49.0": true,
+		"esbuild@0.25.12": true,
+		"esbuild@0.28.1": true
+	}
+}
