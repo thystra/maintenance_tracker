@@ -33,6 +33,7 @@ final class AssetValidatorTest extends TestCase {
 		self::assertSame('Ingersoll Rand', $result['manufacturer']);
 		self::assertSame(2024, $result['modelYear']);
 		self::assertSame('other', $result['category']);
+		self::assertNull($result['assetClass']);
 		self::assertSame('active', $result['status']);
 		self::assertNull($result['currency']);
 		self::assertNull($result['purchasePriceMinor']);

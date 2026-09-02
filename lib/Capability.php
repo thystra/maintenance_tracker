@@ -25,6 +25,10 @@ final class Capability implements ICapability {
 				'features' => [
 					'private-workspace',
 					'assets',
+					'custom-categories',
+					'asset-classes',
+					'component-instances',
+					'structured-specifications',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

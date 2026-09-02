@@ -5,12 +5,12 @@
 Maintenance Tracker is a classic Nextcloud PHP app. Nextcloud owns
 authentication, sessions, database connections, user files, and the web shell.
 The app owns maintenance-domain data and exposes it through a versioned OCS API
-used by both the Vue web client and the future Android client.
+used by the Vue desktop management client and a future offline-first Vue mobile client/PWA, with Capacitor packaging planned when native Android/iOS capabilities are needed.
 
 ```text
 Nextcloud web UI ─┐
                   ├─ OCS API ─ domain services ─ PostgreSQL/MariaDB/SQLite
-Android client ───┘                    │
+Mobile/PWA client ─┘                    │
                                       ├─ Nextcloud Files (receipts/photos)
                                       ├─ Calendar projection
                                       └─ Activity/notifications

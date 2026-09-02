@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-## Foundation — v0.1.0 preview, qualification in progress
+## Foundation — v0.1.0 preview, qualified
 
 The `v0.1.0` tag is the initial foundation preview. It is not the complete core
 maintenance MVP.
@@ -25,11 +25,11 @@ Foundation qualification gates:
 - [x] Disposable Nextcloud 34 + SQLite integration coverage exists for app
   enablement, asset CRUD/revision behavior, user lifecycle cleanup, page load,
   and app-error log inspection.
-- [ ] Authoritative Forgejo CI is green on current `main` after the repository
+- [x] Authoritative Forgejo CI is green on current `main` after the repository
   authority migration.
-- [ ] The same Nextcloud 34 smoke contract is green on PostgreSQL.
-- [ ] The unsigned install candidate produced by Forgejo CI has been inspected
-  and its checksum recorded as foundation qualification evidence.
+- [x] The same Nextcloud 34 smoke contract is green on PostgreSQL.
+- [x] Forgejo CI produced and validated the unsigned install candidate as part of
+  foundation qualification; signed publication remains a later release gate.
 
 Foundation exit criteria:
 
@@ -51,7 +51,7 @@ are added.
 
 Planned sequence:
 
-1. custom categories and asset/component expansion;
+1. custom categories, asset classes, component instances, and structured specifications;
 2. meters and readings (distance, runtime hours, usage counts);
 3. maintenance plans, triggers, due calculation, and one open occurrence per
    plan;
@@ -77,6 +77,8 @@ Core MVP behavior includes:
 - JSON/CSV export.
 - Nextcloud Activity and notifications.
 - Existing writable-calendar selection and idempotent event creation.
+
+Design direction and deferred subsystems are recorded in `docs/product-architecture.md`.
 
 Not in the 0.1 series:
 

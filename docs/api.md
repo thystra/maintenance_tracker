@@ -112,6 +112,16 @@ returns `412`.
 Accepts `expectedRevision` and performs a soft delete. The retained tombstone is
 needed for offline synchronization.
 
+## Inventory expansion endpoints
+
+`GET /categories` returns built-in and workspace-defined categories. `POST /categories` creates a custom category with a default broad asset class. Assets now return `assetClass`; when omitted on create, the category default is used.
+
+`GET /assets/{uuid}/components` lists active component instances for an asset. `POST /assets/{uuid}/components` creates an individually identified component and may set `parentUuid` to form a nested component tree.
+
+`GET /assets/{uuid}/specifications` lists structured specifications for the asset and its components. `POST /assets/{uuid}/specifications` creates a semantic key/label/value record with optional `unit`, `regime`, `componentUuid`, and provenance `source`.
+
+These resources remain experimental. Update/archive contracts for categories, components, and specifications will be completed before the OCS API is declared stable.
+
 ## Errors
 
 - `400`: invalid or unknown fields.

@@ -180,6 +180,27 @@ done
 assert_contains "$capabilities" '"statuscode":200' 'capabilities'
 assert_contains "$capabilities" '"cursor-pagination"' 'capabilities'
 
+assert_contains "$capabilities" '"custom-categories"' 'capabilities'
+assert_contains "$capabilities" '"component-instances"' 'capabilities'
+
+categories=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/categories?format=json')
+assert_contains "$categories" '"key":"vehicle"' 'category list'
+
+custom_category=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--request POST \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data '{"category":{"key":"marine","name":"Marine","defaultAssetClass":"equipment"}}' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/categories?format=json')
+assert_contains "$custom_category" '"statuscode":201' 'custom category create'
+assert_contains "$custom_category" '"key":"marine"' 'custom category create'
+
 created=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
 	--request POST \
@@ -190,6 +211,47 @@ created=$(docker exec "$container" curl --silent --show-error \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?format=json')
 assert_contains "$created" '"statuscode":201' 'asset create'
 assert_contains "$created" '"revision":1' 'asset create'
+
+assert_contains "$created" '"assetClass":"vehicle"' 'asset create class'
+
+component=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--request POST \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data '{"component":{"name":"Primary fuel filter","type":"fuel_filter","partNumber":"OEM-PRIMARY"}}' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/components?format=json')
+assert_contains "$component" '"statuscode":201' 'component create'
+assert_contains "$component" '"type":"fuel_filter"' 'component create'
+
+component_uuid=$(printf '%s' "$component" | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["ocs"]["data"]["uuid"] ?? "";')
+test -n "$component_uuid"
+
+specification=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--request POST \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data "{\"specification\":{\"componentUuid\":\"${component_uuid}\",\"key\":\"filter.part_number\",\"label\":\"OEM part number\",\"value\":\"OEM-PRIMARY\",\"source\":{\"type\":\"manual\",\"reference\":\"integration test\"}}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/specifications?format=json')
+assert_contains "$specification" '"statuscode":201' 'specification create'
+assert_contains "$specification" '"key":"filter.part_number"' 'specification create'
+
+component_list=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/components?format=json')
+assert_contains "$component_list" '"Primary fuel filter"' 'component list'
+
+specification_list=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/specifications?format=json')
+assert_contains "$specification_list" '"OEM part number"' 'specification list'
 
 updated=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \

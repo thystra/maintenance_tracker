@@ -82,6 +82,7 @@ final class AssetMapper extends QBMapper {
 		$query = $this->db->getQueryBuilder();
 		$query->update('maint_assets')
 			->set('category_key', $this->stringParameter($query, $asset->getCategoryKey()))
+			->set('asset_class', $this->stringParameter($query, $asset->getAssetClass()))
 			->set('name', $this->stringParameter($query, $asset->getName()))
 			->set('manufacturer', $this->nullableStringParameter($query, $asset->getManufacturer()))
 			->set('model', $this->nullableStringParameter($query, $asset->getModel()))
