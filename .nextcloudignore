@@ -1,4 +1,6 @@
+/.forgejo
 /.github
+/AGENTS.md
 /.gitattributes
 /.gitignore
 /.nextcloudignore
