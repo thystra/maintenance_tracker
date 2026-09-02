@@ -225,7 +225,7 @@ component=$(docker exec "$container" curl --silent --show-error \
 assert_contains "$component" '"statuscode":201' 'component create'
 assert_contains "$component" '"type":"fuel_filter"' 'component create'
 
-component_uuid=$(printf '%s' "$component" | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["ocs"]["data"]["uuid"] ?? "";')
+component_uuid=$(printf '%s' "$component" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["ocs"]["data"]["uuid"] ?? "";')
 test -n "$component_uuid"
 
 specification=$(docker exec "$container" curl --silent --show-error \
