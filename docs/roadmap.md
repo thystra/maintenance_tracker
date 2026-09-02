@@ -1,23 +1,68 @@
 # Delivery roadmap
 
-## Foundation — current
+## Foundation — v0.1.0 preview, qualification in progress
 
-- Nextcloud 34/PHP 8.5 app shell.
+The `v0.1.0` tag is the initial foundation preview. It is not the complete core
+maintenance MVP.
+
+Implemented foundation:
+
+- Nextcloud 34/PHP 8.2–8.5 app shell.
 - Vue web entry point.
 - Authenticated OCS capabilities, workspace, and asset endpoints.
 - Private workspace and role-ready membership.
 - UUID, revision, tombstone, and change-journal foundation.
+- Bounded cursor pagination.
+- Serialized user-deletion/external-ID cleanup that prevents UID reuse from
+  inheriting a previous account's personal workspace.
 - Data-only profile schema and sample.
-- Architecture, security, licensing, and API decisions.
+- Architecture, security, licensing, API, and engineering guidance.
 
-Exit criteria:
+Foundation qualification gates:
 
-- PHP syntax, PHPUnit, frontend lint/typecheck/build pass.
-- App installs and migration applies on a disposable Nextcloud 34 instance.
-- Asset create/list/update/delete is verified through OCS.
-- PostgreSQL is exercised before deployment to Nidhoggur.
+- [x] PHP/frontend deterministic checks were established for the `v0.1.0`
+  foundation.
+- [x] Disposable Nextcloud 34 + SQLite integration coverage exists for app
+  enablement, asset CRUD/revision behavior, user lifecycle cleanup, page load,
+  and app-error log inspection.
+- [ ] Authoritative Forgejo CI is green on current `main` after the repository
+  authority migration.
+- [ ] The same Nextcloud 34 smoke contract is green on PostgreSQL.
+- [ ] The unsigned install candidate produced by Forgejo CI has been inspected
+  and its checksum recorded as foundation qualification evidence.
 
-## 0.1 — Core maintenance MVP
+Foundation exit criteria:
+
+- PHP syntax, PHPUnit, frontend lint/typecheck/build pass in authoritative CI.
+- App installs and migrations apply on a disposable Nextcloud 34 instance.
+- Asset create/list/update/delete and stale-revision behavior are verified
+  through OCS.
+- User deletion/UID-reuse behavior remains verified.
+- PostgreSQL is exercised before production deployment.
+
+Do not mark a gate complete merely because its workflow or test code exists; the
+corresponding Forgejo run must actually pass.
+
+## 0.1 series — Core maintenance MVP
+
+Implement this milestone in vertical tranches so each new domain layer can be
+migrated, authorized, exposed through OCS, and tested before dependent layers
+are added.
+
+Planned sequence:
+
+1. custom categories and asset/component expansion;
+2. meters and readings (distance, runtime hours, usage counts);
+3. maintenance plans, triggers, due calculation, and one open occurrence per
+   plan;
+4. service/completion records and free-form notes;
+5. validated local profile installation into real domain records;
+6. parts, compatible part numbers, store links, and central cost entries;
+7. photos/receipts in Nextcloud Files;
+8. Nextcloud Activity, notifications, and writable-calendar projection;
+9. JSON/CSV export and UI/accessibility hardening.
+
+Core MVP behavior includes:
 
 - Custom categories.
 - Assets and individually suppressible component instances.
@@ -33,7 +78,7 @@ Exit criteria:
 - Nextcloud Activity and notifications.
 - Existing writable-calendar selection and idempotent event creation.
 
-Not in 0.1:
+Not in the 0.1 series:
 
 - household sharing UI;
 - remote profile marketplace;

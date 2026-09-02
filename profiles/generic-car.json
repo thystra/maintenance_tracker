@@ -8,7 +8,7 @@
   "dataLicense": "CC0-1.0",
   "provenance": {
     "author": "Maintenance Tracker contributors",
-    "sourceUrl": "https://github.com/thystra/maintenance_tracker"
+    "sourceUrl": "https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud"
   },
   "applicability": {
     "tags": [

@@ -1,6 +1,8 @@
 * text=auto eol=lf
 
+/.forgejo export-ignore
 /.github export-ignore
+/AGENTS.md export-ignore
 /.gitattributes export-ignore
 /.gitignore export-ignore
 /.nextcloudignore export-ignore

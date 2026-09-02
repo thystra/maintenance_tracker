@@ -3,11 +3,23 @@
 Maintenance Tracker is a self-hosted Nextcloud app for recurring maintenance,
 usage meters, service history, costs, vehicle mileage, and supporting documents.
 
-The project is in its foundation phase. The first vertical slice provides a
-Nextcloud 34 app shell, a private per-user workspace, and an authenticated OCS
-API for creating and listing maintained assets. The architecture deliberately
+The project is in its foundation/qualification phase. The first vertical slice
+provides a Nextcloud 34 app shell, a private per-user workspace, and an
+authenticated OCS API for maintained assets. The architecture deliberately
 supports a future offline-first Android client without making the first release
 depend on that client.
+
+## Repository authority
+
+The authoritative development repository is:
+
+```text
+https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud
+```
+
+GitHub is maintained as a downstream mirror. The private GitHub security
+advisory endpoint documented in `SECURITY.md` remains an explicit vulnerability
+reporting channel, but GitHub is not the source, CI, or release authority.
 
 ## Platform targets
 
@@ -53,29 +65,44 @@ npm ci
 npm run build
 ```
 
-Run the local checks:
+Run the deterministic local checks:
 
 ```bash
-composer lint
-composer test:unit
+composer validate --strict
+composer test
+npm run validate:project
+bash tests/validate-project-selftest.sh
+npm run validate:profiles
+npm run typecheck
 npm run lint
 npm run stylelint
-npm run typecheck
-npm run validate:profiles
 npm run build
+git diff --check
+git diff --exit-code -- js css
 ```
 
 Run the disposable Nextcloud 34 integration suite when Docker is available:
 
 ```bash
-sudo bash tests/integration/nextcloud34-smoke.sh
+NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud34-smoke.sh
+NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud34-smoke.sh
 ```
 
-CI repeats these checks on PHP 8.2 and 8.5, builds the frontend, exercises the
-API and user-lifecycle behavior in Nextcloud 34, and publishes an explicitly
-unsigned install-candidate archive. App Store releases need a separate
-integrity-signing step and must not use that unsigned candidate as a published
+The integration harness stages the runtime app and transfers it with
+`docker cp`; it does not require the Docker daemon to bind-mount the source
+checkout. This makes the same harness usable with a local daemon and with the
+isolated Docker daemon used by the Forgejo workstation runners.
+
+Authoritative Forgejo CI repeats the PHP/frontend checks, exercises the app on
+Nextcloud 34 with SQLite and PostgreSQL, and publishes an explicitly unsigned
+install-candidate archive plus checksum. App Store releases need a separate
+integrity-signing step and must not treat that unsigned candidate as a published
 release.
+
+Live package-registry advisory queries are intentionally separate from normal
+CI because registry availability and advisory state are external inputs. Run the
+Forgejo **Dependency advisories** workflow before release and investigate real
+findings without treating a registry outage as a product regression.
 
 For development, clone or mount this repository at:
 
@@ -89,17 +116,20 @@ Then enable it:
 sudo -u www-data php occ app:enable maintenance_tracker
 ```
 
-The target Nidhoggur deployment should use Nextcloud's recommended system cron,
-not AJAX background jobs, before calendar synchronization and reminders are
-enabled.
+Production deployments should use Nextcloud's recommended system cron, not AJAX
+background jobs, before calendar synchronization and reminders are enabled.
+Environment-specific deployment details belong in infrastructure management,
+not this public application repository.
 
 ## Documentation
 
+- [Project/agent guidance](AGENTS.md)
 - [Architecture](docs/architecture.md)
 - [Domain model](docs/domain-model.md)
 - [OCS API](docs/api.md)
 - [Profile format](docs/profile-format.md)
 - [Security and privacy](docs/security.md)
+- [Nextcloud app engineering guidance](docs/NEXTCLOUD-DEVELOPMENT-GUIDANCE.md)
 - [Licensing and distribution](docs/licensing.md)
 - [Roadmap](docs/roadmap.md)
 

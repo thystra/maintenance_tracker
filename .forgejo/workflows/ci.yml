@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    name: PHP ${{ matrix.php }}
+    runs-on: forgejo-workstation
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php:
+          - '8.2'
+          - '8.5'
+
+    steps:
+      - name: Check out repository
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: https://github.com/shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          extensions: dom, libxml, mbstring, xml, xmlwriter
+          tools: composer:v2
+
+      - name: Validate metadata and dependencies
+        run: |
+          set -euo pipefail
+          composer validate --strict
+          php -r 'new SimpleXMLElement(file_get_contents("appinfo/info.xml"));'
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Run PHP checks
+        run: composer test
+
+  frontend:
+    name: Frontend and generated assets
+    runs-on: forgejo-workstation
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
+        with:
+          persist-credentials: false
+
+      - name: Verify runner JavaScript toolchain
+        run: |
+          set -euo pipefail
+          test "$(node --version | cut -d. -f1)" = 'v24'
+          node --version
+          npm --version
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run deterministic frontend checks
+        run: |
+          set -euo pipefail
+          npm run validate:project
+          bash tests/validate-project-selftest.sh
+          npm run validate:profiles
+          npm run typecheck
+          npm run lint
+          npm run stylelint
+          npm run build
+          test -f js/maintenance_tracker-main.mjs
+          test -f css/maintenance_tracker-main.css
+
+      - name: Verify generated assets are committed
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --exit-code -- js css
+
+  nextcloud34:
+    name: Nextcloud 34 / ${{ matrix.database }}
+    runs-on: forgejo-workstation
+    timeout-minutes: 20
+    needs:
+      - php
+      - frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        database:
+          - sqlite
+          - pgsql
+
+    steps:
+      - name: Check out repository
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
+        with:
+          persist-credentials: false
+
+      - name: Install Docker client
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install --yes --no-install-recommends docker.io ca-certificates
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Verify isolated Docker transport
+        run: |
+          set -euo pipefail
+          test -n "${DOCKER_HOST:-}"
+          test ! -S /var/run/docker.sock
+          docker version
+
+      - name: Run disposable Nextcloud 34 integration suite
+        env:
+          NC_SMOKE_DATABASE: ${{ matrix.database }}
+        run: bash tests/integration/nextcloud34-smoke.sh
+
+  package:
+    name: Unsigned install candidate
+    runs-on: forgejo-workstation
+    timeout-minutes: 10
+    needs:
+      - nextcloud34
+
+    steps:
+      - name: Check out repository
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
+        with:
+          persist-credentials: false
+
+      - name: Build unsigned install candidate
+        run: |
+          set -euo pipefail
+          mkdir -p build/stage
+          git archive --format=tar --prefix=maintenance_tracker/ HEAD \
+            | tar -xf - -C build/stage
+          cp -R js css build/stage/maintenance_tracker/
+          tar -C build/stage -czf build/maintenance_tracker-unsigned.tar.gz maintenance_tracker
+          (
+            cd build
+            sha256sum maintenance_tracker-unsigned.tar.gz \
+              > maintenance_tracker-unsigned.tar.gz.sha256
+          )
+          test -f build/stage/maintenance_tracker/appinfo/info.xml
+          test -f build/stage/maintenance_tracker/js/maintenance_tracker-main.mjs
+          test -f build/stage/maintenance_tracker/css/maintenance_tracker-main.css
+          test ! -e build/stage/maintenance_tracker/.forgejo
+          test ! -e build/stage/maintenance_tracker/.github
+          test ! -e build/stage/maintenance_tracker/AGENTS.md
+          test ! -e build/stage/maintenance_tracker/src
+          test ! -e build/stage/maintenance_tracker/tests
+          test ! -e build/stage/maintenance_tracker/package.json
+          tar -tzf build/maintenance_tracker-unsigned.tar.gz
+          (
+            cd build
+            sha256sum -c maintenance_tracker-unsigned.tar.gz.sha256
+          )
+
+      - name: Upload unsigned install candidate
+        uses: https://code.forgejo.org/actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        with:
+          name: maintenance_tracker-unsigned-${{ forgejo.sha }}
+          path: |
+            build/maintenance_tracker-unsigned.tar.gz
+            build/maintenance_tracker-unsigned.tar.gz.sha256
+          if-no-files-found: error

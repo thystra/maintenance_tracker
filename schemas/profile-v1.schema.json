@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/thystra/maintenance_tracker/blob/main/schemas/profile-v1.schema.json",
+  "$id": "https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/src/branch/main/schemas/profile-v1.schema.json",
   "title": "Maintenance Tracker Profile v1",
   "description": "A data-only maintenance template for a class or model of asset.",
   "type": "object",
