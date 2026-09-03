@@ -22,6 +22,7 @@ fixture_paths=(
 	schemas/profile-v1.schema.json
 	lib/AppInfo/Application.php
 	.forgejo/workflows/ci.yml
+	ci/images/qualified-images.json
 )
 
 copy_fixture() {
@@ -54,6 +55,29 @@ if run_validator >"$tmp/runner.out" 2>&1; then
 fi
 grep -Fq 'Authoritative Forgejo CI must not target GitHub-hosted ubuntu-latest runners.' \
 	"$tmp/runner.out"
+
+copy_fixture
+python3 - "$tmp/fixture/.forgejo/workflows/ci.yml" \
+	"$tmp/fixture/ci/images/qualified-images.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+workflow_path = Path(sys.argv[1])
+images_path = Path(sys.argv[2])
+images = json.loads(images_path.read_text())
+php82 = images['images']['php82']
+text = workflow_path.read_text()
+if text.count(php82['reference']) != 1:
+    raise SystemExit('Expected exactly one PHP 8.2 digest reference in workflow fixture.')
+workflow_path.write_text(text.replace(php82['reference'], php82['tag'], 1))
+PY
+if run_validator >"$tmp/image-digest.out" 2>&1; then
+	echo 'Validator accepted a mutable CI image tag.' >&2
+	exit 1
+fi
+grep -Fq 'Routine CI must pin the qualified PHP 8.2 image digest.' \
+	"$tmp/image-digest.out"
 
 copy_fixture
 python3 - "$tmp/fixture/package.json" <<'PY'

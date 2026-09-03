@@ -19,6 +19,8 @@ Usage: scripts/build-ci-images.sh [--push]
 
 Builds and qualifies the Maintenance Tracker CI images. With --push, publishes
 qualified tags to the configured Forgejo registry and prints their RepoDigests.
+After publication, record those exact identities in
+ci/images/qualified-images.json before making routine CI consume them.
 
 Environment overrides:
   CI_IMAGE_REGISTRY    default: forgejo.argentwolf.org

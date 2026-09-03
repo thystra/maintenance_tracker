@@ -18,9 +18,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php:
-          - '8.2'
-          - '8.5'
+        include:
+          - php: '8.2'
+            image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:fbbd1d9067f302fc769e342fe292836131cde3c8b809522f90d7165bbfb2fdc6
+          - php: '8.5'
+            image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:a1c8b402f8cc6a61609cf4b0459b2a795b1b0671b95867995a1dd0b257c2a7dc
+    container:
+      image: ${{ matrix.image }}
 
     steps:
       - name: Check out repository
@@ -28,13 +32,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up PHP
-        uses: https://github.com/shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
-        with:
-          php-version: ${{ matrix.php }}
-          coverage: none
-          extensions: dom, libxml, mbstring, xml, xmlwriter
-          tools: composer:v2
+      - name: Verify qualified PHP CI image
+        run: |
+          set -euo pipefail
+          actual_php="$(php -r 'echo PHP_MAJOR_VERSION . chr(46) . PHP_MINOR_VERSION;')"
+          test "$actual_php" = "${{ matrix.php }}"
+          test "$(node --version | cut -d. -f1)" = 'v24'
+          composer --version
+          git --version
+          php -r 'foreach (["dom", "libxml", "mbstring", "xml", "xmlwriter"] as $ext) { if (!extension_loaded($ext)) { fwrite(STDERR, "Missing PHP extension: {$ext}\n"); exit(1); } }'
 
       - name: Validate metadata and dependencies
         run: |
@@ -92,6 +98,8 @@ jobs:
     name: Nextcloud 34 / ${{ matrix.database }}
     runs-on: forgejo-workstation
     timeout-minutes: 20
+    container:
+      image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud@sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c
     needs:
       - php
       - frontend
@@ -108,16 +116,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Docker client
+      - name: Verify qualified Nextcloud CI image and isolated Docker transport
         run: |
           set -euo pipefail
-          apt-get update
-          apt-get install --yes --no-install-recommends docker.io ca-certificates
-          rm -rf /var/lib/apt/lists/*
-
-      - name: Verify isolated Docker transport
-        run: |
-          set -euo pipefail
+          test "$(node --version | cut -d. -f1)" = 'v24'
+          git --version
+          docker --version
+          test -r /etc/ssl/certs/ca-certificates.crt
           test -n "${DOCKER_HOST:-}"
           test ! -S /var/run/docker.sock
           docker version
