@@ -66,12 +66,20 @@ expect(
 	'.gitattributes must exclude project agent guidance from release archives.',
 )
 expect(
+	attributes.includes('/ci export-ignore'),
+	'.gitattributes must exclude CI image definitions from release archives.',
+)
+expect(
 	nextcloudIgnore.split(/\r?\n/).includes('/.forgejo'),
 	'.nextcloudignore must exclude Forgejo contributor workflows.',
 )
 expect(
 	nextcloudIgnore.split(/\r?\n/).includes('/AGENTS.md'),
 	'.nextcloudignore must exclude project agent guidance.',
+)
+expect(
+	nextcloudIgnore.split(/\r?\n/).includes('/ci'),
+	'.nextcloudignore must exclude CI image definitions.',
 )
 expect(
 	forgejoCi.includes('runs-on: forgejo-workstation'),
