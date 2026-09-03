@@ -7,7 +7,16 @@ import type {
 	Asset,
 	AssetList,
 	Capabilities,
+	Category,
+	CategoryList,
+	Component,
+	ComponentList,
 	CreateAsset,
+	CreateCategory,
+	CreateComponent,
+	CreateSpecification,
+	Specification,
+	SpecificationList,
 } from '../types.ts'
 
 import axios from '@nextcloud/axios'
@@ -40,26 +49,40 @@ function data<T>(response: { data: OcsEnvelope<T> }): T {
 }
 
 export async function getCapabilities(): Promise<Capabilities> {
-	return data(await axios.get<OcsEnvelope<Capabilities>>(
-		endpoint('/capabilities'),
-		requestOptions,
-	))
+	return data(await axios.get<OcsEnvelope<Capabilities>>(endpoint('/capabilities'), requestOptions))
 }
 
 export async function getAssets(cursor: string | null = null): Promise<AssetList> {
-	return data(await axios.get<OcsEnvelope<AssetList>>(
-		endpoint('/assets'),
-		{
-			...requestOptions,
-			params: cursor === null ? undefined : { cursor },
-		},
-	))
+	return data(await axios.get<OcsEnvelope<AssetList>>(endpoint('/assets'), {
+		...requestOptions,
+		params: cursor === null ? undefined : { cursor },
+	}))
 }
 
 export async function createAsset(asset: CreateAsset): Promise<Asset> {
-	return data(await axios.post<OcsEnvelope<Asset>>(
-		endpoint('/assets'),
-		{ asset },
-		requestOptions,
-	))
+	return data(await axios.post<OcsEnvelope<Asset>>(endpoint('/assets'), { asset }, requestOptions))
+}
+
+export async function getCategories(): Promise<CategoryList> {
+	return data(await axios.get<OcsEnvelope<CategoryList>>(endpoint('/categories'), requestOptions))
+}
+
+export async function createCategory(category: CreateCategory): Promise<Category> {
+	return data(await axios.post<OcsEnvelope<Category>>(endpoint('/categories'), { category }, requestOptions))
+}
+
+export async function getComponents(assetUuid: string): Promise<ComponentList> {
+	return data(await axios.get<OcsEnvelope<ComponentList>>(endpoint(`/assets/${assetUuid}/components`), requestOptions))
+}
+
+export async function createComponent(assetUuid: string, component: CreateComponent): Promise<Component> {
+	return data(await axios.post<OcsEnvelope<Component>>(endpoint(`/assets/${assetUuid}/components`), { component }, requestOptions))
+}
+
+export async function getSpecifications(assetUuid: string): Promise<SpecificationList> {
+	return data(await axios.get<OcsEnvelope<SpecificationList>>(endpoint(`/assets/${assetUuid}/specifications`), requestOptions))
+}
+
+export async function createSpecification(assetUuid: string, specification: CreateSpecification): Promise<Specification> {
+	return data(await axios.post<OcsEnvelope<Specification>>(endpoint(`/assets/${assetUuid}/specifications`), { specification }, requestOptions))
 }

@@ -19,6 +19,8 @@ use OCP\DB\Types;
  * @method void setUuid(string $uuid)
  * @method string getCategoryKey()
  * @method void setCategoryKey(string $categoryKey)
+ * @method string getAssetClass()
+ * @method void setAssetClass(string $assetClass)
  * @method string getName()
  * @method void setName(string $name)
  * @method string|null getManufacturer()
@@ -56,6 +58,7 @@ final class Asset extends Entity {
 	protected int $workspaceId = 0;
 	protected string $uuid = '';
 	protected string $categoryKey = 'other';
+	protected string $assetClass = 'other';
 	protected string $name = '';
 	protected ?string $manufacturer = null;
 	protected ?string $model = null;
@@ -77,6 +80,7 @@ final class Asset extends Entity {
 		$this->addType('workspaceId', Types::BIGINT);
 		$this->addType('uuid', Types::STRING);
 		$this->addType('categoryKey', Types::STRING);
+		$this->addType('assetClass', Types::STRING);
 		$this->addType('name', Types::STRING);
 		$this->addType('manufacturer', Types::STRING);
 		$this->addType('model', Types::STRING);
@@ -99,6 +103,7 @@ final class Asset extends Entity {
 	 * @return array{
 	 *     uuid: string,
 	 *     category: string,
+	 *     assetClass: string,
 	 *     name: string,
 	 *     manufacturer: string|null,
 	 *     model: string|null,
@@ -135,6 +140,7 @@ final class Asset extends Entity {
 		return [
 			'uuid' => $this->getUuid(),
 			'category' => $this->getCategoryKey(),
+			'assetClass' => $this->getAssetClass(),
 			'name' => $this->getName(),
 			'manufacturer' => $this->getManufacturer(),
 			'model' => $this->getModel(),

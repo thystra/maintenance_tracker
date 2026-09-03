@@ -9,6 +9,10 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.1 inventory expansion: workspace custom categories, broad asset classes, nested component instances, and structured asset/component specifications with units, regimes, and provenance.
+- OCS and desktop inventory UI for category, component, and specification creation/listing.
+- Product architecture guidance covering desktop/mobile split, offline work bundles, relationships/assignments, usage bases, forecasting, towing/load configurations, weight tickets, and optional geodata.
+
 - Project-specific `AGENTS.md` and reusable Nextcloud engineering guidance.
 - Native Forgejo CI with Nextcloud 34 SQLite/PostgreSQL runtime qualification.
 - Separate scheduled/manual dependency-advisory workflow.

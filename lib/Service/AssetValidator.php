@@ -16,6 +16,7 @@ final class AssetValidator {
 	private const CREATE_FIELDS = [
 		'uuid',
 		'category',
+		'assetClass',
 		'name',
 		'manufacturer',
 		'model',
@@ -32,6 +33,7 @@ final class AssetValidator {
 
 	private const PATCH_FIELDS = [
 		'category',
+		'assetClass',
 		'name',
 		'manufacturer',
 		'model',
@@ -62,6 +64,7 @@ final class AssetValidator {
 		$result = [
 			'uuid' => $this->uuid($input['uuid'] ?? null),
 			'category' => $this->category($input['category'] ?? 'other'),
+			'assetClass' => $this->assetClass($input['assetClass'] ?? null),
 			'name' => $this->requiredText($input['name'], 'name', 255),
 			'manufacturer' => $this->optionalText($input['manufacturer'] ?? null, 'manufacturer', 255),
 			'model' => $this->optionalText($input['model'] ?? null, 'model', 255),
@@ -95,6 +98,7 @@ final class AssetValidator {
 		foreach ($input as $field => $value) {
 			$result[$field] = match ($field) {
 				'category' => $this->category($value),
+				'assetClass' => $this->assetClass($value),
 				'name' => $this->requiredText($value, 'name', 255),
 				'manufacturer' => $this->optionalText($value, 'manufacturer', 255),
 				'model' => $this->optionalText($value, 'model', 255),
@@ -165,6 +169,18 @@ final class AssetValidator {
 		}
 
 		return $category;
+	}
+
+	private function assetClass(mixed $value): ?string {
+		if ($value === null || $value === '') {
+			return null;
+		}
+		$class = $this->requiredText($value, 'assetClass', 32);
+		if (!in_array($class, CategoryService::ASSET_CLASSES, true)) {
+			throw new ValidationException('Unsupported assetClass');
+		}
+
+		return $class;
 	}
 
 	private function status(mixed $value): string {

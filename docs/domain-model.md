@@ -20,7 +20,8 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
 
 `maint_assets`
 : A specific maintained object: vehicle, HVAC unit, tool, CPAP device, trailer,
-  and so on.
+  and so on. `asset_class` is a coarse behavior/relationship class independent
+  of the user-facing category.
 
 `maint_relations`
 : Typed relationships such as vehicle `tows` trailer or generator `powers`
@@ -28,12 +29,14 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
 
 `maint_components`
 : One row per actual component instance. Two fuel filters or two HVAC systems
-  are two rows, not a quantity. Each can be active, suppressed, or retired and
-  can retain independent history.
+  are two rows, not a quantity. Components may be nested and retain independent
+  identity/history.
 
-An asset stores normalized fields used by reports and a small, validated
-specification object for model-specific descriptive facts. Calculation inputs
-do not hide in arbitrary JSON.
+`maint_specs`
+: Structured semantic specifications attached to an asset or component. Values
+  are JSON-typed with optional unit, operating regime, and source provenance.
+  This is descriptive/configuration data; calculation-critical facts should gain
+  explicit validated semantics as the relevant subsystem is implemented.
 
 ## Versioned profiles
 

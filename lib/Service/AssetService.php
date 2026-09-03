@@ -25,6 +25,7 @@ final class AssetService {
 	public function __construct(
 		private AssetMapper $assetMapper,
 		private AssetValidator $validator,
+		private CategoryService $categoryService,
 		private UuidGenerator $uuidGenerator,
 		private ChangeJournal $changeJournal,
 		private ITimeFactory $timeFactory,
@@ -83,6 +84,7 @@ final class AssetService {
 	public function create(WorkspaceContext $context, array $input): Asset {
 		$values = $this->validator->forCreate($input);
 		$workspaceId = $context->workspace()->getId();
+		$values['assetClass'] ??= $this->categoryService->defaultClass($context, $values['category']);
 		$uuid = $values['uuid'] ?? $this->uuidGenerator->generate();
 
 		if ($values['uuid'] !== null) {
@@ -176,6 +178,9 @@ final class AssetService {
 			throw new RevisionConflictException('The asset has changed since it was last read');
 		}
 
+		if (array_key_exists('category', $values) && !array_key_exists('assetClass', $values)) {
+			$values['assetClass'] = $this->categoryService->defaultClass($context, $values['category']);
+		}
 		$this->applyValues($asset, $values);
 		$this->validator->validateRelationships([
 			'profileKey' => $asset->getProfileKey(),
@@ -254,6 +259,9 @@ final class AssetService {
 				case 'category':
 					$asset->setCategoryKey($value);
 					break;
+				case 'assetClass':
+					$asset->setAssetClass($value);
+					break;
 				case 'name':
 					$asset->setName($value);
 					break;
@@ -299,6 +307,7 @@ final class AssetService {
 	 */
 	private function matchesCreate(Asset $asset, array $values): bool {
 		return $asset->getCategoryKey() === $values['category']
+			&& $asset->getAssetClass() === $values['assetClass']
 			&& $asset->getName() === $values['name']
 			&& $asset->getManufacturer() === $values['manufacturer']
 			&& $asset->getModel() === $values['model']

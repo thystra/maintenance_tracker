@@ -125,6 +125,7 @@ not this public application repository.
 
 - [Project/agent guidance](AGENTS.md)
 - [Architecture](docs/architecture.md)
+- [Product architecture](docs/product-architecture.md)
 - [Domain model](docs/domain-model.md)
 - [OCS API](docs/api.md)
 - [Profile format](docs/profile-format.md)

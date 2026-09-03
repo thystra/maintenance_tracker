@@ -1,0 +1,4 @@
+<?php
+
+declare(strict_types=1);namespace OCA\MaintenanceTracker\Db;use OCP\AppFramework\Db\QBMapper;use OCP\DB\QueryBuilder\IQueryBuilder;use OCP\IDBConnection;
+/** @extends QBMapper<Specification> */ final class SpecificationMapper extends QBMapper{public function __construct(IDBConnection $db){parent::__construct($db,'maint_specs',Specification::class);} /** @return list<Specification> */ public function findForAsset(int $ws,int $assetId):array{$q=$this->db->getQueryBuilder();$q->select('*')->from('maint_specs')->where($q->expr()->eq('workspace_id',$q->createNamedParameter($ws,IQueryBuilder::PARAM_INT)))->andWhere($q->expr()->eq('asset_id',$q->createNamedParameter($assetId,IQueryBuilder::PARAM_INT)))->andWhere($q->expr()->isNull('deleted_at'))->orderBy('id','ASC');return $this->findEntities($q);}}
