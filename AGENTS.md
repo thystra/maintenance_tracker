@@ -151,6 +151,15 @@ behavior are separate gates.
 separate Docker-in-Docker daemon through `DOCKER_HOST`; the host Docker socket is
 not exposed.
 
+Project-owned CI images under `ci/images/` separate expensive toolchain
+construction from routine behavior testing. Build and qualify those images
+separately; once published, routine workflows must pin the reviewed Forgejo
+registry digest rather than relying on a mutable tag. The exact qualified image
+set consumed by routine CI is recorded in `ci/images/qualified-images.json`; do
+not change those identities without corresponding build, qualification,
+publication, and registry-digest evidence. Application dependencies remain
+repository/lockfile-owned and must not be baked into CI images.
+
 Do not assume a job-container path is bind-mountable by that daemon. Integration
 harnesses that need repository content inside a Docker container should transfer
 staged content through the Docker API (for example `docker cp`) or another

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "4ac2406a87aa4070ed50e3e8164b593699f4d470",
+  "images": {
+    "php82": {
+      "tag": "forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php:8.2-v1",
+      "digest": "sha256:fbbd1d9067f302fc769e342fe292836131cde3c8b809522f90d7165bbfb2fdc6",
+      "reference": "forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:fbbd1d9067f302fc769e342fe292836131cde3c8b809522f90d7165bbfb2fdc6",
+      "label": "PHP 8.2"
+    },
+    "php85": {
+      "tag": "forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php:8.5-v1",
+      "digest": "sha256:a1c8b402f8cc6a61609cf4b0459b2a795b1b0671b95867995a1dd0b257c2a7dc",
+      "reference": "forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:a1c8b402f8cc6a61609cf4b0459b2a795b1b0671b95867995a1dd0b257c2a7dc",
+      "label": "PHP 8.5"
+    },
+    "nextcloud": {
+      "tag": "forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud:v1",
+      "digest": "sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c",
+      "reference": "forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud@sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c",
+      "label": "Nextcloud harness"
+    }
+  }
+}
