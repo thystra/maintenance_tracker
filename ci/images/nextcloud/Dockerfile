@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
-ARG NODE_BASE
+# Keep a valid pinned default for direct Dockerfile parsing/builds. The build
+# script supplies this same reviewed identity explicitly.
+ARG NODE_BASE=node:24.20.0-bookworm@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d67258e2
 FROM ${NODE_BASE}
 
 ARG SOURCE_URL=https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud

@@ -1,8 +1,11 @@
 # syntax=docker/dockerfile:1
 
-ARG NODE_BASE
-ARG COMPOSER_BASE
-ARG PHP_BASE
+# Defaults are pinned so the Dockerfile is valid when parsed or built directly.
+# scripts/build-ci-images.sh still supplies the reviewed base explicitly for
+# each image (including the PHP 8.2 override).
+ARG NODE_BASE=node:24.20.0-bookworm@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d67258e2
+ARG COMPOSER_BASE=composer:2.10.3@sha256:4d045ea9f71d5d111a95e608400da61d187e487adf9eaf2dfe068998a8d4f584
+ARG PHP_BASE=php:8.5.5-cli-bookworm@sha256:36664e49e4bdc669d9e2cba2e708c288b7fafade442dd1cd3c30d6cb97370b82
 
 FROM ${NODE_BASE} AS node_toolchain
 FROM ${COMPOSER_BASE} AS composer_toolchain
@@ -19,14 +22,14 @@ LABEL org.opencontainers.image.source="${SOURCE_URL}" \
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_HOME=/tmp/composer
 
+# The pinned official PHP images provide the required core extensions.
+# Do not rebuild them here; the qualification command below is the contract
+# check for each exact image identity.
 RUN set -eux; \
     apt-get update; \
     apt-get install --yes --no-install-recommends \
         git \
-        libonig-dev \
-        libxml2-dev \
         unzip; \
-    docker-php-ext-install -j"$(nproc)" dom mbstring xml xmlwriter; \
     rm -rf /var/lib/apt/lists/*
 
 # Forgejo JavaScript actions (including checkout) require a Node runtime in a
