@@ -42,10 +42,10 @@ final class AssignmentController extends OCSController {
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assignments')]
 	public function index(?string $workspace = null): DataResponse {
 		try {
-			return $this->workspaces->runWithAccess(
+			return $this->workspaces->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'viewer',
+				'inventory.read',
 				fn ($context): DataResponse => new DataResponse([
 					'workspace' => $context->workspace()->getUuid(),
 					'items' => $this->service->list($context),
@@ -60,10 +60,10 @@ final class AssignmentController extends OCSController {
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assignments/{uuid}')]
 	public function show(string $uuid, ?string $workspace = null): DataResponse {
 		try {
-			return $this->workspaces->runWithAccess(
+			return $this->workspaces->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'viewer',
+				'inventory.read',
 				fn ($context): DataResponse => new DataResponse($this->service->show($context, $uuid)),
 			);
 		} catch (AccessDeniedException $exception) {
@@ -79,10 +79,10 @@ final class AssignmentController extends OCSController {
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assignments')]
 	public function create(array $assignment, ?string $workspace = null): DataResponse {
 		try {
-			return $this->workspaces->runWithAccess(
+			return $this->workspaces->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'editor',
+				'inventory.manage',
 				fn ($context): DataResponse => new DataResponse(
 					$this->service->create($context, $assignment),
 					Http::STATUS_CREATED,
@@ -103,10 +103,10 @@ final class AssignmentController extends OCSController {
 	#[ApiRoute(verb: 'PATCH', url: '/api/v1/assignments/{uuid}')]
 	public function update(string $uuid, int $expectedRevision, array $assignment, ?string $workspace = null): DataResponse {
 		try {
-			return $this->workspaces->runWithAccess(
+			return $this->workspaces->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'editor',
+				'inventory.manage',
 				fn ($context): DataResponse => new DataResponse(
 					$this->service->update($context, $uuid, $expectedRevision, $assignment),
 				),
@@ -126,10 +126,10 @@ final class AssignmentController extends OCSController {
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/assignments/{uuid}')]
 	public function destroy(string $uuid, int $expectedRevision, ?string $workspace = null): DataResponse {
 		try {
-			return $this->workspaces->runWithAccess(
+			return $this->workspaces->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'editor',
+				'inventory.manage',
 				fn ($context): DataResponse => new DataResponse(
 					$this->service->archive($context, $uuid, $expectedRevision),
 				),

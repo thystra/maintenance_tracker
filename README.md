@@ -28,7 +28,7 @@ reporting channel, but GitHub is not the source, CI, or release authority.
 - nginx with PHP-FPM is supported by Nextcloud; the app adds no nginx routes
 - PostgreSQL, MariaDB/MySQL, and SQLite through Nextcloud's database APIs
 - Node.js 24 for frontend builds
-- Future Android client: compile/target SDK 36 (Android 16), minimum SDK 23
+- Future mobile client: Vue offline-first PWA with Capacitor packaging for Android/iOS when native capabilities are needed
 
 The repository directory may have any name. When installed in Nextcloud, the
 app directory must be named `maintenance_tracker` so it matches
@@ -45,9 +45,13 @@ app directory must be named `maintenance_tracker` so it matches
 - Custom categories, broad asset classes, nested component instances, and structured specifications
 - Typed class-compatible asset relationships and effective-dated assignments
 - Workspace-wide mutation serialization for invariants that span multiple members
+- Capability-based Owner/Manager/Contributor/Viewer workspace authorization
+- Shared-workspace membership API with lifecycle-safe grants and role changes
+- Append-only audit events for implemented domain and membership mutations
 - Bounded cursor pagination and account-lifecycle cleanup
-- Change journal foundation for future Android delta synchronization
+- Change journal foundation for future mobile delta synchronization
 - Versioned, data-only JSON profile schema with a generic starter profile
+- Common future work-definition model where `schedule: none` means unscheduled/ad-hoc work
 - Architecture, domain, API, security, licensing, and delivery roadmap
 
 The UI and API are explicitly pre-release. Do not treat the current API as a

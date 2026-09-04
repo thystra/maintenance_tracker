@@ -24,6 +24,7 @@ final class UserLifecycleService {
 		'maint_components',
 		'maint_categories',
 		'maint_changes',
+		'maint_audit',
 		'maint_assets',
 		'maint_members',
 	];
@@ -35,41 +36,76 @@ final class UserLifecycleService {
 	}
 
 	/**
-	 * Run a personal-workspace operation while serializing it against account
-	 * deletion and external identity detachment.
-	 *
 	 * @template T
 	 * @param callable(): T $operation
 	 * @return T
 	 */
 	public function runForActiveUser(string $userUid, callable $operation): mixed {
-		$state = $this->beginLockedState($userUid, 'active');
-		try {
-			if ($state !== 'active') {
-				throw new AccessDeniedException('The account is no longer active');
-			}
+		return $this->runForActiveUsers([$userUid], $operation);
+	}
 
-			$result = $operation();
-			$this->db->commit();
-
-			return $result;
-		} catch (Throwable $exception) {
-			$this->rollback();
-			throw $exception;
+	/**
+	 * Serialize an operation against deletion/detachment of every named account.
+	 * Locks are acquired in deterministic UID order to avoid actor/target deadlocks.
+	 *
+	 * @template T
+	 * @param list<string> $userUids
+	 * @param callable(): T $operation
+	 * @return T
+	 */
+	public function runForActiveUsers(array $userUids, callable $operation): mixed {
+		$userUids = array_values(array_unique(array_map(
+			static fn (string $uid): string => trim($uid),
+			$userUids,
+		)));
+		if ($userUids === [] || in_array('', $userUids, true)) {
+			throw new \InvalidArgumentException('At least one non-empty user UID is required');
 		}
+		sort($userUids, SORT_STRING);
+
+		for ($attempt = 0; $attempt < 3; ++$attempt) {
+			$this->db->beginTransaction();
+			try {
+				foreach ($userUids as $userUid) {
+					if ($this->lockStateInTransaction($userUid, 'active') !== 'active') {
+						throw new AccessDeniedException('The account is no longer active');
+					}
+				}
+
+				$result = $operation();
+				$this->db->commit();
+
+				return $result;
+			} catch (DatabaseException $exception) {
+				$this->rollback();
+				if (
+					$attempt < 2
+					&& $exception->getReason()
+						=== DatabaseException::REASON_UNIQUE_CONSTRAINT_VIOLATION
+				) {
+					continue;
+				}
+
+				throw $exception;
+			} catch (Throwable $exception) {
+				$this->rollback();
+				throw $exception;
+			}
+		}
+
+		throw new \RuntimeException('Could not serialize the account lifecycle');
 	}
 
 	/**
 	 * Remove personal workspaces and memberships when a Nextcloud identity is
-	 * deleted or detached. The retained state row contains only a SHA-256 UID
-	 * key and serializes cleanup against lazy workspace creation.
+	 * deleted or detached. Shared records authored by this UID are retained;
+	 * append-only audit actor attribution therefore remains historically useful.
 	 */
 	public function purgeUser(string $userUid): void {
 		$this->beginLockedState($userUid, 'deleted');
 		try {
 			$this->setState($userUid, 'deleted');
 			$workspaceIds = $this->findPersonalWorkspaceIds($userUid);
-
 			foreach ($workspaceIds as $workspaceId) {
 				$this->serializeWorkspacePurge($workspaceId);
 				foreach (self::WORKSPACE_PURGE_ORDER as $table) {
@@ -85,7 +121,6 @@ final class UserLifecycleService {
 					$query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR),
 				));
 			$query->executeStatement();
-
 			$this->db->commit();
 		} catch (Throwable $exception) {
 			$this->rollback();
@@ -93,10 +128,6 @@ final class UserLifecycleService {
 		}
 	}
 
-	/**
-	 * Reactivate the lifecycle key when Nextcloud creates or assigns a new
-	 * identity. This is intentionally separate from ordinary API requests.
-	 */
 	public function activateUser(string $userUid): void {
 		$this->beginLockedState($userUid, 'active');
 		try {
@@ -119,7 +150,6 @@ final class UserLifecycleService {
 				'personal_owner_uid',
 				$query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR),
 			));
-
 		$result = $query->executeQuery();
 		try {
 			return array_map(
@@ -131,12 +161,6 @@ final class UserLifecycleService {
 		}
 	}
 
-	/**
-	 * Acquire the same workspace-row write lock used by editor operations before
-	 * purging child rows. Without this, a shared-workspace member could insert a
-	 * new child after its table was purged but before the workspace row was
-	 * deleted, leaving an orphan after the deletion transaction commits.
-	 */
 	private function serializeWorkspacePurge(int $workspaceId): void {
 		$query = $this->db->getQueryBuilder();
 		$query->update('maint_spaces')
@@ -177,45 +201,11 @@ final class UserLifecycleService {
 		$query->executeStatement();
 	}
 
-	/**
-	 * Begin a transaction and acquire a database write lock for this hashed
-	 * user key before reading its state. A conflicting first insert is retried
-	 * after the winning transaction commits.
-	 */
-	private function beginLockedState(
-		string $userUid,
-		string $initialState,
-	): string {
-		$userKey = self::userKey($userUid);
-
+	private function beginLockedState(string $userUid, string $initialState): string {
 		for ($attempt = 0; $attempt < 3; ++$attempt) {
 			$this->db->beginTransaction();
 			try {
-				$now = $this->timeFactory->getTime();
-				$lockToken = bin2hex(random_bytes(16));
-				$query = $this->db->getQueryBuilder();
-				$query->update('maint_user_state')
-					->set(
-						'updated_at',
-						$query->createNamedParameter($now, IQueryBuilder::PARAM_INT),
-					)
-					->set(
-						'lock_token',
-						$query->createNamedParameter(
-							$lockToken,
-							IQueryBuilder::PARAM_STR,
-						),
-					)
-					->where($query->expr()->eq(
-						'user_key',
-						$query->createNamedParameter($userKey, IQueryBuilder::PARAM_STR),
-					));
-
-				if ($query->executeStatement() === 0) {
-					$this->insertState($userKey, $initialState, $lockToken, $now);
-				}
-
-				return $this->readState($userKey);
+				return $this->lockStateInTransaction($userUid, $initialState);
 			} catch (DatabaseException $exception) {
 				$this->rollback();
 				if (
@@ -236,6 +226,32 @@ final class UserLifecycleService {
 		throw new \RuntimeException('Could not serialize the account lifecycle');
 	}
 
+	private function lockStateInTransaction(string $userUid, string $initialState): string {
+		$userKey = self::userKey($userUid);
+		$now = $this->timeFactory->getTime();
+		$lockToken = bin2hex(random_bytes(16));
+		$query = $this->db->getQueryBuilder();
+		$query->update('maint_user_state')
+			->set(
+				'updated_at',
+				$query->createNamedParameter($now, IQueryBuilder::PARAM_INT),
+			)
+			->set(
+				'lock_token',
+				$query->createNamedParameter($lockToken, IQueryBuilder::PARAM_STR),
+			)
+			->where($query->expr()->eq(
+				'user_key',
+				$query->createNamedParameter($userKey, IQueryBuilder::PARAM_STR),
+			));
+
+		if ($query->executeStatement() === 0) {
+			$this->insertState($userKey, $initialState, $lockToken, $now);
+		}
+
+		return $this->readState($userKey);
+	}
+
 	private function insertState(
 		string $userKey,
 		string $state,
@@ -245,36 +261,15 @@ final class UserLifecycleService {
 		$query = $this->db->getQueryBuilder();
 		$query->insert('maint_user_state')
 			->values([
-				'user_key' => $query->createNamedParameter(
-					$userKey,
-					IQueryBuilder::PARAM_STR,
-				),
-				'state' => $query->createNamedParameter(
-					$state,
-					IQueryBuilder::PARAM_STR,
-				),
-				'lock_token' => $query->createNamedParameter(
-					$lockToken,
-					IQueryBuilder::PARAM_STR,
-				),
-				'updated_at' => $query->createNamedParameter(
-					$updatedAt,
-					IQueryBuilder::PARAM_INT,
-				),
+				'user_key' => $query->createNamedParameter($userKey, IQueryBuilder::PARAM_STR),
+				'state' => $query->createNamedParameter($state, IQueryBuilder::PARAM_STR),
+				'lock_token' => $query->createNamedParameter($lockToken, IQueryBuilder::PARAM_STR),
+				'updated_at' => $query->createNamedParameter($updatedAt, IQueryBuilder::PARAM_INT),
 			]);
 		$query->executeStatement();
 	}
 
 	private function readState(string $userKey): string {
-		$state = $this->readStateOrNull($userKey);
-		if ($state === null) {
-			throw new \RuntimeException('Account lifecycle state disappeared');
-		}
-
-		return $state;
-	}
-
-	private function readStateOrNull(string $userKey): ?string {
 		$query = $this->db->getQueryBuilder();
 		$query->select('state')
 			->from('maint_user_state')
@@ -282,7 +277,6 @@ final class UserLifecycleService {
 				'user_key',
 				$query->createNamedParameter($userKey, IQueryBuilder::PARAM_STR),
 			));
-
 		$result = $query->executeQuery();
 		try {
 			$state = $result->fetchOne();
@@ -290,9 +284,6 @@ final class UserLifecycleService {
 			$result->closeCursor();
 		}
 
-		if ($state === false) {
-			return null;
-		}
 		if (!is_string($state) || !in_array($state, ['active', 'deleted'], true)) {
 			throw new \RuntimeException('Invalid account lifecycle state');
 		}

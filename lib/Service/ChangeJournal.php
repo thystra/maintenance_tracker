@@ -15,6 +15,9 @@ use OCA\MaintenanceTracker\Db\ChangeRecordMapper;
 final class ChangeJournal {
 	public function __construct(
 		private ChangeRecordMapper $mapper,
+		private AuditEventCatalog $auditEvents,
+		private AuditService $audit,
+		private CurrentUser $currentUser,
 	) {
 	}
 
@@ -34,5 +37,16 @@ final class ChangeJournal {
 		$change->setRevision($revision);
 		$change->setChangedAt($changedAt);
 		$this->mapper->insert($change);
+
+		$eventType = $this->auditEvents->eventForChange($entityType, $operation, $revision);
+		if ($eventType !== null) {
+			$this->audit->record(
+				$workspaceId,
+				$eventType,
+				$this->currentUser->uid(),
+				$entityUuid,
+				$revision,
+			);
+		}
 	}
 }

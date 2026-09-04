@@ -61,10 +61,10 @@ final class AssetController extends OCSController {
 		int $limit = 100,
 	): DataResponse {
 		try {
-			return $this->workspaceService->runWithAccess(
+			return $this->workspaceService->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'viewer',
+				'inventory.read',
 				function ($context) use ($cursor, $limit): DataResponse {
 					$page = $this->assetService->findPage($context, $cursor, $limit);
 
@@ -99,10 +99,10 @@ final class AssetController extends OCSController {
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{uuid}')]
 	public function show(string $uuid, ?string $workspace = null): DataResponse {
 		try {
-			return $this->workspaceService->runWithAccess(
+			return $this->workspaceService->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'viewer',
+				'inventory.read',
 				fn ($context): DataResponse => new DataResponse(
 					$this->assetService->find($context, $uuid)->toApi(),
 				),
@@ -128,10 +128,10 @@ final class AssetController extends OCSController {
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets')]
 	public function create(array $asset, ?string $workspace = null): DataResponse {
 		try {
-			return $this->workspaceService->runWithAccess(
+			return $this->workspaceService->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'editor',
+				'inventory.manage',
 				function ($context) use ($asset): DataResponse {
 					$created = $this->assetService->create($context, $asset);
 
@@ -168,10 +168,10 @@ final class AssetController extends OCSController {
 		?string $workspace = null,
 	): DataResponse {
 		try {
-			return $this->workspaceService->runWithAccess(
+			return $this->workspaceService->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'editor',
+				'inventory.manage',
 				function ($context) use ($uuid, $expectedRevision, $asset): DataResponse {
 					$updated = $this->assetService->update(
 						$context,
@@ -213,10 +213,10 @@ final class AssetController extends OCSController {
 		?string $workspace = null,
 	): DataResponse {
 		try {
-			return $this->workspaceService->runWithAccess(
+			return $this->workspaceService->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
-				'editor',
+				'inventory.manage',
 				function ($context) use ($uuid, $expectedRevision): DataResponse {
 					$archived = $this->assetService->archive(
 						$context,

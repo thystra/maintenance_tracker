@@ -53,15 +53,15 @@ Planned sequence:
 
 1. [x] custom categories, asset classes, component instances, and structured specifications;
 2. [x] typed asset relationships and effective-dated assignments;
-3. meters and readings (distance, runtime hours, usage counts);
-4. maintenance plans, triggers, due calculation, and one open occurrence per
-   plan;
-5. service/completion records and free-form notes;
-6. validated local profile installation into real domain records;
-7. parts, compatible part numbers, store links, and central cost entries;
-8. photos/receipts in Nextcloud Files;
-9. Nextcloud Activity, notifications, and writable-calendar projection;
-10. JSON/CSV export and UI/accessibility hardening.
+3. [ ] v0.1.3 capability authorization, multi-user membership lifecycle, and append-only audit foundation (mark complete only after authoritative runtime qualification);
+4. meters and readings (distance, runtime hours, usage counts);
+5. common work definitions with `schedule: none` for unscheduled work, non-`none` scheduling policies, due calculation, and occurrences;
+6. activity/service records and free-form notes;
+7. validated local profile installation into real domain records;
+8. parts, compatible part numbers, store links, and central cost entries;
+9. first-class evidence in Nextcloud Files (photo/video/receipt/invoice/document/other);
+10. Nextcloud Activity, notifications, and writable-calendar projection;
+11. JSON/CSV export and UI/accessibility hardening.
 
 Core MVP behavior includes:
 
@@ -70,9 +70,9 @@ Core MVP behavior includes:
 - Typed relationships, contextual defaults, and effective-dated operational assignments.
 - Validated local profile import and generic bundled profiles.
 - Distance, runtime-hour, and usage-count meters/readings.
-- Calendar and meter triggers with `ANY` (“whichever first”) behavior.
-- Due dashboard and one open occurrence per plan.
-- Service/completion records and free-form notes.
+- Common work definitions where `schedule: none` is unscheduled and non-`none` policies may use calendar, meter, usage, or condition limits.
+- Due dashboard and occurrence materialization for scheduled definitions.
+- Activity/service records and free-form notes.
 - Parts used, compatible part numbers, and safe store links.
 - Central cost entries.
 - Photos/receipts in Nextcloud Files.
@@ -84,7 +84,7 @@ Design direction and deferred subsystems are recorded in `docs/product-architect
 
 Not in the 0.1 series:
 
-- household sharing UI;
+- polished household sharing UI beyond the v0.1.3 membership API foundation;
 - remote profile marketplace;
 - OCR or automatic ordering;
 - predictive maintenance;
@@ -114,39 +114,33 @@ to decide eligibility or guarantee IRS compliance.
 - Profile upgrade diff and merge.
 - Vendor catalog, equivalent parts, offers, and reorder workflows.
 - Inventory quantities where useful.
-- Household workspaces with owner/editor/viewer UI.
+- Household workspace UX using Owner/Manager/Contributor/Viewer roles; the membership API and capability foundation begin in v0.1.3.
+- Scoped/revocable public maintenance report shares and external-submission review workflows.
 - Nextcloud user migration/export integration.
-- Retention policy and account-deletion workflows.
+- Evidence/blob retention policies, Protect/Keep overrides, storage reporting, and account-deletion workflows.
 
-## Android 0.1
+## Mobile 0.1
 
-Begin only after the OCS sync contract is tested and versioned.
+The mobile client starts only after the OCS sync contract is tested and versioned.
+Its architecture is **Vue offline-first PWA -> Capacitor Android/iOS**, not a separate native data model.
 
 Baseline:
 
-- Kotlin, Jetpack Compose, JDK 17.
-- compile/target SDK 36 (Android 16).
-- minimum SDK 23.
-- single-activity, unidirectional data flow.
-- Room as local source of truth.
-- durable mutation outbox and opaque sync cursor.
-- WorkManager per-account synchronization.
-- Login Flow v2, app password encrypted by Android Keystore.
-- Photo Picker and camera receipt capture.
-- WebDAV uploads plus OCS metadata association.
+- purpose-built Vue mobile UI sharing API/schema/sync code where useful;
+- installable offline-first PWA with durable local records and mutation outbox;
+- Capacitor packaging when Android/iOS native capabilities are required;
+- Login Flow v2/app-password authentication with platform-appropriate protected
+  credential storage in packaged clients;
+- explicit pending/synced/conflict status and a detailed sync/storage page;
+- portable unsynced work-bundle export for desktop import;
+- camera/photo-picker and Nextcloud Files/WebDAV evidence upload;
 - HTTPS required; no trust-all certificate behavior.
 
-First mobile workflows:
-
-- login/account selection;
-- view due work;
-- create/edit assets;
-- enter readings;
-- complete maintenance with notes/cost/photos;
-- add fuel entries;
-- add business trips.
-
-Automatic background GPS is deliberately deferred.
+First mobile workflows are task-first: choose asset, choose activity/work,
+record task-specific facts, optionally add notes/evidence, and submit to the log.
+Fuel, readings, usage events, maintenance/repair completion, and trips then grow
+from that same offline transaction model. Automatic background GPS remains
+deferred.
 
 ## 1.0
 
@@ -157,5 +151,4 @@ Automatic background GPS is deliberately deferred.
 - Signed Nextcloud App Store package.
 - Privacy policy, support channel, security response process, and user/admin
   documentation.
-- Android closed test, Play Data Safety review, paid-app pricing decision, and
-  store-ready notices/EULA.
+- Packaged Android/iOS testing as applicable, store privacy/data-safety review, pricing decision, and store-ready notices/EULA.

@@ -69,19 +69,24 @@ Preserve these invariants:
   app-specific nginx endpoints;
 - authenticated identity comes from Nextcloud, never a caller-supplied owner UID;
 - normal-user routes are not public routes;
-- every workspace-bound query is authorization-scoped before object access;
+- every workspace-bound query is authorization-scoped by capability before object access;
+- Owner/Manager/Contributor/Viewer are capability bundles, not a role rank; Manager must never gain a new sensitive capability implicitly;
+- legacy `editor` compatibility normalizes to `manager`; controllers must not authorize on raw role names;
 - UUIDs identify objects but are never authorization secrets;
 - cross-workspace errors do not disclose another user's object existence;
 - writes use optimistic revisions and retain tombstones where synchronization
   requires deletion visibility;
 - user deletion/external-ID detachment cleanup must remain serialized against
   lazy personal-workspace creation so UID reuse cannot inherit prior data;
-- every editor/owner mutation must retain workspace-wide write serialization so
+- membership mutations must serialize lifecycle state for actor and target users in deterministic UID order;
+- `maint_audit` is append-only: no update/delete mapper path, bounded structured details, no free-form notes/file contents; historical shared-workspace actor attribution survives member deletion;
+- every capability-authorized write must retain workspace-wide write serialization so
   invariants spanning multiple rows remain safe when different members write
   the same shared workspace concurrently;
 - every migration-created table with `workspace_id` must remain in the account
   deletion purge registry, with child/history tables removed before assets;
 - profiles are bounded, data-only, non-executable input;
+- the common work-definition scheduling field is named `schedule`; `schedule: none` is unscheduled/ad-hoc work and any non-`none` policy is scheduled maintenance;
 - receipt/photo bytes belong in Nextcloud Files, not database blobs or a public
   app directory;
 - calendar, Activity, and notifications are projections/integrations, not the
@@ -197,5 +202,4 @@ not silently rebuild equivalent-looking bytes after qualification.
 Architecture belongs in architecture/domain documentation, current API behavior
 in `docs/api.md`, and user-visible release history in `CHANGELOG.md`.
 
-Do not begin Android implementation until the OCS synchronization contract is
-versioned and tested as required by the roadmap.
+Do not begin packaged mobile implementation until the OCS synchronization contract is versioned and tested as required by the roadmap. The mobile direction is Vue offline-first PWA with Capacitor Android/iOS packaging; do not reintroduce a separate Kotlin/Compose/Room architecture without an explicit design decision.

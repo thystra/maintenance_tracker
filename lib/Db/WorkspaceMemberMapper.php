@@ -36,4 +36,36 @@ final class WorkspaceMemberMapper extends QBMapper {
 
 		return $this->findEntity($query);
 	}
+
+	/**
+	 * @return list<WorkspaceMember>
+	 */
+	public function findForWorkspace(int $workspaceId): array {
+		$query = $this->db->getQueryBuilder();
+		$query->select('*')
+			->from('maint_members')
+			->where($query->expr()->eq(
+				'workspace_id',
+				$query->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT),
+			))
+			->orderBy('id', 'ASC');
+
+		return $this->findEntities($query);
+	}
+
+	/**
+	 * @return list<WorkspaceMember>
+	 */
+	public function findForUser(string $userUid): array {
+		$query = $this->db->getQueryBuilder();
+		$query->select('*')
+			->from('maint_members')
+			->where($query->expr()->eq(
+				'user_uid',
+				$query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR),
+			))
+			->orderBy('id', 'ASC');
+
+		return $this->findEntities($query);
+	}
 }

@@ -9,6 +9,12 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.3 capability-based workspace authorization with explicit Owner, Manager, Contributor, and Viewer bundles plus legacy `editor` normalization.
+- Shared-workspace membership OCS endpoints with deterministic actor/target lifecycle locking.
+- Append-only, versioned audit events for implemented inventory, relationship/assignment, and membership mutations.
+- Multi-user integration coverage for Contributor/Manager boundaries, membership removal on account deletion, retained shared work, and retained historical audit attribution.
+- Architecture/documentation synchronization for common work definitions (`schedule: none` for unscheduled work), evidence/retention, scoped public reports, external mechanic submissions, and Vue PWA -> Capacitor mobile direction.
+
 - v0.1.2 relationship/assignment expansion: typed class-compatible asset relationships, contextual defaults, effective-dated assignments, and primary-assignment overlap protection.
 - Relationship and assignment OCS lifecycle endpoints plus desktop configuration UI.
 - Workspace-wide mutation serialization so shared-workspace members cannot race contextual-default or primary-assignment invariants.
@@ -31,6 +37,10 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - Architecture, security, licensing, API, and delivery documentation.
 
 ### Changed
+
+- Workspace authorization no longer uses a role-rank gate; controllers request named capabilities and workspace writes retain row-level serialization.
+- `GET /workspaces` now returns all workspaces accessible to the current user instead of only the personal workspace.
+- Account lifecycle cleanup now includes personal-workspace audit rows while preserving shared-workspace history authored by a deleted member.
 
 - Personal-workspace deletion now purges categories, components, specifications, relationships, and assignments in addition to assets, change records, memberships, and the workspace itself.
 - Forgejo is now the authoritative source and CI repository; GitHub is a
