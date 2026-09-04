@@ -51,21 +51,23 @@ are added.
 
 Planned sequence:
 
-1. custom categories, asset classes, component instances, and structured specifications;
-2. meters and readings (distance, runtime hours, usage counts);
-3. maintenance plans, triggers, due calculation, and one open occurrence per
+1. [x] custom categories, asset classes, component instances, and structured specifications;
+2. [x] typed asset relationships and effective-dated assignments;
+3. meters and readings (distance, runtime hours, usage counts);
+4. maintenance plans, triggers, due calculation, and one open occurrence per
    plan;
-4. service/completion records and free-form notes;
-5. validated local profile installation into real domain records;
-6. parts, compatible part numbers, store links, and central cost entries;
-7. photos/receipts in Nextcloud Files;
-8. Nextcloud Activity, notifications, and writable-calendar projection;
-9. JSON/CSV export and UI/accessibility hardening.
+5. service/completion records and free-form notes;
+6. validated local profile installation into real domain records;
+7. parts, compatible part numbers, store links, and central cost entries;
+8. photos/receipts in Nextcloud Files;
+9. Nextcloud Activity, notifications, and writable-calendar projection;
+10. JSON/CSV export and UI/accessibility hardening.
 
 Core MVP behavior includes:
 
 - Custom categories.
 - Assets and individually suppressible component instances.
+- Typed relationships, contextual defaults, and effective-dated operational assignments.
 - Validated local profile import and generic bundled profiles.
 - Distance, runtime-hour, and usage-count meters/readings.
 - Calendar and meter triggers with `ANY` (“whichever first”) behavior.

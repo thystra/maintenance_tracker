@@ -6,15 +6,22 @@
 import type {
 	Asset,
 	AssetList,
+	Assignment,
+	AssignmentList,
 	Capabilities,
 	Category,
 	CategoryList,
 	Component,
 	ComponentList,
 	CreateAsset,
+	CreateAssignment,
 	CreateCategory,
 	CreateComponent,
+	CreateRelationship,
 	CreateSpecification,
+	Relationship,
+	RelationshipList,
+	RelationshipTypeList,
 	Specification,
 	SpecificationList,
 } from '../types.ts'
@@ -85,4 +92,46 @@ export async function getSpecifications(assetUuid: string): Promise<Specificatio
 
 export async function createSpecification(assetUuid: string, specification: CreateSpecification): Promise<Specification> {
 	return data(await axios.post<OcsEnvelope<Specification>>(endpoint(`/assets/${assetUuid}/specifications`), { specification }, requestOptions))
+}
+
+export async function getRelationshipTypes(): Promise<RelationshipTypeList> {
+	return data(await axios.get<OcsEnvelope<RelationshipTypeList>>(endpoint('/relationship-types'), requestOptions))
+}
+
+export async function getRelationships(): Promise<RelationshipList> {
+	return data(await axios.get<OcsEnvelope<RelationshipList>>(endpoint('/relationships'), requestOptions))
+}
+
+export async function createRelationship(relationship: CreateRelationship): Promise<Relationship> {
+	return data(await axios.post<OcsEnvelope<Relationship>>(endpoint('/relationships'), { relationship }, requestOptions))
+}
+
+export async function updateRelationship(uuid: string, expectedRevision: number, relationship: Partial<Pick<CreateRelationship, 'context' | 'isDefault' | 'notes'>>): Promise<Relationship> {
+	return data(await axios.patch<OcsEnvelope<Relationship>>(endpoint(`/relationships/${uuid}`), { expectedRevision, relationship }, requestOptions))
+}
+
+export async function archiveRelationship(uuid: string, expectedRevision: number): Promise<Relationship> {
+	return data(await axios.delete<OcsEnvelope<Relationship>>(endpoint(`/relationships/${uuid}`), {
+		...requestOptions,
+		data: { expectedRevision },
+	}))
+}
+
+export async function getAssignments(): Promise<AssignmentList> {
+	return data(await axios.get<OcsEnvelope<AssignmentList>>(endpoint('/assignments'), requestOptions))
+}
+
+export async function createAssignment(assignment: CreateAssignment): Promise<Assignment> {
+	return data(await axios.post<OcsEnvelope<Assignment>>(endpoint('/assignments'), { assignment }, requestOptions))
+}
+
+export async function updateAssignment(uuid: string, expectedRevision: number, assignment: Partial<Pick<CreateAssignment, 'context' | 'isPrimary' | 'effectiveFrom' | 'effectiveUntil' | 'notes'>>): Promise<Assignment> {
+	return data(await axios.patch<OcsEnvelope<Assignment>>(endpoint(`/assignments/${uuid}`), { expectedRevision, assignment }, requestOptions))
+}
+
+export async function archiveAssignment(uuid: string, expectedRevision: number): Promise<Assignment> {
+	return data(await axios.delete<OcsEnvelope<Assignment>>(endpoint(`/assignments/${uuid}`), {
+		...requestOptions,
+		data: { expectedRevision },
+	}))
 }

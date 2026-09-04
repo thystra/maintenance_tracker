@@ -66,6 +66,8 @@ Knowing a workspace or asset UUID never grants access. Controllers authenticate
 the Nextcloud user; `WorkspaceService` verifies membership and role; mappers
 then constrain the query by the workspace's internal ID.
 
+Editor/owner mutations also acquire a database write lock by changing a dedicated random lock token on the authorized workspace row inside the request transaction. This guarantees a physical row update even for same-second requests and serializes cross-record invariants across different member accounts; the per-user lifecycle lock alone is not sufficient for a future shared workspace. Read-only viewer operations do not take the workspace write lock.
+
 ## Offline synchronization
 
 Mutable entities use:

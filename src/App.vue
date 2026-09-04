@@ -7,10 +7,13 @@
 import type {
 	Asset,
 	AssetClass,
+	Assignment,
 	Capabilities,
 	Category,
 	Component,
 	CreateAsset,
+	Relationship,
+	RelationshipType,
 	Specification,
 } from './types.ts'
 
@@ -19,13 +22,18 @@ import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import {
 	createAsset,
+	createAssignment,
 	createCategory,
 	createComponent,
+	createRelationship,
 	createSpecification,
 	getAssets,
+	getAssignments,
 	getCapabilities,
 	getCategories,
 	getComponents,
+	getRelationships,
+	getRelationshipTypes,
 	getSpecifications,
 } from './services/api.ts'
 
@@ -35,6 +43,9 @@ const capabilities = ref<Capabilities | null>(null)
 const expandedAsset = ref<string | null>(null)
 const components = ref<Record<string, Component[]>>({})
 const specifications = ref<Record<string, Specification[]>>({})
+const relationshipTypes = ref<RelationshipType[]>([])
+const relationships = ref<Relationship[]>([])
+const assignments = ref<Assignment[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
@@ -43,6 +54,8 @@ const draft = reactive<CreateAsset>({ name: '', category: 'vehicle', manufacture
 const categoryDraft = reactive({ key: '', name: '', defaultAssetClass: 'other' as AssetClass })
 const componentDraft = reactive({ name: '', type: 'component', parentUuid: '' })
 const specificationDraft = reactive({ key: '', label: '', value: '', unit: '', regime: '', componentUuid: '' })
+const relationshipDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'general', isDefault: false })
+const assignmentDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'trip', isPrimary: true, effectiveFrom: '', effectiveUntil: '' })
 const empty = computed(() => !loading.value && assets.value.length === 0)
 
 function categoryLabel(key: string): string {
@@ -60,10 +73,13 @@ async function load(): Promise<void> {
 	loading.value = true
 	error.value = ''
 	try {
-		const [serverCapabilities, firstPage, categoryList] = await Promise.all([
+		const [serverCapabilities, firstPage, categoryList, typeList, relationshipList, assignmentList] = await Promise.all([
 			getCapabilities(),
 			getAssets(),
 			getCategories(),
+			getRelationshipTypes(),
+			getRelationships(),
+			getAssignments(),
 		])
 		const allAssets = [...firstPage.items]
 		let nextCursor = firstPage.nextCursor
@@ -74,6 +90,9 @@ async function load(): Promise<void> {
 		}
 		capabilities.value = serverCapabilities
 		categories.value = categoryList.items
+		relationshipTypes.value = typeList.items
+		relationships.value = relationshipList.items
+		assignments.value = assignmentList.items
 		assets.value = allAssets.sort((left, right) => left.name.localeCompare(right.name))
 	} catch (reason) {
 		error.value = readableError(reason)
@@ -181,6 +200,56 @@ async function submitSpecification(asset: Asset): Promise<void> {
 	}
 }
 
+async function submitRelationship(): Promise<void> {
+	if (relationshipDraft.sourceAssetUuid === '' || relationshipDraft.targetAssetUuid === '') {
+		return
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const created = await createRelationship({
+			sourceAssetUuid: relationshipDraft.sourceAssetUuid,
+			targetAssetUuid: relationshipDraft.targetAssetUuid,
+			type: relationshipDraft.type,
+			context: relationshipDraft.context.trim() || null,
+			isDefault: relationshipDraft.isDefault,
+		})
+		relationships.value = [...relationships.value, created]
+		relationshipDraft.targetAssetUuid = ''
+		relationshipDraft.isDefault = false
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function submitAssignment(): Promise<void> {
+	if (assignmentDraft.sourceAssetUuid === '' || assignmentDraft.targetAssetUuid === '' || assignmentDraft.effectiveFrom === '') {
+		return
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const created = await createAssignment({
+			sourceAssetUuid: assignmentDraft.sourceAssetUuid,
+			targetAssetUuid: assignmentDraft.targetAssetUuid,
+			type: assignmentDraft.type,
+			context: assignmentDraft.context.trim() || null,
+			isPrimary: assignmentDraft.isPrimary,
+			effectiveFrom: assignmentDraft.effectiveFrom,
+			effectiveUntil: assignmentDraft.effectiveUntil || null,
+		})
+		assignments.value = [...assignments.value, created]
+		assignmentDraft.targetAssetUuid = ''
+		assignmentDraft.effectiveUntil = ''
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
 onMounted(load)
 </script>
 
@@ -195,7 +264,7 @@ onMounted(load)
 						</p>
 						<h1>Maintenance Tracker</h1>
 						<p class="intro">
-							Define maintained items, their component instances, and structured specifications. Maintenance rules and work records build on this inventory.
+							Define maintained items, their components, specifications, relationships, and current assignments. Maintenance rules and work records build on this inventory.
 						</p>
 					</div>
 					<span v-if="capabilities" class="pill">{{ capabilities.appVersion }}</span>
@@ -230,6 +299,86 @@ onMounted(load)
 						<label><span>Default asset class</span><select v-model="categoryDraft.defaultAssetClass"><option v-for="value in ['vehicle', 'trailer', 'building', 'equipment', 'appliance', 'system', 'tool', 'medical_device', 'location', 'other']" :key="value" :value="value">{{ value }}</option></select></label>
 						<button type="submit" :disabled="saving">
 							Add category
+						</button>
+					</form>
+				</section>
+
+				<section class="panel">
+					<h2>Asset relationships</h2>
+					<p class="panel-copy">
+						Record compatibility and durable associations separately from what was actually used on a trip or work record.
+					</p>
+					<ul class="compact-list relationship-list">
+						<li v-for="relationship in relationships" :key="relationship.uuid">
+							<strong>{{ relationship.sourceAsset.name }} {{ relationship.label.toLowerCase() }} {{ relationship.targetAsset.name }}</strong>
+							<span>{{ relationship.context || 'no context' }}<template v-if="relationship.isDefault"> · default</template></span>
+						</li>
+					</ul>
+					<form class="relationship-form" @submit.prevent="submitRelationship">
+						<select v-model="relationshipDraft.sourceAssetUuid" required>
+							<option value="" disabled>
+								Source asset
+							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
+								{{ asset.name }}
+							</option>
+						</select>
+						<select v-model="relationshipDraft.type">
+							<option v-for="type in relationshipTypes" :key="type.key" :value="type.key">
+								{{ type.label }}
+							</option>
+						</select>
+						<select v-model="relationshipDraft.targetAssetUuid" required>
+							<option value="" disabled>
+								Target asset
+							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
+								{{ asset.name }}
+							</option>
+						</select>
+						<input v-model="relationshipDraft.context" placeholder="context (general, trip, fuel)">
+						<label class="check-field"><input v-model="relationshipDraft.isDefault" type="checkbox"><span>Default for context</span></label>
+						<button type="submit" :disabled="saving || assets.length < 2">
+							Add relationship
+						</button>
+					</form>
+				</section>
+
+				<section class="panel">
+					<h2>Operational assignments</h2>
+					<p class="panel-copy">
+						Assignments are effective-dated defaults. They do not rewrite historical activity and may be overridden by a later work or trip record.
+					</p>
+					<ul class="compact-list relationship-list">
+						<li v-for="assignment in assignments" :key="assignment.uuid">
+							<strong>{{ assignment.sourceAsset.name }} {{ assignment.label.toLowerCase() }} {{ assignment.targetAsset.name }}</strong>
+							<span>{{ assignment.effectiveFrom }} → {{ assignment.effectiveUntil || 'indefinite' }}<template v-if="assignment.isPrimary"> · primary</template></span>
+						</li>
+					</ul>
+					<form class="assignment-form" @submit.prevent="submitAssignment">
+						<select v-model="assignmentDraft.sourceAssetUuid" required>
+							<option value="" disabled>
+								Source asset
+							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
+								{{ asset.name }}
+							</option>
+						</select>
+						<select v-model="assignmentDraft.type">
+							<option v-for="type in relationshipTypes" :key="type.key" :value="type.key">
+								{{ type.label }}
+							</option>
+						</select>
+						<select v-model="assignmentDraft.targetAssetUuid" required>
+							<option value="" disabled>
+								Target asset
+							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
+								{{ asset.name }}
+							</option>
+						</select>
+						<input v-model="assignmentDraft.context" placeholder="context (trip, fuel)">
+						<label><span>Effective from</span><input v-model="assignmentDraft.effectiveFrom" type="date" required></label>
+						<label><span>Effective until</span><input v-model="assignmentDraft.effectiveUntil" type="date"></label>
+						<label class="check-field"><input v-model="assignmentDraft.isPrimary" type="checkbox"><span>Primary</span></label>
+						<button type="submit" :disabled="saving || assets.length < 2">
+							Add assignment
 						</button>
 					</form>
 				</section>
@@ -365,6 +514,16 @@ button:disabled { opacity: .55; }
 
 .inline-form, .spec-form { display: grid; gap: 8px; }
 
+.relationship-form, .assignment-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
+
+.panel-copy { color: var(--color-text-maxcontrast); }
+
+.relationship-list li { align-items: baseline; }
+
+.check-field { display: flex; align-items: center; gap: 8px; min-height: 42px; }
+
+.check-field input { min-height: auto; }
+
 .inline-form { grid-template-columns: 1.4fr 1fr 1.2fr auto; }
 
 .spec-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -372,6 +531,6 @@ button:disabled { opacity: .55; }
 .spec-form button { grid-column: 3; }
 
 .empty-state { display: grid; place-items: center; min-height: 130px; color: var(--color-text-maxcontrast); }
-@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
-@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form { display: grid; grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
+@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form { display: grid; grid-template-columns: 1fr; } }
 </style>

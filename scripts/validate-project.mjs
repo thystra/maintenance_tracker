@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { access, readFile } from 'node:fs/promises'
+import { access, readdir, readFile } from 'node:fs/promises'
 
 const projectUrl = 'https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud'
 const failures = []
@@ -25,6 +25,18 @@ const attributes = await read('.gitattributes')
 const nextcloudIgnore = await read('.nextcloudignore')
 const forgejoCi = await read('.forgejo/workflows/ci.yml')
 const qualifiedImages = JSON.parse(await read('ci/images/qualified-images.json'))
+const userLifecycle = await read('lib/Service/UserLifecycleService.php')
+const migrationNames = (await readdir('lib/Migration')).filter((name) => name.endsWith('.php')).sort()
+const workspaceTables = new Set()
+for (const migrationName of migrationNames) {
+	const migration = await read(`lib/Migration/${migrationName}`)
+	const createTable = /#\[CreateTable\(\s*table:\s*'([^']+)',\s*columns:\s*\[([\s\S]*?)\],\s*description:/g
+	for (const match of migration.matchAll(createTable)) {
+		if (match[2].includes("'workspace_id'")) {
+			workspaceTables.add(match[1])
+		}
+	}
+}
 
 const infoVersion = info.match(/<version>([^<]+)<\/version>/)?.[1]
 const applicationVersion = application.match(/APP_VERSION\s*=\s*'([^']+)'/)?.[1]
@@ -141,6 +153,25 @@ expect(
 	!forgejoCi.includes('npm audit'),
 	'Network-dependent npm advisory checks must remain outside deterministic CI.',
 )
+
+for (const table of [...workspaceTables].sort()) {
+	expect(
+		userLifecycle.includes(`'${table}'`),
+		`Account deletion purge registry must cover workspace-scoped table ${table}.`,
+	)
+}
+expect(
+	userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'),
+	'Account deletion must serialize each personal workspace before purging child rows.',
+)
+const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
+for (const table of ['maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes']) {
+	expect(
+		userLifecycle.indexOf(`'${table}'`) !== -1
+		&& userLifecycle.indexOf(`'${table}'`) < assetPurgePosition,
+		`${table} must be purged before maint_assets.`,
+	)
+}
 
 try {
 	await access('.github/workflows/ci.yml')

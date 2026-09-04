@@ -1,8 +1,6 @@
 # Domain model
 
-This document is the target model. The foundation migration currently creates
-workspaces, memberships, assets, and the change journal. Remaining tables arrive
-in additive migrations with their vertical slices.
+This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, categories, component instances, structured specifications, relationships, and assignments. Remaining tables arrive with their vertical slices.
 
 All table names stay under Nextcloud's recommended 23-character limit. API IDs
 are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
@@ -23,9 +21,11 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
   and so on. `asset_class` is a coarse behavior/relationship class independent
   of the user-facing category.
 
-`maint_relations`
-: Typed relationships such as vehicle `tows` trailer or generator `powers`
-  building.
+`maint_relationships`
+: Typed relationships between independent assets. The row stores the canonical forward relationship key, source/target assets, optional context, and whether it is the contextual default. Inverse keys/labels are catalog metadata rather than separately stored relationship types.
+
+`maint_assignments`
+: Effective-dated operational associations between independent assets. A primary assignment is unique over an overlapping source/type/context time range. Assignments do not rewrite compatibility relationships or historical activity.
 
 `maint_components`
 : One row per actual component instance. Two fuel filters or two HVAC systems

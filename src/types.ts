@@ -43,3 +43,82 @@ export interface SpecificationList { items: Specification[] }
 export interface CreateSpecification { uuid?: string, componentUuid?: string | null, key: string, label: string, value: unknown, unit?: string | null, regime?: string | null, source?: SpecificationSource | null }
 
 export interface Capabilities { app: string, appVersion: string, apiVersion: string, apiStability: 'experimental', features: string[] }
+
+export interface AssetReference {
+	uuid: string
+	name: string
+	assetClass: AssetClass
+	archived: boolean
+}
+
+export interface RelationshipType {
+	key: string
+	label: string
+	inverseKey: string
+	inverseLabel: string
+	symmetric: boolean
+	sourceClasses: AssetClass[]
+	targetClasses: AssetClass[]
+}
+
+export interface RelationshipTypeList { items: RelationshipType[] }
+
+export interface Relationship {
+	uuid: string
+	type: string
+	label: string
+	inverseType: string
+	inverseLabel: string
+	sourceAsset: AssetReference
+	targetAsset: AssetReference
+	context: string | null
+	isDefault: boolean
+	notes: string | null
+	revision: number
+	createdAt: string
+	updatedAt: string
+	deletedAt: string | null
+}
+
+export interface RelationshipList { workspace: string, items: Relationship[] }
+export interface CreateRelationship {
+	uuid?: string
+	sourceAssetUuid: string
+	targetAssetUuid: string
+	type: string
+	context?: string | null
+	isDefault?: boolean
+	notes?: string | null
+}
+
+export interface Assignment {
+	uuid: string
+	type: string
+	label: string
+	inverseType: string
+	inverseLabel: string
+	sourceAsset: AssetReference
+	targetAsset: AssetReference
+	context: string | null
+	isPrimary: boolean
+	effectiveFrom: string
+	effectiveUntil: string | null
+	notes: string | null
+	revision: number
+	createdAt: string
+	updatedAt: string
+	deletedAt: string | null
+}
+
+export interface AssignmentList { workspace: string, items: Assignment[] }
+export interface CreateAssignment {
+	uuid?: string
+	sourceAssetUuid: string
+	targetAssetUuid: string
+	type: string
+	context?: string | null
+	isPrimary?: boolean
+	effectiveFrom: string
+	effectiveUntil?: string | null
+	notes?: string | null
+}

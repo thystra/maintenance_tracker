@@ -25,6 +25,8 @@ use OCP\DB\Types;
  * @method void setKind(string $kind)
  * @method int getRevision()
  * @method void setRevision(int $revision)
+ * @method string|null getWriteLockToken()
+ * @method void setWriteLockToken(?string $writeLockToken)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  * @method int getUpdatedAt()
@@ -39,6 +41,7 @@ final class Workspace extends Entity {
 	protected string $name = '';
 	protected string $kind = 'personal';
 	protected int $revision = 1;
+	protected ?string $writeLockToken = null;
 	protected int $createdAt = 0;
 	protected int $updatedAt = 0;
 	protected ?int $deletedAt = null;
@@ -50,6 +53,7 @@ final class Workspace extends Entity {
 		$this->addType('name', Types::STRING);
 		$this->addType('kind', Types::STRING);
 		$this->addType('revision', Types::INTEGER);
+		$this->addType('writeLockToken', Types::STRING);
 		$this->addType('createdAt', Types::BIGINT);
 		$this->addType('updatedAt', Types::BIGINT);
 		$this->addType('deletedAt', Types::BIGINT);
