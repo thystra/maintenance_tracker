@@ -22,6 +22,30 @@ final class AssetMapper extends QBMapper {
 		parent::__construct($db, 'maint_assets', Asset::class);
 	}
 
+	public function findById(
+		int $workspaceId,
+		int $id,
+		bool $includeDeleted = false,
+	): Asset {
+		$query = $this->db->getQueryBuilder();
+		$query->select('*')
+			->from('maint_assets')
+			->where($query->expr()->eq(
+				'workspace_id',
+				$query->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT),
+			))
+			->andWhere($query->expr()->eq(
+				'id',
+				$query->createNamedParameter($id, IQueryBuilder::PARAM_INT),
+			));
+
+		if (!$includeDeleted) {
+			$query->andWhere($query->expr()->isNull('deleted_at'));
+		}
+
+		return $this->findEntity($query);
+	}
+
 	public function findByUuid(
 		int $workspaceId,
 		string $uuid,

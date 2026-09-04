@@ -18,6 +18,14 @@ data even though the app is not a medical product.
   external identity mapping is removed, preventing UID reuse from inheriting
   the previous account's records. A database-serialized lifecycle row retains
   only a SHA-256 UID key so cleanup cannot race lazy workspace creation.
+- Editor/owner mutations serialize by changing a dedicated random lock token on the authorized workspace row as well as the
+  current user's lifecycle row. This prevents two different shared-workspace
+  members from concurrently establishing contradictory defaults/assignments.
+  Personal-workspace deletion acquires the same workspace-row lock before
+  purging child records so a concurrent member write cannot leave an orphan.
+- Project validation discovers every migration-created `workspace_id` table and
+  requires account deletion cleanup to cover it; child/history tables are
+  purged before assets.
 
 ## Input and rendering
 

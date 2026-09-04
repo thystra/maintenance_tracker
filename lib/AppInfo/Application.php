@@ -22,7 +22,7 @@ use OCP\User\Events\UserIdUnassignedEvent;
 
 final class Application extends App implements IBootstrap {
 	public const APP_ID = 'maintenance_tracker';
-	public const APP_VERSION = '0.1.1';
+	public const APP_VERSION = '0.1.2';
 	public const API_VERSION = '0.1';
 
 	public function __construct() {

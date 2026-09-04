@@ -76,6 +76,11 @@ Preserve these invariants:
   requires deletion visibility;
 - user deletion/external-ID detachment cleanup must remain serialized against
   lazy personal-workspace creation so UID reuse cannot inherit prior data;
+- every editor/owner mutation must retain workspace-wide write serialization so
+  invariants spanning multiple rows remain safe when different members write
+  the same shared workspace concurrently;
+- every migration-created table with `workspace_id` must remain in the account
+  deletion purge registry, with child/history tables removed before assets;
 - profiles are bounded, data-only, non-executable input;
 - receipt/photo bytes belong in Nextcloud Files, not database blobs or a public
   app directory;

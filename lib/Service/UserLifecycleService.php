@@ -17,6 +17,17 @@ use OCP\IDBConnection;
 use Throwable;
 
 final class UserLifecycleService {
+	private const WORKSPACE_PURGE_ORDER = [
+		'maint_assignments',
+		'maint_relationships',
+		'maint_specs',
+		'maint_components',
+		'maint_categories',
+		'maint_changes',
+		'maint_assets',
+		'maint_members',
+	];
+
 	public function __construct(
 		private IDBConnection $db,
 		private ITimeFactory $timeFactory,
@@ -60,9 +71,10 @@ final class UserLifecycleService {
 			$workspaceIds = $this->findPersonalWorkspaceIds($userUid);
 
 			foreach ($workspaceIds as $workspaceId) {
-				$this->deleteByWorkspace('maint_changes', $workspaceId);
-				$this->deleteByWorkspace('maint_assets', $workspaceId);
-				$this->deleteByWorkspace('maint_members', $workspaceId);
+				$this->serializeWorkspacePurge($workspaceId);
+				foreach (self::WORKSPACE_PURGE_ORDER as $table) {
+					$this->deleteByWorkspace($table, $workspaceId);
+				}
 				$this->deleteWorkspace($workspaceId);
 			}
 
@@ -116,6 +128,32 @@ final class UserLifecycleService {
 			);
 		} finally {
 			$result->closeCursor();
+		}
+	}
+
+	/**
+	 * Acquire the same workspace-row write lock used by editor operations before
+	 * purging child rows. Without this, a shared-workspace member could insert a
+	 * new child after its table was purged but before the workspace row was
+	 * deleted, leaving an orphan after the deletion transaction commits.
+	 */
+	private function serializeWorkspacePurge(int $workspaceId): void {
+		$query = $this->db->getQueryBuilder();
+		$query->update('maint_spaces')
+			->set(
+				'write_lock_token',
+				$query->createNamedParameter(
+					bin2hex(random_bytes(16)),
+					IQueryBuilder::PARAM_STR,
+				),
+			)
+			->where($query->expr()->eq(
+				'id',
+				$query->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT),
+			));
+
+		if ($query->executeStatement() !== 1) {
+			throw new \RuntimeException('Workspace disappeared while serializing account deletion');
 		}
 	}
 
@@ -268,6 +306,13 @@ final class UserLifecycleService {
 			->set(
 				'state',
 				$query->createNamedParameter($state, IQueryBuilder::PARAM_STR),
+			)
+			->set(
+				'lock_token',
+				$query->createNamedParameter(
+					bin2hex(random_bytes(16)),
+					IQueryBuilder::PARAM_STR,
+				),
 			)
 			->set(
 				'updated_at',

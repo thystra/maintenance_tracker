@@ -23,6 +23,10 @@ fixture_paths=(
 	lib/AppInfo/Application.php
 	.forgejo/workflows/ci.yml
 	ci/images/qualified-images.json
+	lib/Migration/Version1000Date20260723000000.php
+	lib/Migration/Version1010Date20260902000000.php
+	lib/Migration/Version1020Date20260903000000.php
+	lib/Service/UserLifecycleService.php
 )
 
 copy_fixture() {
@@ -96,5 +100,23 @@ if run_validator >"$tmp/version.out" 2>&1; then
 fi
 grep -Fq 'App version must match appinfo/info.xml, Application::APP_VERSION, and package.json.' \
 	"$tmp/version.out"
+
+copy_fixture
+sed -i "/'maint_specs',/d" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+if run_validator >"$tmp/lifecycle-purge.out" 2>&1; then
+	echo 'Validator accepted an incomplete account-deletion purge registry.' >&2
+	exit 1
+fi
+grep -Fq 'Account deletion purge registry must cover workspace-scoped table maint_specs.' \
+	"$tmp/lifecycle-purge.out"
+
+copy_fixture
+sed -i '/\$this->serializeWorkspacePurge(\$workspaceId);/d' "$tmp/fixture/lib/Service/UserLifecycleService.php"
+if run_validator >"$tmp/lifecycle-serialization.out" 2>&1; then
+	echo 'Validator accepted account deletion without workspace serialization.' >&2
+	exit 1
+fi
+grep -Fq 'Account deletion must serialize each personal workspace before purging child rows.' \
+	"$tmp/lifecycle-serialization.out"
 
 echo 'Project validator self-tests passed.'

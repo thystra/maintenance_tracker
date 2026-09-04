@@ -56,11 +56,22 @@ final class WorkspaceService {
 	): mixed {
 		return $this->userLifecycleService->runForActiveUser(
 			$userUid,
-			fn (): mixed => $operation($this->requireAccessUnlocked(
-				$userUid,
-				$workspaceUuid,
-				$minimumRole,
-			)),
+			function () use ($userUid, $workspaceUuid, $minimumRole, $operation): mixed {
+				$context = $this->requireAccessUnlocked(
+					$userUid,
+					$workspaceUuid,
+					$minimumRole,
+				);
+
+				if (self::ROLE_RANK[$minimumRole] >= self::ROLE_RANK['editor']) {
+					$this->workspaceMapper->serializeWrite(
+						$context->workspace()->getId(),
+						$this->uuidGenerator->generate(),
+					);
+				}
+
+				return $operation($context);
+			},
 		);
 	}
 

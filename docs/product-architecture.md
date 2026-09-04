@@ -40,7 +40,9 @@ Due rules are authoritative; forecasts predict when a rule is likely to become d
 
 ## Relationships, assignments, and activities
 
-Containment and cross-asset relationships are separate. A component is part of an asset; independent assets participate in typed many-to-many relationships such as `tows`, `carries`, `stored_at`, `powers`, or user-defined equivalents. Relationship types may constrain compatible source/target asset classes and provide inverse labels.
+> Implementation status: v0.1.2 materializes the built-in relationship catalog, class compatibility checks, contextual relationship defaults, and effective-dated assignments. Actual activity configuration remains a later activity/trip concern.
+
+Containment and cross-asset relationships are separate. A component is part of an asset; independent assets participate in typed many-to-many relationships such as `tows`, `carries`, `stored_at`, `powers`, with room for later extension. The v0.1.2 built-in catalog constrains compatible source/target asset classes and provides inverse labels; arbitrary user-defined relationship types are deferred until their validation and migration contract is designed.
 
 Relationships are composable and may form multi-asset operating configurations, e.g. boat -> trailer -> tow vehicle. A relationship may have contextual defaults (such as the default trailer for fuel/trip entry).
 
