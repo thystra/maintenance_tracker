@@ -1,6 +1,6 @@
 # OCS API
 
-The API is experimental until the Android synchronization contract is complete.
+The API is experimental until the offline/mobile synchronization contract is complete.
 
 Base path:
 
@@ -17,7 +17,7 @@ Accept: application/json
 
 Requests use the user's Nextcloud session or an app password obtained through
 [Login Flow v2](https://docs.nextcloud.com/server/stable/developer_manual/client_apis/LoginFlow/index.html).
-The Android app must never request or store the user's primary password.
+Mobile clients must never request or store the user's primary password.
 
 OCS wraps response data:
 
@@ -38,12 +38,11 @@ OCS wraps response data:
 
 ### `GET /capabilities`
 
-Returns the app/API version, stability, and feature flags. Android must check
-this before enabling server-dependent features.
+Returns the app/API version, stability, and feature flags. Clients must check this before enabling server-dependent features.
 
 ### `GET /workspaces`
 
-Returns the current user's personal workspace, creating it on first use.
+Returns every workspace accessible to the current user, creating the personal workspace on first use. Each item includes the caller's normalized role.
 
 ### `GET /assets?workspace=<uuid>&limit=100&cursor=<opaque>`
 
@@ -122,10 +121,49 @@ needed for offline synchronization.
 
 These resources remain experimental. Update/archive contracts for categories, components, and specifications will be completed before the OCS API is declared stable.
 
+## Workspace membership and audit endpoints
+
+Authorization is capability-based. The stable role bundles are Owner, Manager,
+Contributor, and Viewer; legacy `editor` input normalizes to Manager. Manager can
+manage current inventory and read membership/audit data but cannot administer
+membership. Contributor and Viewer are read-only on the current inventory API.
+
+### `GET /workspaces/{workspace}/members`
+
+Returns workspace memberships for callers with `workspace.members.read`.
+
+### `POST /workspaces/{workspace}/members`
+
+Owner-only in the current bundles (`workspace.members.manage`). Body:
+
+```json
+{"member":{"userUid":"mechanic-helper","role":"contributor"}}
+```
+
+The target must be an existing Nextcloud user. Assignable roles are `manager`,
+`contributor`, and `viewer`; owner transfer is not implemented.
+
+### `PATCH /workspaces/{workspace}/members/{userUid}`
+
+Changes a non-owner member role. Actor and target user lifecycle locks are held
+in deterministic order with the workspace write lock.
+
+### `DELETE /workspaces/{workspace}/members/{userUid}`
+
+Removes a non-owner membership. It does not erase shared domain records or prior
+audit actor attribution created by that user.
+
+### `GET /audit?workspace=<uuid>&limit=100`
+
+Returns newest-first append-only audit events for callers with `audit.read`.
+Each event contains event type/version, actor UID, subject type/ID/revision,
+level, bounded structured details, and timestamp. Free-form maintenance notes
+and evidence/document contents are not copied into audit details.
+
 ## Errors
 
 - `400`: invalid or unknown fields.
-- `403`: workspace does not exist for this user or the role is insufficient.
+- `403`: workspace does not exist for this user or the required capability is not granted.
 - `404`: asset does not exist in the authorized workspace.
 - `412`: stale revision or conflicting client-generated UUID.
 - `429`: future upload/report rate limits.
@@ -143,9 +181,7 @@ Before the API is marked stable:
 - upload association and verified file ownership;
 - generated OpenAPI checked in CI.
 
-Planned resources include categories, profiles/imports, components, meters,
-readings, plans, triggers, occurrences, service records, parts, cost entries,
-fuel entries, trips, calendar bindings, TCO reports, and mileage reports.
+Planned resources include profiles/imports, meters/readings, common work definitions and occurrences, activities/service records, evidence, parts/costs, fuel entries, trips, calendar bindings, public report shares, external submissions, TCO reports, and mileage reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any non-`none` schedule policy is scheduled maintenance.
 
 User/owner IDs are never accepted when they can be derived from authentication.
 
@@ -227,5 +263,4 @@ primary status, effective dates, and notes with optimistic revision checking.
 DELETE creates a revisioned tombstone.
 
 Relationship/default and primary-assignment checks execute under a workspace
-write serialization point. This matters for future shared workspaces because two
-different member accounts otherwise have independent account-lifecycle locks.
+write serialization point. This matters for shared workspaces because two different member accounts otherwise have independent account-lifecycle locks.

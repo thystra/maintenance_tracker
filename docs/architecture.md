@@ -57,16 +57,30 @@ and [OCS guidance](https://docs.nextcloud.com/server/stable/developer_manual/bas
 
 ## Ownership and sharing
 
-Each user receives one private workspace on first use. Assets belong to the
-workspace, and membership carries `owner`, `editor`, or `viewer` authorization.
-Only the owner path is exposed in the foundation UI, but persisting workspace
-membership now prevents a disruptive rewrite when household sharing is added.
+Each user receives one personal workspace on first use. Workspace memberships use
+four stable roles: **Owner**, **Manager**, **Contributor**, and **Viewer**. A
+legacy persisted `editor` role is migrated and runtime-normalized to `manager`.
+
+Authorization is capability-based rather than role-rank-based. The role name is
+only a bundle selector. Manager is an explicit bundle: it can manage current
+inventory and read workspace membership/audit history, but it cannot administer
+membership. Contributor and Viewer are read-only on the currently implemented
+inventory surface; later activity capabilities can distinguish their write
+behavior without changing existing role meaning.
+
+The authorization catalog also reserves future capability names for maintenance
+definitions, activities, evidence, checkout, retention, public report shares,
+external submissions, workspace settings, and workspace deletion. Reserved
+capabilities are explicitly unimplemented and authorize nothing until their
+subsystem lands.
 
 Knowing a workspace or asset UUID never grants access. Controllers authenticate
-the Nextcloud user; `WorkspaceService` verifies membership and role; mappers
-then constrain the query by the workspace's internal ID.
-
-Editor/owner mutations also acquire a database write lock by changing a dedicated random lock token on the authorized workspace row inside the request transaction. This guarantees a physical row update even for same-second requests and serializes cross-record invariants across different member accounts; the per-user lifecycle lock alone is not sufficient for a future shared workspace. Read-only viewer operations do not take the workspace write lock.
+the Nextcloud user, request a capability from `WorkspaceService`, and only then
+allow mappers to access rows constrained by the workspace's internal ID.
+Capability-authorized writes acquire the workspace-row write lock. Membership
+mutations additionally lock lifecycle state for actor and target users in
+stable UID order so account deletion/UID reuse cannot race a grant or role
+change.
 
 ## Offline synchronization
 
@@ -77,15 +91,18 @@ Mutable entities use:
 - `created_at`, `updated_at`, and nullable `deleted_at`;
 - an append-only `maint_changes` sequence.
 
-The Android protocol will be completed before its first build:
+The mobile synchronization contract will be completed before packaged mobile
+clients depend on it:
 
-1. A client writes a mutation to a durable local outbox.
+1. A Vue/PWA client writes a mutation to durable local storage/outbox first.
 2. Client-generated UUIDs and mutation IDs make retries safe.
 3. The server rejects stale revisions with `412 Precondition Failed`.
 4. The client pulls ordered changes after an opaque cursor.
-5. Applying a change page and advancing its Room cursor happen atomically.
+5. Applying a page and advancing its durable cursor happen atomically.
 6. Tombstones are retained long enough for offline devices, with a documented
    full-resync path after expiry.
+7. A portable work bundle is an alternate transport through the same canonical
+   validation/idempotency ingest path.
 
 The current change table is foundation work, not yet a public sync endpoint.
 
@@ -95,32 +112,38 @@ Profiles are untrusted, data-only JSON documents validated against a versioned
 schema. They cannot include PHP, JavaScript, templates, executable expressions,
 or credentials.
 
-Installing a profile materializes a snapshot of its components, plans, triggers,
-and parts into an asset. A later profile revision produces an explicit diff.
-It never silently rewrites user-adjusted schedules or re-enables suppressed
-components.
+Installing a profile materializes a snapshot of its components, structured information fields, work definitions, meters, and parts into an asset. A later profile revision produces an explicit diff. It never silently rewrites user-adjusted `schedule` policies or re-enables suppressed components. Profiles may define their own display groups (for example Engine, Transmission, Cooling, or HVAC); those groups are data, not application constants.
 
 Profile provenance includes an ID, semantic version, data license, source URL,
 and content hash. Generic first-party profiles should use CC0 where possible.
 
 ## Scheduling
 
-The maintenance plan is the source of truth. A plan can have multiple triggers:
+Scheduling is a property of a common **work definition**, not a separate record
+type. The canonical field name is `schedule`.
 
-- calendar duration (`day`, `week`, `month`, or `year`);
-- distance;
-- runtime/engine hours;
-- usage count.
+```text
+schedule: none
+```
 
-The common combination is `ANY`: six months or 5,000 miles, whichever becomes
-due first. Month/year periods remain calendar units; they are never approximated
-as seconds.
+means unscheduled/ad-hoc work. Any non-`none` schedule policy denotes scheduled
+maintenance. This gives clients a built-in filter without splitting repairs and
+recurring maintenance into different definition types:
 
-One periodic Nextcloud `TimedJob` will reconcile indexed due projections,
+```text
+scheduled   = schedule != none
+unscheduled = schedule == none
+```
+
+A non-`none` schedule may use calendar time, distance, runtime/engine hours,
+usage counts, condition measurements, or a reviewed combination such as `ANY`
+("six months or 5,000 miles, whichever comes first"). Month/year intervals stay
+calendar units; they are not approximated as seconds. Unscheduled definitions
+cover failures and ad-hoc work such as a turbocharger or transmission repair.
+
+A future periodic Nextcloud `TimedJob` will reconcile indexed due projections,
 calendar events, and notifications. The design avoids one background job per
-task. Production requires system cron; Nextcloud describes AJAX cron as the
-least reliable option in its
-[background-job documentation](https://docs.nextcloud.com/server/stable/admin_manual/configuration_server/background_jobs_configuration.html).
+work definition. Production requires system cron.
 
 ## Calendar integration
 
@@ -141,20 +164,31 @@ update/delete lifecycle. Therefore the MVP will:
 Calendar titles default to neutral text such as “Maintenance due,” because a
 shared calendar could otherwise expose health-equipment details.
 
-## Files and receipts
+## Files and evidence
 
-Receipt and photo bytes live in Nextcloud Files, not database BLOBs or the app
-directory. The default is a user-visible folder such as
-`Maintenance Tracker/Receipts`.
+Evidence bytes (photos, video, receipts, invoices, documents, and other supported files) live in Nextcloud Files, not database BLOBs or the app directory. A user-visible Maintenance Tracker folder is the default storage surface.
 
 The database stores a verified file ID, owner/workspace association, MIME type,
 hash, and last-known path. Every read or unlink revalidates file ownership.
 Nextcloud then supplies quota enforcement, storage backends, versions, trash,
 sharing, previews, and WebDAV access.
 
-Android will upload bytes by WebDAV and associate the verified file through OCS.
-Ordinary images use streaming `PUT`; large/resumable uploads can use Nextcloud's
-chunk upload v2.
+Mobile clients will upload bytes through Nextcloud Files/WebDAV and associate the verified file through OCS. Ordinary images use streaming `PUT`; large/resumable uploads can use Nextcloud's chunk upload v2.
+
+## Audit trail
+
+`maint_audit` is an append-only workspace event stream distinct from the sync
+change journal. It records significant implemented mutations with an
+independently versioned event vocabulary, actor UID, subject identity/revision,
+timestamp, level, and tightly bounded structured metadata. It does not copy
+free-form maintenance notes, receipt/invoice contents, or document bodies.
+
+Current event families cover asset/category/component/specification,
+relationship/assignment, and workspace membership mutations. Audit persistence
+has no update/delete API. Deleting a member removes authorization membership but
+retains that actor UID in audit history for shared work they already performed.
+Deleting the owner of a personal workspace purges that workspace and its audit
+rows with the rest of the personal data.
 
 ## Reports
 

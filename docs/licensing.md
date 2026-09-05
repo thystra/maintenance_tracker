@@ -35,26 +35,23 @@ Code and profile facts should not be conflated.
 - Imported profiles are user-supplied data; the UI must show provenance and
   should distinguish first-party, locally created, and third-party definitions.
 
-## Paid Android client
+## Paid packaged mobile client
 
-A separate proprietary Android client is viable in principle when it
-communicates through the documented HTTP API and does not incorporate AGPL
-server code. Keep repositories and build artifacts separate:
+The planned mobile implementation is a Vue offline-first PWA packaged with
+Capacitor for Android/iOS when native capabilities are required. It is not a
+separate Kotlin Android client or an unrelated Swift iOS data model. Shared
+API/schema/sync code can remain distinct from the server while the mobile UI is
+purpose-built for field entry.
 
-- server app: AGPL-3.0-or-later;
-- OpenAPI contract and generated-client support: preferably Apache-2.0 or MIT;
-- Android app: commercial EULA/proprietary code;
-- third-party libraries: preserve their notices and comply with each license.
+Commercial distribution and source-license choices for packaged clients require
+a separate legal/product decision before publication. Do not assume that sharing
+Vue code with the AGPL server, using Capacitor, or charging for an app by itself
+determines the correct license. Preserve third-party notices and have qualified
+open-source counsel review the final dependency and distribution boundary.
 
-Have open-source counsel confirm the boundary before publication. Avoid the GPL
-Nextcloud Android SSO library if the desired client is proprietary. The
-[Nextcloud Android library](https://github.com/nextcloud/android-library) is
-MIT-licensed, but verify the exact dependency graph and bundled notices for the
-version selected.
-
-Charging money does not require proprietary licensing: open-source apps may be
-sold. The commercial reason for a proprietary client would be limiting
-redistribution of the packaged mobile experience, not permission to charge.
+Charging money does not inherently require proprietary licensing; the business
+model and redistribution goals should be evaluated separately from technical
+architecture.
 
 ## Google Play
 
@@ -85,17 +82,12 @@ and [current service fees](https://support.google.com/googleplay/android-develop
 
 ## Apple later
 
-Deferring iOS is reasonable. As of July 2026, Apple lists the Developer Program
-at USD 99 per membership year (or local equivalent), plus applicable App Store
-commission. iOS also requires a separate Swift/SwiftUI client, signing,
-provisioning, privacy disclosures, review, and ongoing device testing.
+Deferring iOS packaging is reasonable. As of July 2026, Apple lists the Developer Program at USD 99 per membership year (or local equivalent), plus applicable App Store commission. A Capacitor package still requires Apple signing/provisioning, privacy disclosures, review, and ongoing device testing.
 
 Apple's current terms and fees can change:
 [Apple Developer Program membership](https://developer.apple.com/programs/whats-included/).
 
-If the server API and sync behavior stabilize first, an eventual iOS client can
-reuse the OpenAPI contract and test fixtures without forcing an early
-cross-platform UI abstraction.
+If the server API and sync behavior stabilize first, Android/iOS Capacitor packages can share the Vue mobile application and OpenAPI/sync fixtures while retaining platform-specific native integrations where required.
 
 ## Branding
 

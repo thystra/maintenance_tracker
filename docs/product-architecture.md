@@ -16,7 +16,7 @@ API sync is one transport, not the data model. Pending work can also be exported
 
 ## Assets, classes, categories, and profiles
 
-`Asset` is generic: vehicle, trailer, building, equipment, appliance, tool, medical device, system, location, or other. A coarse asset class guides capabilities and relationship compatibility; user-facing categories remain configurable. Profiles provide declarative defaults for specifications, component topology, maintenance definitions, meters, condition measurements, relationship capabilities, and part information. Imported profile materialization remains editable by the user.
+`Asset` is generic: vehicle, trailer, building, equipment, appliance, tool, medical device, system, location, or other. A coarse asset class guides capabilities and relationship compatibility; user-facing categories remain configurable. Profiles provide declarative defaults for specifications, component topology, maintenance definitions, meters, condition measurements, relationship capabilities, and part information. An asset's user-facing display name/nickname remains separate from template-defined structured identity. Profile-defined information fields can declare type, group, order, validation, units, sensitivity, and summary-display metadata. Imported profile materialization remains editable by the user.
 
 Profiles must not impose fixed cardinality. Two batteries, two OEM fuel filters, and three aftermarket filters are ordinary component instances, not numbered schema fields.
 
@@ -28,11 +28,19 @@ Part requirements and compatible products are relational. Compatible, preferred,
 
 ## Usage, measurements, and maintenance rules
 
-Meters/measurements may represent distance, Hobbs/runtime hours, uses/cycles, starts, condition values, or custom dimensions. Inputs may be absolute readings or increments such as “I used this today” (+1 use). One activity may update several measurements.
+Maintenance definitions use one common work-definition model. The scheduling
+property is named `schedule`: `schedule: none` means unscheduled/ad-hoc work;
+anything else is scheduled maintenance. This supports a direct scheduled versus
+unscheduled filter without separate record types.
 
-Time bases include calendar days and configurable working days. Working days default to Monday-Friday but may be overridden by profile, asset, or task; the UI uses a human day picker rather than cron numbering.
+Non-`none` schedules may be time-, business-day-, distance-, runtime/hour-,
+usage/event-, or condition-driven and may combine reviewed limits. Condition
+monitoring (for example oil-life percentage) is an optional asset capability and
+may be combined with hard maximum distance/runtime/calendar thresholds.
 
-Maintenance definitions describe what should happen. Multiple due conditions support earliest-condition/ANY semantics, for example 7,500 miles OR 365 days. Generic condition measurements such as oil-life percentage may be preferred triggers while hard mileage/hour/calendar limits remain safety caps.
+Profiles define their own work-definition groups and catalogs rather than relying
+on hard-coded application categories. A quick "I used this today" action is a
+usage activity that can feed relevant schedules.
 
 ## Forecasting
 
@@ -63,6 +71,38 @@ Scale/weight tickets are first-class observations attached to a trip or operatin
 ## Optional geodata
 
 Location is optional evidence, never required for normal operation. A record may carry no geodata, device location captured at entry time, location derived from photo EXIF, or another explicit source. Preserve provenance and capture time. Privacy configuration can disable location globally or contextually, including a “never capture here” private/office location policy. Attachments must not silently convert EXIF location into canonical record location without the configured policy and visible provenance.
+
+## Evidence and retention
+
+Evidence kinds are `photo`, `video`, `receipt`, `invoice`, `document`, and
+`other`. Evidence and activities have a many-to-many relationship: one invoice
+can support an oil change plus filters, and one activity can carry several media
+and document items.
+
+Retention policy applies independently to bytes and durable evidence metadata.
+Where policy permits, pruning a blob can retain checksum, original name/type and
+size, uploader/provenance, links, retention action/date, and audit provenance.
+A per-item **Protect / Keep** override prevents automated pruning. Management
+reporting should expose total, protected, and prunable storage by media type,
+asset, and age with a policy simulation before destructive action.
+
+## Public maintenance reports
+
+Future public reports use scoped, revocable share tokens rather than public
+workspace membership. A share may expose selected asset identity/specifications,
+maintenance history/current state, and selected evidence. It must not implicitly
+expose other assets, workspace membership, internal audit data, private notes,
+geodata, or unrelated evidence. Both live and immutable snapshot report modes
+remain design options.
+
+## External mechanic submissions
+
+A future scoped mechanic link may permit reading selected maintenance information
+and preparing a work transaction with work performed, parts, notes, evidence,
+receipt, and invoice. The external party never writes canonical history directly.
+The result is an external submission reviewed by an Owner or authorized Manager;
+acceptance passes through the same validation/idempotency ingest boundary used by
+mobile sync and portable work bundles.
 
 ## Guiding invariant
 

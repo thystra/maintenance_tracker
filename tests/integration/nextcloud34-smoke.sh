@@ -24,6 +24,8 @@ admin_user="integration_admin"
 admin_password="integration-test-only"
 cleanup_user="cleanup_test"
 cleanup_password="cleanup-test-only"
+collab_user="collab_test"
+collab_password="collab-test-only"
 postgres_database="nextcloud"
 postgres_user="nextcloud"
 postgres_password="integration-postgres-only"
@@ -195,6 +197,9 @@ assert_contains "$capabilities" '"custom-categories"' 'capabilities'
 assert_contains "$capabilities" '"component-instances"' 'capabilities'
 assert_contains "$capabilities" '"typed-asset-relationships"' 'capabilities'
 assert_contains "$capabilities" '"effective-dated-assignments"' 'capabilities'
+assert_contains "$capabilities" '"capability-authorization"' 'capabilities'
+assert_contains "$capabilities" '"workspace-membership"' 'capabilities'
+assert_contains "$capabilities" '"append-only-audit"' 'capabilities'
 
 categories=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -502,6 +507,141 @@ post_archive_assignments=$(docker exec "$container" curl --silent --show-error \
 	--header 'Accept: application/json' \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assignments?format=json')
 assert_not_contains "$post_archive_assignments" '"a468ac62-a95a-4fdd-8aae-72bc5fa3e821"' 'assignment active list after archive'
+
+# Qualify real multi-user capability boundaries and shared-workspace lifecycle.
+docker exec --env OC_PASS="$collab_password" --user www-data "$container" \
+	php occ user:add --password-from-env "$collab_user" >/dev/null
+
+admin_workspaces=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/workspaces?format=json')
+assert_contains "$admin_workspaces" '"statuscode":200' 'owner workspace list'
+admin_workspace_uuid=$(docker exec --env RESPONSE="$admin_workspaces" "$container" \
+	php -r '$d=json_decode(getenv("RESPONSE"),true); echo $d["ocs"]["data"]["items"][0]["uuid"] ?? "";')
+if [[ ! "$admin_workspace_uuid" =~ ^[0-9a-f-]{36}$ ]]; then
+	echo "Could not resolve the owner personal workspace UUID: $admin_workspace_uuid" >&2
+	exit 1
+fi
+
+member_added=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--request POST \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data "{\"member\":{\"userUid\":\"${collab_user}\",\"role\":\"contributor\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/workspaces/${admin_workspace_uuid}/members?format=json")
+assert_contains "$member_added" '"statuscode":201' 'contributor membership create'
+assert_contains "$member_added" '"role":"contributor"' 'contributor membership create'
+
+collab_workspaces=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/workspaces?format=json')
+assert_contains "$collab_workspaces" "\"uuid\":\"${admin_workspace_uuid}\"" 'contributor shared workspace visibility'
+assert_contains "$collab_workspaces" '"role":"contributor"' 'contributor shared workspace role'
+
+collab_assets=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$collab_assets" '"statuscode":200' 'contributor inventory read'
+
+collab_write_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--request POST \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data '{"asset":{"name":"Contributor must not create"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$collab_write_denied" '"statuscode":403' 'contributor inventory write rejection'
+
+collab_audit_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/audit?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$collab_audit_denied" '"statuscode":403' 'contributor audit rejection'
+
+member_promoted=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--request PATCH \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data '{"member":{"role":"manager"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/workspaces/${admin_workspace_uuid}/members/${collab_user}?format=json")
+assert_contains "$member_promoted" '"statuscode":200' 'manager promotion'
+assert_contains "$member_promoted" '"role":"manager"' 'manager promotion'
+
+shared_asset_uuid='8d6d399f-8a39-4d84-9bd9-57a84e6a7aec'
+manager_created=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--request POST \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data "{\"asset\":{\"uuid\":\"${shared_asset_uuid}\",\"category\":\"other\",\"name\":\"Manager-created shared asset\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$manager_created" '"statuscode":201' 'manager inventory create'
+assert_contains "$manager_created" "\"uuid\":\"${shared_asset_uuid}\"" 'manager inventory create'
+
+manager_members=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/workspaces/${admin_workspace_uuid}/members?format=json")
+assert_contains "$manager_members" '"statuscode":200' 'manager membership read'
+assert_contains "$manager_members" "\"userUid\":\"${collab_user}\"" 'manager membership read'
+
+manager_audit=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/audit?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$manager_audit" '"statuscode":200' 'manager audit read'
+assert_contains "$manager_audit" '"eventType":"asset.created"' 'manager audit domain event'
+assert_contains "$manager_audit" "\"actorUid\":\"${collab_user}\"" 'manager audit actor attribution'
+assert_contains "$manager_audit" "\"subjectId\":\"${shared_asset_uuid}\"" 'manager audit subject attribution'
+
+manager_membership_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--request PATCH \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data '{"member":{"role":"viewer"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/workspaces/${admin_workspace_uuid}/members/${collab_user}?format=json")
+assert_contains "$manager_membership_denied" '"statuscode":403' 'manager membership administration rejection'
+
+docker exec --user www-data "$container" php occ user:delete "$collab_user" >/dev/null
+
+members_after_delete=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/workspaces/${admin_workspace_uuid}/members?format=json")
+assert_not_contains "$members_after_delete" "\"userUid\":\"${collab_user}\"" 'deleted manager membership cleanup'
+
+assets_after_member_delete=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$assets_after_member_delete" "\"uuid\":\"${shared_asset_uuid}\"" 'shared work retention after member deletion'
+
+audit_after_member_delete=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/audit?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$audit_after_member_delete" "\"actorUid\":\"${collab_user}\"" 'historical audit actor retention after member deletion'
+assert_contains "$audit_after_member_delete" "\"subjectId\":\"${shared_asset_uuid}\"" 'historical audit subject retention after member deletion'
 
 docker exec --env OC_PASS="$cleanup_password" --user www-data "$container" \
 	php occ user:add --password-from-env "$cleanup_user" >/dev/null

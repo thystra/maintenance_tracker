@@ -1,6 +1,6 @@
 # Domain model
 
-This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, categories, component instances, structured specifications, relationships, and assignments. Remaining tables arrive with their vertical slices.
+This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, append-only audit events, categories, component instances, structured specifications, relationships, and assignments. Remaining tables arrive with their vertical slices.
 
 All table names stay under Nextcloud's recommended 23-character limit. API IDs
 are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
@@ -11,7 +11,7 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
 : A private or shared maintenance workspace.
 
 `maint_members`
-: Nextcloud user membership and `owner`/`editor`/`viewer` role.
+: Nextcloud user membership with `owner`/`manager`/`contributor`/`viewer` role. Authorization is capability-based; legacy `editor` persists only as a migration/runtime compatibility input and normalizes to `manager`.
 
 `maint_categories`
 : Built-in or custom broad categories, optionally hierarchical.
@@ -50,15 +50,13 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
 `maint_prof_parts`
 : Part definitions supplied by a profile revision.
 
-`maint_prof_plans`
-: Component and maintenance-plan templates.
+`maint_prof_defs`
+: Future common work-definition templates. The provisional profile-v1 `maintenancePlans`/`triggers` representation is input compatibility only and is revised before profile installation becomes a product contract.
 
 `maint_asset_prof`
 : Which profile revision was materialized into an asset.
 
-Profile installation creates ordinary asset components and plans while retaining
-source keys. Profile upgrades are user-approved diffs. Suppressed or customized
-records are never overwritten without an explicit choice.
+Profile installation will create ordinary asset components and work definitions while retaining source keys. Profile upgrades are user-approved diffs. Suppressed or customized records are never overwritten without an explicit choice.
 
 ## Meters
 
@@ -82,31 +80,30 @@ Corrections supersede old readings; they do not erase the audit trail.
 
 ## Plans, triggers, and work
 
-`maint_plans`
-: Maintenance, inspection, administration, or reorder plan attached to an asset
-  or component. Includes title, instructions, notes, enabled state, and trigger
-  combination (`ANY` initially).
+The future maintenance model uses a common **work definition** for scheduled and
+unscheduled work. A definition describes what may/should be done; an activity
+records what actually happened.
 
-`maint_triggers`
-: Calendar or meter threshold. Multiple rows support “six months or 5,000
-  miles, whichever comes first.”
+A work definition contains a required scheduling property named `schedule`.
+`schedule: none` means unscheduled/ad-hoc work. Any non-`none` policy means
+scheduled maintenance and may reference time, distance, runtime hours, use
+counts, condition measurements, or a reviewed combination policy. Oil changes,
+inspections, turbocharger repairs, and transmission repairs therefore share one
+underlying definition shape instead of separate scheduled/repair record types.
 
-`maint_occurrences`
-: Materialized due occurrence used by reminders, calendar synchronization, and
-  offline clients. At most one open occurrence per plan in the MVP.
+Profiles may provide definition groups such as Engine, Transmission, Cooling,
+or HVAC, but those groups remain profile/user data. Asset display name/nickname
+is also distinct from profile-defined structured identity fields. Profile fields
+may carry type, group, order, validation, units, sensitivity, and summary-display
+metadata.
 
-`maint_service`
-: Work performed, with local time/timezone, provider/location, notes, and
-  status.
-
-`maint_service_tasks`
-: One service visit can complete several due occurrences.
-
-`maint_service_parts`
-: Parts and quantities actually used.
-
-Admin/reorder work is a plan kind, not a separate scheduling engine. Every plan
-and every service record supports free-form notes.
+An **activity** is the canonical event/transaction timeline entry. Maintenance,
+repair, inspection, fuel/energy, trip, meter reading, usage event, and extensible
+other activities can reference a primary asset and related assets. A maintenance
+activity may satisfy one or more scheduled occurrences/definitions and record
+parts, costs, notes, evidence, provider, and operating context. The exact table
+split for definitions/activities remains intentionally deferred until its
+vertical slice is implemented.
 
 ## Parts and vendors
 
@@ -128,20 +125,26 @@ prevents accidental tracking or remote-content leakage.
 
 ## Files and costs
 
-`maint_documents`
-: Verified Nextcloud file ID, MIME type, size, hash, document kind, owner, and
-  last-known path.
+Evidence bytes live in Nextcloud Files; the database stores verified identity and
+provenance. Planned first-class evidence kinds are `photo`, `video`, `receipt`,
+`invoice`, `document`, and `other`.
 
-Explicit join tables associate a document with an asset, service record, cost,
-fuel entry, or trip.
+Evidence linkage is many-to-many. One receipt or invoice can support several
+work items, and one activity can have multiple photos, a video, receipt, invoice,
+and other documents. Link rows are explicit rather than overloading a single
+`document_id` field.
 
-`maint_costs`
-: The single cost ledger. It stores date, integer minor amount, ISO currency,
-  category, vendor, notes, and optional links to domain records.
+Blob retention is independent from activity/evidence-record retention. A policy
+may prune a large media blob while retaining, when permitted, evidence identity,
+original filename/type, original size, checksum, uploader/provenance, linked
+activity, retention action/date, and audit provenance. Each evidence item can be
+marked **Protect / Keep** so automated pruning cannot remove its blob. Storage
+management should report total/protected/prunable bytes by media type, asset,
+and age and simulate a policy before deletion.
 
-Service and fuel records reference their cost entry; they do not duplicate its
-amount. Categories cover acquisition, fuel/energy, maintenance, repair,
-insurance, registration, tax, financing, depreciation, disposal, and other.
+`maint_costs` remains the central future cost ledger: date, integer minor amount,
+ISO currency, category, vendor, notes, and links to domain records. Service/fuel
+records reference costs rather than duplicating amounts.
 
 ## Vehicle extension
 
@@ -188,8 +191,10 @@ and other mileage.
   projection hash, and sync status.
 
 `maint_changes`
-: Monotonic per-workspace entity journal. `id` becomes the internal cursor;
-  public cursors will be opaque encodings with expiry/version metadata.
+: Monotonic per-workspace entity journal. `id` becomes the internal cursor; public cursors will be opaque encodings with expiry/version metadata.
+
+`maint_audit`
+: Implemented append-only audit stream with versioned event type, actor UID, subject, revision, level, bounded structured details, and timestamp. It is security/history provenance, not a substitute for the synchronization journal.
 
 Mutable records include `revision`, `created_at`, `updated_at`, and
 `deleted_at`. Historical readings, costs, service records, trip revisions, and
@@ -197,7 +202,9 @@ report snapshots are append-only where practical.
 
 ## Key invariants
 
-- Every object lookup is constrained by an authorized workspace.
+- Every object lookup is constrained by an authorized workspace capability.
+- Manager capabilities are explicit and do not include membership administration.
+- Audit history is append-only and retains historical actor attribution for shared work.
 - UUID knowledge is not authorization.
 - A component row represents one real component instance.
 - Money always has an amount and currency together.

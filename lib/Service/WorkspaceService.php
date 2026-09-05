@@ -19,18 +19,13 @@ use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 
 final class WorkspaceService {
-	private const ROLE_RANK = [
-		'viewer' => 10,
-		'editor' => 20,
-		'owner' => 30,
-	];
-
 	public function __construct(
 		private WorkspaceMapper $workspaceMapper,
 		private WorkspaceMemberMapper $memberMapper,
 		private UuidGenerator $uuidGenerator,
 		private ITimeFactory $timeFactory,
 		private UserLifecycleService $userLifecycleService,
+		private AuthorizationCatalog $authorization,
 	) {
 	}
 
@@ -42,36 +37,84 @@ final class WorkspaceService {
 	}
 
 	/**
-	 * Authorize and run the entire operation under the account lifecycle lock.
-	 *
+	 * @return list<array<string, mixed>>
+	 */
+	public function listAccessible(string $userUid): array {
+		return $this->userLifecycleService->runForActiveUser(
+			$userUid,
+			function () use ($userUid): array {
+				$this->getOrCreatePersonalUnlocked($userUid);
+				$items = [];
+				foreach ($this->memberMapper->findForUser($userUid) as $member) {
+					try {
+						$workspace = $this->workspaceMapper->findById($member->getWorkspaceId());
+					} catch (DoesNotExistException) {
+						continue;
+					}
+					$items[] = $workspace->toApi(
+						$this->authorization->normalizeRole($member->getRole()),
+					);
+				}
+
+				usort(
+					$items,
+					static fn (array $left, array $right): int =>
+						[$left['kind'] !== 'personal', $left['name'], $left['uuid']]
+						<=> [$right['kind'] !== 'personal', $right['name'], $right['uuid']],
+				);
+
+				return $items;
+			},
+		);
+	}
+
+	/**
 	 * @template T
 	 * @param callable(WorkspaceContext): T $operation
 	 * @return T
 	 */
-	public function runWithAccess(
+	public function runWithCapability(
 		string $userUid,
 		?string $workspaceUuid,
-		string $minimumRole,
+		string $capability,
 		callable $operation,
 	): mixed {
 		return $this->userLifecycleService->runForActiveUser(
 			$userUid,
-			function () use ($userUid, $workspaceUuid, $minimumRole, $operation): mixed {
-				$context = $this->requireAccessUnlocked(
-					$userUid,
-					$workspaceUuid,
-					$minimumRole,
-				);
+			fn (): mixed => $this->runAuthorizedUnlocked(
+				$userUid,
+				$workspaceUuid,
+				$capability,
+				$operation,
+			),
+		);
+	}
 
-				if (self::ROLE_RANK[$minimumRole] >= self::ROLE_RANK['editor']) {
-					$this->workspaceMapper->serializeWrite(
-						$context->workspace()->getId(),
-						$this->uuidGenerator->generate(),
-					);
-				}
-
-				return $operation($context);
-			},
+	/**
+	 * Run a workspace operation while holding lifecycle locks for the actor and
+	 * all explicitly affected users. Membership mutations use this boundary so
+	 * account deletion/UID reuse cannot race a grant, role change, or removal.
+	 *
+	 * @template T
+	 * @param list<string> $affectedUserUids
+	 * @param callable(WorkspaceContext): T $operation
+	 * @return T
+	 */
+	public function runWithCapabilityForUsers(
+		string $userUid,
+		array $affectedUserUids,
+		?string $workspaceUuid,
+		string $capability,
+		callable $operation,
+	): mixed {
+		return $this->userLifecycleService->runForActiveUsers(
+			[$userUid, ...$affectedUserUids],
+			fn (): mixed => $this->runAuthorizedUnlocked(
+				$userUid,
+				$workspaceUuid,
+				$capability,
+				$operation,
+			),
 		);
 	}
 
@@ -95,7 +138,6 @@ final class WorkspaceService {
 
 		/** @var Workspace $inserted */
 		$inserted = $this->workspaceMapper->insert($workspace);
-
 		$member = new WorkspaceMember();
 		$member->setWorkspaceId($inserted->getId());
 		$member->setUserUid($userUid);
@@ -106,39 +148,53 @@ final class WorkspaceService {
 		return $inserted;
 	}
 
-	private function requireAccessUnlocked(
+	private function runAuthorizedUnlocked(
 		string $userUid,
 		?string $workspaceUuid,
-		string $minimumRole,
-	): WorkspaceContext {
-		if (!isset(self::ROLE_RANK[$minimumRole])) {
-			throw new \LogicException("Unknown workspace role: {$minimumRole}");
+		string $capability,
+		callable $operation,
+	): mixed {
+		$context = $this->requireCapabilityUnlocked($userUid, $workspaceUuid, $capability);
+		if ($this->authorization->isWrite($capability)) {
+			$this->workspaceMapper->serializeWrite(
+				$context->workspace()->getId(),
+				$this->uuidGenerator->generate(),
+			);
 		}
+
+		return $operation($context);
+	}
+
+	private function requireCapabilityUnlocked(
+		string $userUid,
+		?string $workspaceUuid,
+		string $capability,
+	): WorkspaceContext {
+		// Validate capability identity even before a personal workspace shortcut.
+		$this->authorization->isWrite($capability);
 
 		if ($workspaceUuid === null || $workspaceUuid === '') {
 			$workspace = $this->getOrCreatePersonalUnlocked($userUid);
-
-			return new WorkspaceContext($workspace, 'owner');
+			$role = 'owner';
+		} else {
+			$workspaceUuid = strtolower(trim($workspaceUuid));
+			if (!UuidGenerator::isValid($workspaceUuid)) {
+				throw new AccessDeniedException('The workspace is unavailable');
+			}
+			try {
+				$workspace = $this->workspaceMapper->findByUuid($workspaceUuid);
+				$member = $this->memberMapper->findByWorkspaceAndUser(
+					$workspace->getId(),
+					$userUid,
+				);
+			} catch (DoesNotExistException) {
+				throw new AccessDeniedException('The workspace is unavailable');
+			}
+			$role = $this->authorization->normalizeRole($member->getRole());
 		}
 
-		$workspaceUuid = strtolower(trim($workspaceUuid));
-		if (!UuidGenerator::isValid($workspaceUuid)) {
-			throw new AccessDeniedException('The workspace is unavailable');
-		}
-
-		try {
-			$workspace = $this->workspaceMapper->findByUuid($workspaceUuid);
-			$member = $this->memberMapper->findByWorkspaceAndUser(
-				$workspace->getId(),
-				$userUid,
-			);
-		} catch (DoesNotExistException) {
-			throw new AccessDeniedException('The workspace is unavailable');
-		}
-
-		$role = $member->getRole();
-		if (!isset(self::ROLE_RANK[$role]) || self::ROLE_RANK[$role] < self::ROLE_RANK[$minimumRole]) {
-			throw new AccessDeniedException('The workspace role does not permit this action');
+		if (!$this->authorization->allows($role, $capability)) {
+			throw new AccessDeniedException('The workspace capability does not permit this action');
 		}
 
 		return new WorkspaceContext($workspace, $role);

@@ -17,10 +17,20 @@ Each profile declares:
 - `name`, `category`, and description;
 - data license, author, source URL, and optional source revision;
 - applicability metadata;
-- meter, component, part, and maintenance-plan templates.
+- meter, component, part, and provisional maintenance-plan templates.
 
 Changing a published profile creates a new semantic version and content hash.
 Already installed assets retain the exact revision used.
+
+### Scheduling-schema transition
+
+The checked-in profile-v1 schema predates the common work-definition decision and
+still represents scheduling as `maintenancePlans` plus `triggers`. That shape is
+provisional foundation data, not the final installer contract. Before profile
+installation is enabled, a later schema revision will use common work definitions
+with a `schedule` property: `schedule: none` means unscheduled/ad-hoc work and any
+non-`none` policy means scheduled maintenance. Existing profile-v1 data will need
+an explicit versioned migration/import mapping rather than silent reinterpretation.
 
 ## Installation behavior
 
@@ -47,7 +57,7 @@ Profile upgrades show:
 
 No upgrade silently overwrites user choices.
 
-## Trigger model
+## Provisional profile-v1 trigger representation
 
 Calendar trigger:
 

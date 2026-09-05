@@ -8,9 +8,8 @@ data even though the app is not a medical product.
 
 - Every request requires a Nextcloud user except the standard login flow.
 - Normal-user endpoints use `NoAdminRequired`, not `PublicPage`.
-- OCS endpoints retain framework CSRF protection; Android sends
-  `OCS-APIRequest: true`.
-- Workspace membership and role are checked before resource access.
+- OCS endpoints retain framework CSRF protection; API/mobile clients send `OCS-APIRequest: true`.
+- Workspace membership is resolved before resource access and authorization is capability-based. Owner/Manager/Contributor/Viewer are explicit capability bundles; Manager deliberately does not receive membership administration.
 - Every mapper query includes the authorized workspace.
 - UUIDs are identifiers, never bearer secrets.
 - Object existence is not disclosed across workspace boundaries.
@@ -18,9 +17,7 @@ data even though the app is not a medical product.
   external identity mapping is removed, preventing UID reuse from inheriting
   the previous account's records. A database-serialized lifecycle row retains
   only a SHA-256 UID key so cleanup cannot race lazy workspace creation.
-- Editor/owner mutations serialize by changing a dedicated random lock token on the authorized workspace row as well as the
-  current user's lifecycle row. This prevents two different shared-workspace
-  members from concurrently establishing contradictory defaults/assignments.
+- Capability-authorized mutations serialize by changing a dedicated random lock token on the authorized workspace row as well as the actor's lifecycle row. Membership mutations lock actor and target lifecycle rows in deterministic UID order. This prevents concurrent shared-workspace invariant races and grant/delete UID-reuse races.
   Personal-workspace deletion acquires the same workspace-row lock before
   purging child records so a concurrent member write cannot leave an orphan.
 - Project validation discovers every migration-created `workspace_id` table and
@@ -52,18 +49,22 @@ data even though the app is not a medical product.
   user's original file.
 - Log IDs and result codes, never file contents or receipt OCR text.
 
-## Android credentials
+## Mobile credentials
+
+## Mobile credentials
 
 - Use Login Flow v2 and its unique revocable app password.
-- Store the app password with an AES-GCM key held by Android Keystore.
-- Exclude credentials from Android backup and device transfer.
+- The PWA/package must never request or store the user's primary password.
+- Packaged Capacitor clients must use platform-appropriate protected credential
+  storage; exact native storage integration is selected and reviewed with the
+  mobile implementation rather than hard-coding an obsolete client stack here.
 - Never log authorization headers, app passwords, or login polling responses.
-- Do not implement a trust-all TLS manager or an “accept invalid certificate”
+- Do not implement a trust-all TLS manager or an "accept invalid certificate"
   prompt.
 - Publicly trusted HTTPS is the safe initial policy. Private-CA support requires
   a designed trust-onboarding flow.
-- A background-sync key cannot require biometric interaction; optional
-  biometric app lock is a separate foreground control.
+- Optional biometric app lock is a foreground UX control, not a requirement for
+  background synchronization.
 
 ## Calendar privacy
 
@@ -75,12 +76,26 @@ information. Users can opt into more descriptive titles after a warning.
 
 The IRS-oriented log needs date, mileage, destination/area, and business
 purpose—not a continuous GPS route. Exact background location is excluded from
-the initial Android app because it adds privacy, battery, and Google Play policy
+the initial mobile client because it adds privacy, battery, and Google Play policy
 cost.
 
 Trip records keep entry time separately from trip time and preserve corrections
 with reasons. No third-party analytics receives locations, costs, or receipt
 data.
+
+## Audit and evidence retention
+
+The implemented `maint_audit` stream is an append-only audit stream. Significant domain and
+membership mutations record actor/subject metadata, not free-form notes or file
+contents. Shared-workspace member deletion removes authorization but preserves
+historical audit actor attribution. Personal-workspace deletion purges its audit
+rows with the rest of that personal workspace.
+
+Future evidence retention treats blob deletion separately from durable metadata.
+Automatic pruning must respect per-item Protect/Keep state and expose a policy
+simulation before destructive action. Public report tokens and external mechanic
+submissions are scoped/revocable future capabilities; neither grants workspace
+membership or direct canonical-history write access.
 
 ## Logging and exports
 
