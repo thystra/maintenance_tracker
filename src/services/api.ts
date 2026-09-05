@@ -17,8 +17,14 @@ import type {
 	CreateAssignment,
 	CreateCategory,
 	CreateComponent,
+	CreateMeter,
+	CreateReading,
 	CreateRelationship,
 	CreateSpecification,
+	Meter,
+	MeterList,
+	Reading,
+	ReadingList,
 	Relationship,
 	RelationshipList,
 	RelationshipTypeList,
@@ -134,4 +140,20 @@ export async function archiveAssignment(uuid: string, expectedRevision: number):
 		...requestOptions,
 		data: { expectedRevision },
 	}))
+}
+
+export async function getMeters(assetUuid: string): Promise<MeterList> {
+	return data(await axios.get<OcsEnvelope<MeterList>>(endpoint(`/assets/${assetUuid}/meters`), requestOptions))
+}
+
+export async function createMeter(assetUuid: string, meter: CreateMeter): Promise<Meter> {
+	return data(await axios.post<OcsEnvelope<Meter>>(endpoint(`/assets/${assetUuid}/meters`), { meter }, requestOptions))
+}
+
+export async function getReadings(meterUuid: string): Promise<ReadingList> {
+	return data(await axios.get<OcsEnvelope<ReadingList>>(endpoint(`/meters/${meterUuid}/readings`), requestOptions))
+}
+
+export async function createReading(meterUuid: string, reading: CreateReading): Promise<Reading> {
+	return data(await axios.post<OcsEnvelope<Reading>>(endpoint(`/meters/${meterUuid}/readings`), { reading }, requestOptions))
 }

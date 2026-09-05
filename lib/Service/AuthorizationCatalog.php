@@ -16,6 +16,10 @@ final class AuthorizationCatalog {
 	public const WORKSPACE_MEMBERS_READ = 'workspace.members.read';
 	public const WORKSPACE_MEMBERS_MANAGE = 'workspace.members.manage';
 	public const AUDIT_READ = 'audit.read';
+	public const METER_READ = 'meter.read';
+	public const METER_MANAGE = 'meter.manage';
+	public const READING_CREATE = 'reading.create';
+	public const READING_CORRECT = 'reading.correct';
 
 	/**
 	 * Reserved vocabulary is deliberately present before its subsystem exists.
@@ -30,6 +34,10 @@ final class AuthorizationCatalog {
 		self::WORKSPACE_MEMBERS_READ => ['implemented' => true, 'write' => false],
 		self::WORKSPACE_MEMBERS_MANAGE => ['implemented' => true, 'write' => true],
 		self::AUDIT_READ => ['implemented' => true, 'write' => false],
+		self::METER_READ => ['implemented' => true, 'write' => false],
+		self::METER_MANAGE => ['implemented' => true, 'write' => true],
+		self::READING_CREATE => ['implemented' => true, 'write' => true],
+		self::READING_CORRECT => ['implemented' => true, 'write' => true],
 
 		'maintenance_definition.*' => ['implemented' => false, 'write' => false],
 		'activity.*' => ['implemented' => false, 'write' => false],
@@ -58,6 +66,10 @@ final class AuthorizationCatalog {
 			self::WORKSPACE_MEMBERS_READ,
 			self::WORKSPACE_MEMBERS_MANAGE,
 			self::AUDIT_READ,
+			self::METER_READ,
+			self::METER_MANAGE,
+			self::READING_CREATE,
+			self::READING_CORRECT,
 		],
 		'manager' => [
 			self::WORKSPACE_READ,
@@ -65,14 +77,21 @@ final class AuthorizationCatalog {
 			self::INVENTORY_MANAGE,
 			self::WORKSPACE_MEMBERS_READ,
 			self::AUDIT_READ,
+			self::METER_READ,
+			self::METER_MANAGE,
+			self::READING_CREATE,
+			self::READING_CORRECT,
 		],
 		'contributor' => [
 			self::WORKSPACE_READ,
 			self::INVENTORY_READ,
+			self::METER_READ,
+			self::READING_CREATE,
 		],
 		'viewer' => [
 			self::WORKSPACE_READ,
 			self::INVENTORY_READ,
+			self::METER_READ,
 		],
 	];
 

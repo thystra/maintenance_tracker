@@ -35,6 +35,7 @@ final class Capability implements ICapability {
 					'capability-authorization',
 					'workspace-membership',
 					'append-only-audit',
+					'meters-readings',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

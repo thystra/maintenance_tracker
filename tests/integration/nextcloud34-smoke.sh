@@ -200,6 +200,7 @@ assert_contains "$capabilities" '"effective-dated-assignments"' 'capabilities'
 assert_contains "$capabilities" '"capability-authorization"' 'capabilities'
 assert_contains "$capabilities" '"workspace-membership"' 'capabilities'
 assert_contains "$capabilities" '"append-only-audit"' 'capabilities'
+assert_contains "$capabilities" '"meters-readings"' 'capabilities'
 
 categories=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -270,6 +271,167 @@ specification_list=$(docker exec "$container" curl --silent --show-error \
 	--header 'Accept: application/json' \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/specifications?format=json')
 assert_contains "$specification_list" '"OEM part number"' 'specification list'
+
+
+odometer_meter_uuid='9c7f24c0-0d3a-4c6f-9c11-0b6f3e1e5e10'
+odometer_meter=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--request POST \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	--header 'Content-Type: application/json' \
+	--data "{\"meter\":{\"uuid\":\"${odometer_meter_uuid}\",\"key\":\"odometer\",\"name\":\"Odometer\",\"dimension\":\"distance\",\"displayUnit\":\"mi\",\"monotonic\":true}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/meters?format=json')
+assert_contains "$odometer_meter" '"statuscode":201' 'odometer meter create'
+assert_contains "$odometer_meter" '"canonicalUnit":"mm"' 'odometer meter canonical unit'
+assert_contains "$odometer_meter" '"monotonic":true' 'odometer meter monotonic flag'
+
+odometer_meter_retry=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"meter\":{\"uuid\":\"${odometer_meter_uuid}\",\"key\":\"odometer\",\"name\":\"Odometer\",\"dimension\":\"distance\",\"displayUnit\":\"mi\",\"monotonic\":true}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/meters?format=json')
+assert_contains "$odometer_meter_retry" '"statuscode":201' 'odometer meter idempotent retry'
+assert_contains "$odometer_meter_retry" "\"uuid\":\"${odometer_meter_uuid}\"" 'odometer meter idempotent retry'
+
+duplicate_odometer=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"meter":{"uuid":"dc8da275-5628-44fe-a254-1ba496b3698f","key":"odometer","name":"Duplicate odometer","dimension":"distance","displayUnit":"mi","monotonic":true}}' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/meters?format=json')
+assert_contains "$duplicate_odometer" '"statuscode":400' 'duplicate meter key rejection'
+
+runtime_meter_uuid='11b6aabd-43c6-43bd-9e00-4daad9f83bfe'
+runtime_meter=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"meter\":{\"uuid\":\"${runtime_meter_uuid}\",\"componentUuid\":\"${component_uuid}\",\"key\":\"service_hours\",\"name\":\"Service hours\",\"dimension\":\"runtime\",\"displayUnit\":\"hour\",\"monotonic\":true}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/meters?format=json')
+assert_contains "$runtime_meter" '"statuscode":201' 'component runtime meter create'
+assert_contains "$runtime_meter" "\"componentUuid\":\"${component_uuid}\"" 'component runtime meter target'
+assert_contains "$runtime_meter" '"canonicalUnit":"s"' 'component runtime meter canonical unit'
+
+runtime_reading=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"reading":{"uuid":"dbbe02fb-26ba-426d-9d21-515e7b161374","observedAt":"2026-09-01T13:00:00Z","value":"1.25","unit":"h"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${runtime_meter_uuid}/readings?format=json")
+assert_contains "$runtime_reading" '"statuscode":201' 'runtime reading create'
+assert_contains "$runtime_reading" '"canonicalValue":4500' 'runtime reading canonical value'
+assert_contains "$runtime_reading" '"originalUnit":"hour"' 'runtime reading normalized unit alias'
+
+reading_one_uuid='a1e81ef4-e63a-4ed7-9053-fcefe78275ab'
+reading_one=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${reading_one_uuid}\",\"observedAt\":\"2026-09-01T12:00:00Z\",\"value\":\"100000.0\",\"unit\":\"mi\",\"source\":{\"type\":\"manual\",\"reference\":\"integration fixture\"}}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$reading_one" '"statuscode":201' 'odometer reading create'
+assert_contains "$reading_one" '"originalValue":"100000"' 'odometer reading normalized original value'
+assert_contains "$reading_one" '"originalUnit":"mi"' 'odometer reading original unit'
+assert_contains "$reading_one" '"canonicalValue":160934400000' 'odometer reading canonical value'
+
+reading_one_retry=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${reading_one_uuid}\",\"observedAt\":\"2026-09-01T12:00:00Z\",\"value\":\"100000.0\",\"unit\":\"mi\",\"source\":{\"type\":\"manual\",\"reference\":\"integration fixture\"}}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$reading_one_retry" '"statuscode":201' 'odometer reading idempotent retry'
+assert_contains "$reading_one_retry" "\"uuid\":\"${reading_one_uuid}\"" 'odometer reading idempotent retry'
+
+reading_later_uuid='b2f92f05-f74b-4fe8-a164-0df0f89386bc'
+reading_later=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${reading_later_uuid}\",\"observedAt\":\"2026-09-03T12:00:00Z\",\"value\":\"100250.5\",\"unit\":\"mi\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$reading_later" '"statuscode":201' 'later odometer reading create'
+
+reading_decrease=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"reading":{"observedAt":"2026-09-04T12:00:00Z","value":"99999","unit":"mi"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$reading_decrease" '"statuscode":400' 'monotonic decrease rejection'
+
+historical_reading_uuid='c30a4016-085c-4af9-b275-1e01fa0497cd'
+historical_reading=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${historical_reading_uuid}\",\"observedAt\":\"2026-09-02T12:00:00Z\",\"value\":\"100100\",\"unit\":\"mi\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$historical_reading" '"statuscode":201' 'historical monotonic reading create'
+
+historical_too_high=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"reading":{"observedAt":"2026-09-02T18:00:00Z","value":"100300","unit":"mi"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$historical_too_high" '"statuscode":400' 'historical successor monotonic rejection'
+
+corrected_reading_uuid='d41b5127-196d-4b0a-8366-2f120b15a8de'
+corrected_reading=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${corrected_reading_uuid}\",\"value\":\"100125\",\"unit\":\"mi\",\"notes\":\"Corrected transcription\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/readings/${historical_reading_uuid}/corrections?format=json")
+assert_contains "$corrected_reading" '"statuscode":201' 'reading correction create'
+assert_contains "$corrected_reading" "\"supersedesUuid\":\"${historical_reading_uuid}\"" 'reading correction supersedes link'
+
+reading_history=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$reading_history" "\"uuid\":\"${historical_reading_uuid}\"" 'reading history retains superseded row'
+assert_contains "$reading_history" "\"supersededByUuid\":\"${corrected_reading_uuid}\"" 'reading history marks superseded row'
+assert_contains "$reading_history" "\"uuid\":\"${corrected_reading_uuid}\"" 'reading history includes correction'
+
+meter_update=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request PATCH \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":1,"meter":{"displayUnit":"km"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}?format=json")
+assert_contains "$meter_update" '"statuscode":200' 'meter update'
+assert_contains "$meter_update" '"revision":2' 'meter update revision'
+assert_contains "$meter_update" '"displayUnit":"km"' 'meter update display unit'
+
+meter_stale=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request PATCH \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":1,"meter":{"name":"Stale meter write"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}?format=json")
+assert_contains "$meter_stale" '"statuscode":412' 'stale meter update'
+
+nonmonotonic_meter_uuid='881174c9-d2b4-49e9-941d-c14eed8a7623'
+nonmonotonic_meter=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"meter\":{\"uuid\":\"${nonmonotonic_meter_uuid}\",\"key\":\"cycle_counter\",\"name\":\"Cycle counter\",\"dimension\":\"usage_count\",\"displayUnit\":\"use\",\"monotonic\":false}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/meters?format=json")
+assert_contains "$nonmonotonic_meter" '"statuscode":201' 'nonmonotonic meter create'
+
+nonmonotonic_reading_one_uuid='4b84e9c0-3a09-4eba-b94d-a00ee7b42226'
+nonmonotonic_reading_one=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${nonmonotonic_reading_one_uuid}\",\"observedAt\":\"2026-09-01T08:00:00Z\",\"value\":\"2\",\"unit\":\"use\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${nonmonotonic_meter_uuid}/readings?format=json")
+assert_contains "$nonmonotonic_reading_one" '"statuscode":201' 'nonmonotonic first reading create'
+
+nonmonotonic_reading_two_uuid='3cf0605f-1823-4e19-a178-bc67c20c74cb'
+nonmonotonic_reading_two=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${nonmonotonic_reading_two_uuid}\",\"observedAt\":\"2026-09-02T08:00:00Z\",\"value\":\"1\",\"unit\":\"use\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${nonmonotonic_meter_uuid}/readings?format=json")
+assert_contains "$nonmonotonic_reading_two" '"statuscode":201' 'nonmonotonic decreasing reading create'
+
+monotonic_enable_rejected=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request PATCH \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":1,"meter":{"monotonic":true}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${nonmonotonic_meter_uuid}?format=json")
+assert_contains "$monotonic_enable_rejected" '"statuscode":400' 'monotonic enable rejects inconsistent history'
 
 relationship_types=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -551,6 +713,35 @@ collab_assets=$(docker exec "$container" curl --silent --show-error \
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
 assert_contains "$collab_assets" '"statuscode":200' 'contributor inventory read'
 
+
+contributor_meters=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_meters" '"statuscode":200' 'contributor meter read'
+
+contributor_meter_manage_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"meter":{"key":"forbidden","name":"Forbidden meter","dimension":"usage_count","displayUnit":"use"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/meters?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_meter_manage_denied" '"statuscode":403' 'contributor meter management rejection'
+
+contributor_reading_uuid='e52c6238-2a7e-4c1b-9477-30231c26b9ef'
+contributor_reading=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${contributor_reading_uuid}\",\"observedAt\":\"2026-09-05T12:00:00Z\",\"value\":\"100300\",\"unit\":\"mi\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_reading" '"statuscode":201' 'contributor reading create'
+
+contributor_correction_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"reading":{"value":"100301","unit":"mi"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/readings/${contributor_reading_uuid}/corrections?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_correction_denied" '"statuscode":403' 'contributor reading correction rejection'
+
 collab_write_denied=$(docker exec "$container" curl --silent --show-error \
 	--user "${collab_user}:${collab_password}" \
 	--request POST \
@@ -579,6 +770,16 @@ member_promoted=$(docker exec "$container" curl --silent --show-error \
 assert_contains "$member_promoted" '"statuscode":200' 'manager promotion'
 assert_contains "$member_promoted" '"role":"manager"' 'manager promotion'
 
+
+manager_correction_uuid='f63d7349-3b8f-4d2c-9588-41342d37caf0'
+manager_correction=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${manager_correction_uuid}\",\"value\":\"100305\",\"unit\":\"mi\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/readings/${contributor_reading_uuid}/corrections?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$manager_correction" '"statuscode":201' 'manager reading correction'
+assert_contains "$manager_correction" "\"supersedesUuid\":\"${contributor_reading_uuid}\"" 'manager reading correction link'
+
 shared_asset_uuid='8d6d399f-8a39-4d84-9bd9-57a84e6a7aec'
 manager_created=$(docker exec "$container" curl --silent --show-error \
 	--user "${collab_user}:${collab_password}" \
@@ -606,6 +807,8 @@ manager_audit=$(docker exec "$container" curl --silent --show-error \
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/audit?workspace=${admin_workspace_uuid}&format=json")
 assert_contains "$manager_audit" '"statuscode":200' 'manager audit read'
 assert_contains "$manager_audit" '"eventType":"asset.created"' 'manager audit domain event'
+assert_contains "$manager_audit" '"eventType":"reading.corrected"' 'manager audit reading correction event'
+assert_contains "$manager_audit" "\"supersedesReadingUuid\":\"${contributor_reading_uuid}\"" 'manager audit reading correction detail'
 assert_contains "$manager_audit" "\"actorUid\":\"${collab_user}\"" 'manager audit actor attribution'
 assert_contains "$manager_audit" "\"subjectId\":\"${shared_asset_uuid}\"" 'manager audit subject attribution'
 
@@ -634,6 +837,14 @@ assets_after_member_delete=$(docker exec "$container" curl --silent --show-error
 	--header 'Accept: application/json' \
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
 assert_contains "$assets_after_member_delete" "\"uuid\":\"${shared_asset_uuid}\"" 'shared work retention after member deletion'
+
+readings_after_member_delete=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' \
+	--header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$readings_after_member_delete" "\"uuid\":\"${contributor_reading_uuid}\"" 'shared contributor reading retention after member deletion'
+assert_contains "$readings_after_member_delete" "\"uuid\":\"${manager_correction_uuid}\"" 'shared manager correction retention after member deletion'
 
 audit_after_member_delete=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -695,6 +906,23 @@ cleanup_spec=$(docker exec "$container" curl --silent --show-error \
 	--data '{"specification":{"uuid":"59adf1b7-feaf-4422-8ff3-c701a4f83d76","componentUuid":"489ce0a6-ed9e-4311-8ee2-b6f093e72c65","key":"cleanup.value","label":"Cleanup value","value":"fixture"}}' \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/267ace84-cb7c-41ff-8cc0-94de71c50a43/specifications?format=json')
 assert_contains "$cleanup_spec" '"statuscode":201' 'cleanup specification create'
+
+
+cleanup_meter_uuid='0a4e845a-4c90-4e3d-a699-52453e48db01'
+cleanup_meter=$(docker exec "$container" curl --silent --show-error \
+	--user "${cleanup_user}:${cleanup_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"meter\":{\"uuid\":\"${cleanup_meter_uuid}\",\"key\":\"uses\",\"name\":\"Uses\",\"dimension\":\"usage_count\",\"displayUnit\":\"use\",\"monotonic\":true}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/267ace84-cb7c-41ff-8cc0-94de71c50a43/meters?format=json')
+assert_contains "$cleanup_meter" '"statuscode":201' 'cleanup meter create'
+
+cleanup_reading_uuid='1b5f956b-5da1-4f4e-b7aa-63564f59ec12'
+cleanup_reading=$(docker exec "$container" curl --silent --show-error \
+	--user "${cleanup_user}:${cleanup_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${cleanup_reading_uuid}\",\"observedAt\":\"2026-09-04T12:00:00Z\",\"value\":\"1\",\"unit\":\"use\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${cleanup_meter_uuid}/readings?format=json")
+assert_contains "$cleanup_reading" '"statuscode":201' 'cleanup reading create'
 
 cleanup_relationship=$(docker exec "$container" curl --silent --show-error \
 	--user "${cleanup_user}:${cleanup_password}" \
@@ -765,6 +993,21 @@ cleanup_spec_reused=$(docker exec "$container" curl --silent --show-error \
 	--data '{"specification":{"uuid":"59adf1b7-feaf-4422-8ff3-c701a4f83d76","componentUuid":"489ce0a6-ed9e-4311-8ee2-b6f093e72c65","key":"cleanup.value","label":"Cleanup value","value":"fixture"}}' \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/267ace84-cb7c-41ff-8cc0-94de71c50a43/specifications?format=json')
 assert_contains "$cleanup_spec_reused" '"statuscode":201' 'cleanup specification UUID reuse'
+
+
+cleanup_meter_reused=$(docker exec "$container" curl --silent --show-error \
+	--user "${cleanup_user}:${cleanup_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"meter\":{\"uuid\":\"${cleanup_meter_uuid}\",\"key\":\"uses\",\"name\":\"Uses\",\"dimension\":\"usage_count\",\"displayUnit\":\"use\",\"monotonic\":true}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/267ace84-cb7c-41ff-8cc0-94de71c50a43/meters?format=json')
+assert_contains "$cleanup_meter_reused" '"statuscode":201' 'cleanup meter UUID reuse'
+
+cleanup_reading_reused=$(docker exec "$container" curl --silent --show-error \
+	--user "${cleanup_user}:${cleanup_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"reading\":{\"uuid\":\"${cleanup_reading_uuid}\",\"observedAt\":\"2026-09-04T12:00:00Z\",\"value\":\"1\",\"unit\":\"use\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${cleanup_meter_uuid}/readings?format=json")
+assert_contains "$cleanup_reading_reused" '"statuscode":201' 'cleanup reading UUID reuse'
 
 cleanup_relationship_reused=$(docker exec "$container" curl --silent --show-error \
 	--user "${cleanup_user}:${cleanup_password}" --request POST \

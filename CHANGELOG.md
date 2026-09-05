@@ -9,6 +9,13 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.4 meter/readings foundation with asset- or component-targeted distance, runtime, and usage-count meters.
+- Immutable timestamped readings retain original value/unit alongside canonical integer values (`mm`, `s`, or `count`) for deterministic scheduling inputs.
+- Monotonic-series validation, historical insertion checks, and correction-by-supersession without rewriting prior observations.
+- Capability boundaries allowing Contributors to record readings while reserving meter configuration and historical correction for Owner/Manager.
+- Meter/reading audit events, account-lifecycle purge coverage, desktop entry UI, and Nextcloud 34 SQLite/PostgreSQL integration coverage.
+- Enabling monotonic mode on an existing meter validates the complete effective history before accepting the configuration change.
+
 - v0.1.3 capability-based workspace authorization with explicit Owner, Manager, Contributor, and Viewer bundles plus legacy `editor` normalization.
 - Shared-workspace membership OCS endpoints with deterministic actor/target lifecycle locking.
 - Append-only, versioned audit events for implemented inventory, relationship/assignment, and membership mutations.

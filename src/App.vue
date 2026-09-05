@@ -12,6 +12,9 @@ import type {
 	Category,
 	Component,
 	CreateAsset,
+	Meter,
+	MeterDimension,
+	Reading,
 	Relationship,
 	RelationshipType,
 	Specification,
@@ -25,6 +28,8 @@ import {
 	createAssignment,
 	createCategory,
 	createComponent,
+	createMeter,
+	createReading,
 	createRelationship,
 	createSpecification,
 	getAssets,
@@ -32,6 +37,8 @@ import {
 	getCapabilities,
 	getCategories,
 	getComponents,
+	getMeters,
+	getReadings,
 	getRelationships,
 	getRelationshipTypes,
 	getSpecifications,
@@ -43,6 +50,8 @@ const capabilities = ref<Capabilities | null>(null)
 const expandedAsset = ref<string | null>(null)
 const components = ref<Record<string, Component[]>>({})
 const specifications = ref<Record<string, Specification[]>>({})
+const meters = ref<Record<string, Meter[]>>({})
+const readings = ref<Record<string, Reading[]>>({})
 const relationshipTypes = ref<RelationshipType[]>([])
 const relationships = ref<Relationship[]>([])
 const assignments = ref<Assignment[]>([])
@@ -54,12 +63,54 @@ const draft = reactive<CreateAsset>({ name: '', category: 'vehicle', manufacture
 const categoryDraft = reactive({ key: '', name: '', defaultAssetClass: 'other' as AssetClass })
 const componentDraft = reactive({ name: '', type: 'component', parentUuid: '' })
 const specificationDraft = reactive({ key: '', label: '', value: '', unit: '', regime: '', componentUuid: '' })
+const meterDraft = reactive({ key: '', name: '', dimension: 'distance' as MeterDimension, displayUnit: 'mi', monotonic: true, componentUuid: '' })
+const readingDraft = reactive({ meterUuid: '', value: '', observedAt: '', unit: 'mi' })
 const relationshipDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'general', isDefault: false })
 const assignmentDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'trip', isPrimary: true, effectiveFrom: '', effectiveUntil: '' })
 const empty = computed(() => !loading.value && assets.value.length === 0)
 
 function categoryLabel(key: string): string {
 	return categories.value.find((category) => category.key === key)?.name ?? key
+}
+
+function meterUnits(dimension: MeterDimension): string[] {
+	if (dimension === 'distance') {
+		return ['mi', 'km', 'm', 'mm']
+	}
+	if (dimension === 'runtime') {
+		return ['hour', 'min', 's']
+	}
+	return ['use']
+}
+
+function syncMeterUnit(): void {
+	meterDraft.displayUnit = meterUnits(meterDraft.dimension)[0] ?? 'use'
+}
+
+function syncReadingUnit(): void {
+	const meter = Object.values(meters.value).flat().find((item) => item.uuid === readingDraft.meterUuid)
+	if (meter) {
+		readingDraft.unit = meter.displayUnit
+	}
+}
+
+function latestReading(meterUuid: string): Reading | null {
+	let latest: Reading | null = null
+	for (const reading of readings.value[meterUuid] ?? []) {
+		if (!reading.effective) {
+			continue
+		}
+		if (latest === null || reading.observedAt > latest.observedAt || (reading.observedAt === latest.observedAt && reading.createdAt > latest.createdAt)) {
+			latest = reading
+		}
+	}
+	return latest
+}
+
+function localNow(): string {
+	const now = new Date()
+	const offset = now.getTimezoneOffset() * 60000
+	return new Date(now.getTime() - offset).toISOString().slice(0, 16)
 }
 
 function readableError(reason: unknown): string {
@@ -146,9 +197,16 @@ async function toggleAsset(asset: Asset): Promise<void> {
 	}
 	expandedAsset.value = asset.uuid
 	try {
-		const [componentList, specificationList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid)])
+		const [componentList, specificationList, meterList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid)])
 		components.value[asset.uuid] = componentList.items
 		specifications.value[asset.uuid] = specificationList.items
+		meters.value[asset.uuid] = meterList.items
+		await Promise.all(meterList.items.map(async (meter) => {
+			readings.value[meter.uuid] = (await getReadings(meter.uuid)).items
+		}))
+		readingDraft.meterUuid = meterList.items[0]?.uuid ?? ''
+		readingDraft.observedAt = localNow()
+		syncReadingUnit()
 	} catch (reason) {
 		error.value = readableError(reason)
 	}
@@ -193,6 +251,58 @@ async function submitSpecification(asset: Asset): Promise<void> {
 		specificationDraft.unit = ''
 		specificationDraft.regime = ''
 		specificationDraft.componentUuid = ''
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function submitMeter(asset: Asset): Promise<void> {
+	if (meterDraft.key.trim() === '' || meterDraft.name.trim() === '') {
+		return
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const created = await createMeter(asset.uuid, {
+			key: meterDraft.key.trim(),
+			name: meterDraft.name.trim(),
+			dimension: meterDraft.dimension,
+			displayUnit: meterDraft.displayUnit,
+			monotonic: meterDraft.monotonic,
+			componentUuid: meterDraft.componentUuid || null,
+		})
+		meters.value[asset.uuid] = [...(meters.value[asset.uuid] ?? []), created]
+		readings.value[created.uuid] = []
+		readingDraft.meterUuid = created.uuid
+		readingDraft.unit = created.displayUnit
+		readingDraft.observedAt = localNow()
+		meterDraft.key = ''
+		meterDraft.name = ''
+		meterDraft.componentUuid = ''
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function submitReading(): Promise<void> {
+	if (readingDraft.meterUuid === '' || readingDraft.value.trim() === '' || readingDraft.observedAt === '') {
+		return
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const created = await createReading(readingDraft.meterUuid, {
+			value: readingDraft.value.trim(),
+			unit: readingDraft.unit,
+			observedAt: new Date(readingDraft.observedAt).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+		})
+		readings.value[readingDraft.meterUuid] = [...(readings.value[readingDraft.meterUuid] ?? []), created]
+		readingDraft.value = ''
+		readingDraft.observedAt = localNow()
 	} catch (reason) {
 		error.value = readableError(reason)
 	} finally {
@@ -408,7 +518,7 @@ onMounted(load)
 							<div class="asset-summary">
 								<div><span class="category">{{ categoryLabel(asset.category) }} · {{ asset.assetClass }}</span><h3>{{ asset.name }}</h3><p>{{ [asset.manufacturer, asset.model].filter(Boolean).join(' · ') || 'Details not added yet' }}</p></div>
 								<button class="button--secondary" type="button" @click="toggleAsset(asset)">
-									{{ expandedAsset === asset.uuid ? 'Close' : 'Components & specs' }}
+									{{ expandedAsset === asset.uuid ? 'Close' : 'Details & meters' }}
 								</button>
 							</div>
 							<div v-if="expandedAsset === asset.uuid" class="asset-details">
@@ -445,6 +555,67 @@ onMounted(load)
 											</option>
 										</select><button type="submit">
 											Add specification
+										</button>
+									</form>
+								</section>
+								<section class="meter-section">
+									<h4>Meters & readings</h4>
+									<ul class="compact-list">
+										<li v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid">
+											<strong>{{ meter.name }}</strong>
+											<span><template v-if="latestReading(meter.uuid)">{{ latestReading(meter.uuid)?.originalValue }} {{ latestReading(meter.uuid)?.originalUnit }} · </template>{{ meter.dimension }} · {{ meter.monotonic ? 'monotonic' : 'non-monotonic' }}</span>
+										</li>
+									</ul>
+									<form class="meter-form" @submit.prevent="submitMeter(asset)">
+										<input
+											v-model="meterDraft.key"
+											pattern="[a-z0-9][a-z0-9_-]*"
+											placeholder="odometer"
+											required>
+										<input v-model="meterDraft.name" placeholder="Odometer" required>
+										<select v-model="meterDraft.dimension" @change="syncMeterUnit">
+											<option value="distance">
+												distance
+											</option><option value="runtime">
+												runtime
+											</option><option value="usage_count">
+												usage count
+											</option>
+										</select>
+										<select v-model="meterDraft.displayUnit">
+											<option v-for="unit in meterUnits(meterDraft.dimension)" :key="unit" :value="unit">
+												{{ unit }}
+											</option>
+										</select>
+										<select v-model="meterDraft.componentUuid">
+											<option value="">
+												Whole asset
+											</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
+												{{ component.name }}
+											</option>
+										</select>
+										<label class="check-field"><input v-model="meterDraft.monotonic" type="checkbox"><span>Monotonic</span></label>
+										<button type="submit">
+											Add meter
+										</button>
+									</form>
+									<form class="reading-form" @submit.prevent="submitReading">
+										<select v-model="readingDraft.meterUuid" required @change="syncReadingUnit">
+											<option value="" disabled>
+												Meter
+											</option><option v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid" :value="meter.uuid">
+												{{ meter.name }}
+											</option>
+										</select>
+										<input
+											v-model="readingDraft.value"
+											inputmode="decimal"
+											placeholder="Reading"
+											required>
+										<input v-model="readingDraft.unit" placeholder="unit" required>
+										<input v-model="readingDraft.observedAt" type="datetime-local" required>
+										<button type="submit" :disabled="(meters[asset.uuid] ?? []).length === 0">
+											Record reading
 										</button>
 									</form>
 								</section>
@@ -512,7 +683,7 @@ button:disabled { opacity: .55; }
 
 .compact-list span { color: var(--color-text-maxcontrast); }
 
-.inline-form, .spec-form { display: grid; gap: 8px; }
+.inline-form, .spec-form, .meter-form, .reading-form { display: grid; gap: 8px; }
 
 .relationship-form, .assignment-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
 
@@ -528,9 +699,15 @@ button:disabled { opacity: .55; }
 
 .spec-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
+.meter-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
+
+.meter-form { grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, minmax(120px, .7fr)) auto auto; align-items: end; }
+
+.reading-form { grid-template-columns: 1.5fr 1fr .6fr 1.2fr auto; align-items: end; margin-top: 10px; }
+
 .spec-form button { grid-column: 3; }
 
 .empty-state { display: grid; place-items: center; min-height: 130px; color: var(--color-text-maxcontrast); }
-@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
-@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form { display: grid; grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
+@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form { display: grid; grid-template-columns: 1fr; } }
 </style>

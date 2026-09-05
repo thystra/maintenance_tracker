@@ -17,7 +17,7 @@ Each profile declares:
 - `name`, `category`, and description;
 - data license, author, source URL, and optional source revision;
 - applicability metadata;
-- meter, component, part, and provisional maintenance-plan templates.
+- meter, component, part, and provisional maintenance-plan templates. Meter templates currently map to the implemented `distance`, `runtime`, or `usage_count` dimensions when materialization is enabled.
 
 Changing a published profile creates a new semantic version and content hash.
 Already installed assets retain the exact revision used.
@@ -39,7 +39,7 @@ Applying a profile:
 1. validates schema, size, depth, counts, URLs, and cross-references;
 2. records profile provenance and content hash;
 3. creates one component row per declared quantity;
-4. creates meters, plans, and triggers;
+4. creates meter definitions and, after the scheduling-schema transition, common work definitions;
 5. links compatible part alternatives;
 6. marks every created row with the source profile/key;
 7. lets the user review and suppress unwanted components or plans.

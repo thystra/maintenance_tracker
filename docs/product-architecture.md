@@ -28,6 +28,12 @@ Part requirements and compatible products are relational. Compatible, preferred,
 
 ## Usage, measurements, and maintenance rules
 
+> Implementation status: v0.1.4 provides configurable `distance`, `runtime`, and
+> `usage_count` meters plus immutable timestamped readings. Canonical values are
+> integer `mm`, `s`, and `count`; corrections supersede rather than rewrite prior
+> observations. These measurements are inputs for later work-definition due
+> calculation, not maintenance activities by themselves.
+
 Maintenance definitions use one common work-definition model. The scheduling
 property is named `schedule`: `schedule: none` means unscheduled/ad-hoc work;
 anything else is scheduled maintenance. This supports a direct scheduled versus

@@ -80,6 +80,8 @@ Preserve these invariants:
   lazy personal-workspace creation so UID reuse cannot inherit prior data;
 - membership mutations must serialize lifecycle state for actor and target users in deterministic UID order;
 - `maint_audit` is append-only: no update/delete mapper path, bounded structured details, no free-form notes/file contents; historical shared-workspace actor attribution survives member deletion;
+- `maint_readings` is append-only: corrections create a new row linked by `supersedes_id`; no mapper/service update/delete path may rewrite an observation;
+- meter canonical values remain integer `mm`, `s`, or `count` while readings retain the normalized original value/unit; monotonic corrections/inserts must be checked against effective neighboring readings;
 - every capability-authorized write must retain workspace-wide write serialization so
   invariants spanning multiple rows remain safe when different members write
   the same shared workspace concurrently;
