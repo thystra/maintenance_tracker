@@ -121,12 +121,100 @@ needed for offline synchronization.
 
 These resources remain experimental. Update/archive contracts for categories, components, and specifications will be completed before the OCS API is declared stable.
 
+## Meter and reading endpoints
+
+Meter configuration and observations are separate resources. Initial dimensions
+are `distance`, `runtime`, and `usage_count`. Canonical values are integer `mm`,
+`s`, and `count`, capped at `9007199254740991` so JavaScript clients preserve them exactly, while each reading retains the normalized original value/unit.
+
+Role bundles use separate capabilities: Owner/Manager have `meter.manage`,
+`reading.create`, and `reading.correct`; Contributor has `meter.read` and
+`reading.create`; Viewer has `meter.read` only.
+
+### `GET /assets/{assetUuid}/meters?workspace=<uuid>`
+
+Lists active meters for an authorized asset. A meter may target the asset itself
+or one active/historical component through `componentUuid`.
+
+### `POST /assets/{assetUuid}/meters?workspace=<uuid>`
+
+Creates a meter. An optional client UUID makes exact retries idempotent.
+
+```json
+{
+  "meter": {
+    "uuid": "9c7f24c0-0d3a-4c6f-9c11-0b6f3e1e5e10",
+    "componentUuid": null,
+    "key": "odometer",
+    "name": "Odometer",
+    "dimension": "distance",
+    "displayUnit": "mi",
+    "monotonic": true
+  }
+}
+```
+
+Supported display/input units are `mi`, `km`, `m`, `mm` for distance;
+`hour`, `min`, `s` for runtime (`h` is accepted as an input alias); and `use`
+for usage count (`count` is accepted as an input alias). Usage-count values must
+be whole numbers.
+
+### `GET /meters/{uuid}?workspace=<uuid>`
+
+Returns one active meter.
+
+### `PATCH /meters/{uuid}?workspace=<uuid>`
+
+Updates `key`, `name`, `displayUnit`, and/or `monotonic` using
+`expectedRevision`. Meter target and dimension are immutable.
+
+### `DELETE /meters/{uuid}?workspace=<uuid>`
+
+Archives the meter using `expectedRevision`. Its immutable readings remain
+available for historical reads.
+
+### `GET /meters/{meterUuid}/readings?workspace=<uuid>`
+
+Returns readings in observation order, including superseded rows. Each item
+contains `canonicalValue`, `originalValue`, `originalUnit`, `supersedesUuid`,
+`supersededByUuid`, and `effective`.
+
+### `POST /meters/{meterUuid}/readings?workspace=<uuid>`
+
+Creates an immutable observation. `observedAt` requires an ISO-8601 timestamp
+with seconds and a timezone. Example:
+
+```json
+{
+  "reading": {
+    "uuid": "a1e81ef4-e63a-4ed7-9053-fcefe78275ab",
+    "observedAt": "2026-09-01T12:00:00Z",
+    "value": "100000.0",
+    "unit": "mi",
+    "source": {"type": "manual", "reference": null},
+    "notes": null
+  }
+}
+```
+
+Exact retries with the same UUID/data are idempotent. On a monotonic meter, the
+candidate must not decrease relative to the nearest effective predecessor or
+exceed the nearest effective successor, so historical insertion is also checked.
+
+### `POST /readings/{readingUuid}/corrections?workspace=<uuid>`
+
+Creates a new immutable reading that supersedes the named reading. The original
+row is retained. `observedAt` defaults to the corrected reading's timestamp when
+omitted; supplying it permits an explicit corrected observation time. A reading
+may be directly superseded only once, though correction chains are possible by
+correcting the latest effective row. This endpoint requires `reading.correct`.
+
 ## Workspace membership and audit endpoints
 
 Authorization is capability-based. The stable role bundles are Owner, Manager,
 Contributor, and Viewer; legacy `editor` input normalizes to Manager. Manager can
 manage current inventory and read membership/audit data but cannot administer
-membership. Contributor and Viewer are read-only on the current inventory API.
+membership. Contributor and Viewer are read-only on inventory configuration. Contributor may record meter readings through `reading.create`; Viewer remains read-only.
 
 ### `GET /workspaces/{workspace}/members`
 
@@ -181,7 +269,7 @@ Before the API is marked stable:
 - upload association and verified file ownership;
 - generated OpenAPI checked in CI.
 
-Planned resources include profiles/imports, meters/readings, common work definitions and occurrences, activities/service records, evidence, parts/costs, fuel entries, trips, calendar bindings, public report shares, external submissions, TCO reports, and mileage reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any non-`none` schedule policy is scheduled maintenance.
+Planned resources include profiles/imports, common work definitions and occurrences, activities/service records, evidence, parts/costs, fuel entries, trips, calendar bindings, public report shares, external submissions, TCO reports, and mileage reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any non-`none` schedule policy is scheduled maintenance.
 
 User/owner IDs are never accepted when they can be derived from authentication.
 

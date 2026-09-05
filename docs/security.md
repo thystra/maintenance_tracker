@@ -51,8 +51,6 @@ data even though the app is not a medical product.
 
 ## Mobile credentials
 
-## Mobile credentials
-
 - Use Login Flow v2 and its unique revocable app password.
 - The PWA/package must never request or store the user's primary password.
 - Packaged Capacitor clients must use platform-appropriate protected credential
@@ -82,6 +80,19 @@ cost.
 Trip records keep entry time separately from trip time and preserve corrections
 with reasons. No third-party analytics receives locations, costs, or receipt
 data.
+
+## Meter and reading integrity
+
+- Meter configuration is distinct from field observation: Owner/Manager can
+  configure meters and correct history; Contributor can record new readings;
+  Viewer cannot write readings.
+- Readings are append-only observations. A correction inserts another row with a
+  supersession link rather than changing/deleting the original.
+- Monotonic meters validate historical inserts/corrections against neighboring
+  effective observations. This is an integrity check, not proof that a physical
+  odometer/hour meter was truthful.
+- Canonical integer conversion retains the original normalized value/unit so
+  audit/support workflows do not have to reverse a rounded conversion.
 
 ## Audit and evidence retention
 

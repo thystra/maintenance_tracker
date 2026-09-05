@@ -1,6 +1,6 @@
 # Domain model
 
-This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, append-only audit events, categories, component instances, structured specifications, relationships, and assignments. Remaining tables arrive with their vertical slices.
+This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, append-only audit events, categories, component instances, structured specifications, relationships, assignments, meters, and immutable meter readings. Remaining tables arrive with their vertical slices.
 
 All table names stay under Nextcloud's recommended 23-character limit. API IDs
 are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
@@ -58,25 +58,34 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
 
 Profile installation will create ordinary asset components and work definitions while retaining source keys. Profile upgrades are user-approved diffs. Suppressed or customized records are never overwritten without an explicit choice.
 
-## Meters
+## Meters and readings
+
+> Implementation status: v0.1.4 materializes these tables and the corresponding OCS/service layer.
 
 `maint_meters`
-: A distance, runtime, engine-hour, usage-count, or custom meter attached to an
-  asset or component. It declares dimension, canonical unit, display unit, and
-  whether readings should be monotonic.
+: An asset- or component-targeted meter definition. The initial implemented
+  dimensions are `distance`, `runtime`, and `usage_count`. Each meter stores a
+  canonical unit, a user-facing display/input unit, a monotonic flag, revision,
+  and tombstone. Meter identity/target/dimension are stable; configuration edits
+  use optimistic revision checks.
 
 `maint_readings`
-: Immutable observations with time, canonical integer value, original value and
-  unit, source, notes, and an optional superseded-reading reference.
+: An immutable timestamped observation. Each row stores its canonical integer
+  value plus the normalized original decimal value/unit, source provenance,
+  optional notes, and an optional `supersedes_id` correction link.
 
-Suggested canonical values:
+Implemented canonical values are deliberately integer and unit-stable. They are capped at JavaScript's safe-integer maximum (`9007199254740991`) so OCS JSON clients preserve them exactly:
 
-- distance: millimetres;
-- duration: seconds;
-- liquid volume: microlitres;
-- count: integer uses.
+- distance -> millimetres (`mm`);
+- runtime/engine hours -> seconds (`s`);
+- usage/event counts -> integer count (`count`).
 
-Corrections supersede old readings; they do not erase the audit trail.
+Input/display units currently include miles/kilometres/metres/millimetres,
+hours/minutes/seconds, and whole uses. Conversion is deterministic and does not
+replace the retained original value/unit. For a monotonic meter, a new or
+corrected observation must fit between the nearest effective observations on
+both sides of its timestamp. Corrections insert a new reading that supersedes
+the old row; existing readings are never updated or deleted.
 
 ## Plans, triggers, and work
 

@@ -9,7 +9,7 @@ Track recurring maintenance for vehicles, homes, tools, health equipment, and
 other assets. Record meter readings, service history, costs, parts, receipts,
 and reminders while keeping the data in your Nextcloud.
 	]]></description>
-	<version>0.1.3</version>
+	<version>0.1.4</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://forgejo.argentwolf.org/alan">Alan Johnson</author>
 	<namespace>MaintenanceTracker</namespace>

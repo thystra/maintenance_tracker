@@ -48,6 +48,7 @@ app directory must be named `maintenance_tracker` so it matches
 - Capability-based Owner/Manager/Contributor/Viewer workspace authorization
 - Shared-workspace membership API with lifecycle-safe grants and role changes
 - Append-only audit events for implemented domain and membership mutations
+- Asset/component meters with immutable distance, runtime, and usage-count readings
 - Bounded cursor pagination and account-lifecycle cleanup
 - Change journal foundation for future mobile delta synchronization
 - Versioned, data-only JSON profile schema with a generic starter profile

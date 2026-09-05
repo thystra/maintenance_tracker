@@ -64,9 +64,10 @@ legacy persisted `editor` role is migrated and runtime-normalized to `manager`.
 Authorization is capability-based rather than role-rank-based. The role name is
 only a bundle selector. Manager is an explicit bundle: it can manage current
 inventory and read workspace membership/audit history, but it cannot administer
-membership. Contributor and Viewer are read-only on the currently implemented
-inventory surface; later activity capabilities can distinguish their write
-behavior without changing existing role meaning.
+membership. Contributor and Viewer remain read-only on inventory configuration.
+For meters/readings, Contributor may record new readings but cannot configure a
+meter or correct historical readings; Viewer remains read-only. Later activity
+capabilities can extend field-entry behavior without changing existing role meaning.
 
 The authorization catalog also reserves future capability names for maintenance
 definitions, activities, evidence, checkout, retention, public report shares,
@@ -81,6 +82,26 @@ Capability-authorized writes acquire the workspace-row write lock. Membership
 mutations additionally lock lifecycle state for actor and target users in
 stable UID order so account deletion/UID reuse cannot race a grant or role
 change.
+
+## Meters and immutable readings
+
+v0.1.4 introduces asset/component meter configuration separately from immutable
+observations. Initial meter dimensions are distance, runtime, and usage count.
+Canonical persistence uses integer millimetres, seconds, and counts, capped at the JavaScript JSON safe-integer maximum, while each
+reading also retains the normalized original value and unit supplied by the
+client. This gives future scheduling logic deterministic values without erasing
+what a user/device actually reported.
+
+Meters may be marked monotonic. Writes validate a candidate against the nearest
+effective reading before and after its observation timestamp, so historical
+insertion cannot make an odometer/Hobbs series internally inconsistent. A
+correction is another immutable reading linked by `supersedes_id`; it never
+updates or deletes the earlier observation. `reading.correct` is intentionally a
+stronger capability than `reading.create`.
+
+Meter/read mutations use the same workspace serialization, client-generated UUID
+idempotency, change journal, audit stream, and account-lifecycle purge invariants
+as the existing domain foundation.
 
 ## Offline synchronization
 

@@ -28,6 +28,15 @@ final class AuditEventCatalog {
 		'assignment.created' => ['subjectType' => 'assignment', 'level' => 'info', 'detailKeys' => []],
 		'assignment.updated' => ['subjectType' => 'assignment', 'level' => 'info', 'detailKeys' => []],
 		'assignment.archived' => ['subjectType' => 'assignment', 'level' => 'info', 'detailKeys' => []],
+		'meter.created' => ['subjectType' => 'meter', 'level' => 'info', 'detailKeys' => []],
+		'meter.updated' => ['subjectType' => 'meter', 'level' => 'info', 'detailKeys' => []],
+		'meter.archived' => ['subjectType' => 'meter', 'level' => 'info', 'detailKeys' => []],
+		'reading.created' => ['subjectType' => 'reading', 'level' => 'info', 'detailKeys' => []],
+		'reading.corrected' => [
+			'subjectType' => 'reading',
+			'level' => 'info',
+			'detailKeys' => ['supersedesReadingUuid'],
+		],
 		'workspace.member.added' => [
 			'subjectType' => 'workspace_member',
 			'level' => 'security',

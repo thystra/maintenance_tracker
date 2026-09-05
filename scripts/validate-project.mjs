@@ -19,6 +19,7 @@ const info = await read('appinfo/info.xml')
 const application = await read('lib/AppInfo/Application.php')
 const composer = JSON.parse(await read('composer.json'))
 const packageJson = JSON.parse(await read('package.json'))
+const packageLock = JSON.parse(await read('package-lock.json'))
 const genericProfile = JSON.parse(await read('profiles/generic-car.json'))
 const profileSchema = JSON.parse(await read('schemas/profile-v1.schema.json'))
 const attributes = await read('.gitattributes')
@@ -32,6 +33,10 @@ const auditMapper = await read('lib/Db/AuditMapper.php')
 const auditService = await read('lib/Service/AuditService.php')
 const auditEvents = await read('lib/Service/AuditEventCatalog.php')
 const migration1030 = await read('lib/Migration/Version1030Date20260904000000.php')
+const migration1040 = await read('lib/Migration/Version1040Date20260905000000.php')
+const readingMapper = await read('lib/Db/ReadingMapper.php')
+const meterValueConverter = await read('lib/Service/MeterValueConverter.php')
+const meterService = await read('lib/Service/MeterService.php')
 const capabilities = await read('lib/Capability.php')
 const architecture = await read('docs/architecture.md')
 const domainModel = await read('docs/domain-model.md')
@@ -63,8 +68,8 @@ const applicationVersion = application.match(/APP_VERSION\s*=\s*'([^']+)'/)?.[1]
 
 expect(infoVersion !== undefined, 'appinfo/info.xml must declare an app version.')
 expect(
-	infoVersion === applicationVersion && infoVersion === packageJson.version,
-	'App version must match appinfo/info.xml, Application::APP_VERSION, and package.json.',
+	infoVersion === applicationVersion && infoVersion === packageJson.version && infoVersion === packageLock.version && infoVersion === packageLock.packages?.['']?.version,
+	'App version must match appinfo/info.xml, Application::APP_VERSION, package.json, and package-lock.json.',
 )
 expect(
 	composer.authors?.[0]?.homepage === 'https://forgejo.argentwolf.org/alan',
@@ -111,6 +116,13 @@ expect(authorizationCatalog.includes("if ($role === 'editor')") && authorization
 const managerMatch = authorizationCatalog.match(/'manager'\s*=>\s*\[([\s\S]*?)\n\s*\],\n\s*'contributor'/)
 expect(managerMatch !== null, 'Authorization catalog must define an explicit Manager capability bundle.')
 expect(managerMatch !== null && !managerMatch[1].includes('WORKSPACE_MEMBERS_MANAGE'), 'Manager must not receive workspace.members.manage.')
+const contributorMatch = authorizationCatalog.match(/'contributor'\s*=>\s*\[([\s\S]*?)\n\s*\],\n\s*'viewer'/)
+const viewerMatch = authorizationCatalog.match(/'viewer'\s*=>\s*\[([\s\S]*?)\n\s*\],/)
+expect(managerMatch !== null && managerMatch[1].includes('METER_MANAGE') && managerMatch[1].includes('READING_CREATE') && managerMatch[1].includes('READING_CORRECT'), 'Manager must explicitly receive meter management, reading creation, and reading correction.')
+expect(contributorMatch !== null && contributorMatch[1].includes('METER_READ') && contributorMatch[1].includes('READING_CREATE'), 'Contributor must be able to read meters and create readings.')
+expect(contributorMatch !== null && !contributorMatch[1].includes('METER_MANAGE') && !contributorMatch[1].includes('READING_CORRECT'), 'Contributor must not configure meters or correct historical readings.')
+expect(viewerMatch !== null && viewerMatch[1].includes('METER_READ') && !viewerMatch[1].includes('READING_CREATE'), 'Viewer must remain read-only for meters/readings.')
+
 for (const capability of [
 	'maintenance_definition.*',
 	'activity.*',
@@ -126,7 +138,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -146,6 +158,11 @@ for (const eventType of [
 	'assignment.created',
 	'assignment.updated',
 	'assignment.archived',
+	'meter.created',
+	'meter.updated',
+	'meter.archived',
+	'reading.created',
+	'reading.corrected',
 	'workspace.member.added',
 	'workspace.member.role_changed',
 	'workspace.member.removed',
@@ -155,13 +172,22 @@ for (const eventType of [
 expect(migration1030.includes("table: 'maint_audit'"), 'v0.1.3 migration must create the audit table.')
 expect(migration1030.includes("createNamedParameter('manager'") && migration1030.includes("createNamedParameter('editor'"), 'v0.1.3 migration must persist editor-to-manager role normalization.')
 
+expect(migration1040.includes("table: 'maint_meters'") && migration1040.includes("table: 'maint_readings'"), 'v0.1.4 migration must create meter and reading tables.')
+expect(!readingMapper.includes('extends QBMapper'), 'Reading mapper must not inherit mutable QBMapper update/delete methods.')
+expect(!readingMapper.includes('->update(') && !readingMapper.includes('->delete('), 'Reading mapper must remain append/read-only.')
+expect(readingMapper.includes('public function append(') && readingMapper.includes("->insert('maint_readings')"), 'Reading mapper must expose an explicit append persistence path.')
+expect(meterValueConverter.includes("'distance'") && meterValueConverter.includes("'runtime'") && meterValueConverter.includes("'usage_count'"), 'Meter conversion must retain the reviewed initial dimensions.')
+expect(meterValueConverter.includes("'mi' => 1609344") && meterValueConverter.includes("'hour' => 3600"), 'Meter canonical conversion factors must retain exact mile-to-mm and hour-to-second factors.')
+expect(meterValueConverter.includes('MAX_CANONICAL_VALUE = 9007199254740991'), 'Meter canonical values must remain within the JavaScript JSON safe-integer range.')
+expect(meterService.includes('!$meter->getMonotonic() && $monotonic') && meterService.includes('$this->assertHistoryCanBeMonotonic($meter);'), 'Enabling monotonic mode must validate all existing effective readings first.')
+
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
 }
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -173,6 +199,10 @@ expect(productArchitecture.includes('Vue') && productArchitecture.includes('Capa
 expect(!roadmap.includes('Kotlin/Compose') && !roadmap.includes('Jetpack Compose') && !roadmap.includes('Room entities'), 'Roadmap must not restore the obsolete native Kotlin/Compose/Room client plan.')
 expect(security.includes('append-only audit'), 'Security documentation must describe the append-only audit boundary.')
 expect(api.includes('GET /audit') && api.includes('/members'), 'API documentation must cover audit and workspace membership endpoints.')
+expect(domainModel.includes('distance -> millimetres (`mm`)') && domainModel.includes('runtime/engine hours -> seconds (`s`)') && domainModel.includes('usage/event counts -> integer count (`count`)'), 'Domain documentation must define integer canonical meter units.')
+expect(domainModel.includes('supersede') && security.includes('append-only observations'), 'Documentation must preserve immutable reading correction-by-supersession semantics.')
+expect(api.includes('/meters/{meterUuid}/readings') && api.includes('/readings/{readingUuid}/corrections'), 'API documentation must cover meter readings and immutable corrections.')
+expect(roadmap.includes('[x] v0.1.3') && roadmap.includes('v0.1.4 meters'), 'Roadmap must record qualified v0.1.3 and the v0.1.4 meter/readings tranche.')
 
 try {
 	await access('.github/workflows/ci.yml')

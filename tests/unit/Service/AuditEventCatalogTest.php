@@ -28,6 +28,11 @@ final class AuditEventCatalogTest extends TestCase {
 			'assignment.created',
 			'assignment.updated',
 			'assignment.archived',
+			'meter.created',
+			'meter.updated',
+			'meter.archived',
+			'reading.created',
+			'reading.corrected',
 			'workspace.member.added',
 			'workspace.member.role_changed',
 			'workspace.member.removed',
@@ -42,6 +47,14 @@ final class AuditEventCatalogTest extends TestCase {
 		self::assertSame('asset.updated', $catalog->eventForChange('asset', 'upsert', 2));
 		self::assertSame('asset.archived', $catalog->eventForChange('asset', 'delete', 3));
 		self::assertNull($catalog->eventForChange('unknown', 'upsert', 1));
+	}
+
+	public function testReadingCorrectionAuditOnlyCarriesSupersededUuid(): void {
+		$catalog = new AuditEventCatalog();
+		self::assertSame(
+			['supersedesReadingUuid'],
+			$catalog->definition('reading.corrected')['detailKeys'],
+		);
 	}
 
 	public function testMembershipAuditDetailsAreBoundedToRoleMetadata(): void {

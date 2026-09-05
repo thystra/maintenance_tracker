@@ -122,3 +122,38 @@ export interface CreateAssignment {
 	effectiveUntil?: string | null
 	notes?: string | null
 }
+
+export type MeterDimension = 'distance' | 'runtime' | 'usage_count'
+export interface Meter {
+	uuid: string
+	componentUuid: string | null
+	key: string
+	name: string
+	dimension: MeterDimension
+	canonicalUnit: 'mm' | 's' | 'count'
+	displayUnit: string
+	monotonic: boolean
+	revision: number
+	createdAt: string
+	updatedAt: string
+	deletedAt: string | null
+}
+export interface MeterList { workspace: string, items: Meter[] }
+export interface CreateMeter { uuid?: string, componentUuid?: string | null, key: string, name: string, dimension: MeterDimension, displayUnit: string, monotonic?: boolean }
+
+export interface ReadingSource { type: string, reference: string | null }
+export interface Reading {
+	uuid: string
+	observedAt: string
+	canonicalValue: number
+	originalValue: string
+	originalUnit: string
+	source: ReadingSource
+	notes: string | null
+	supersedesUuid: string | null
+	supersededByUuid: string | null
+	effective: boolean
+	createdAt: string
+}
+export interface ReadingList { workspace: string, items: Reading[] }
+export interface CreateReading { uuid?: string, observedAt: string, value: string | number, unit?: string, source?: ReadingSource, notes?: string | null }

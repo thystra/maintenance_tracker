@@ -21,6 +21,7 @@ final class ChangeJournal {
 	) {
 	}
 
+	/** @param array<string, scalar|null> $auditDetails */
 	public function record(
 		int $workspaceId,
 		string $entityType,
@@ -28,6 +29,8 @@ final class ChangeJournal {
 		string $operation,
 		int $revision,
 		int $changedAt,
+		?string $auditEventType = null,
+		array $auditDetails = [],
 	): void {
 		$change = new ChangeRecord();
 		$change->setWorkspaceId($workspaceId);
@@ -38,7 +41,7 @@ final class ChangeJournal {
 		$change->setChangedAt($changedAt);
 		$this->mapper->insert($change);
 
-		$eventType = $this->auditEvents->eventForChange($entityType, $operation, $revision);
+		$eventType = $auditEventType ?? $this->auditEvents->eventForChange($entityType, $operation, $revision);
 		if ($eventType !== null) {
 			$this->audit->record(
 				$workspaceId,
@@ -46,6 +49,7 @@ final class ChangeJournal {
 				$this->currentUser->uid(),
 				$entityUuid,
 				$revision,
+				$auditDetails,
 			);
 		}
 	}
