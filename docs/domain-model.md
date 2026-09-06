@@ -1,6 +1,6 @@
 # Domain model
 
-This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, append-only audit events, categories, component instances, structured specifications, relationships, assignments, meters, and immutable meter readings. Remaining tables arrive with their vertical slices.
+This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, append-only audit events, categories, component instances, structured specifications, relationships, assignments, meters, immutable meter readings, work groups, common work definitions, and normalized schedule rules. Remaining tables arrive with their vertical slices.
 
 All table names stay under Nextcloud's recommended 23-character limit. API IDs
 are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
@@ -51,7 +51,7 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
 : Part definitions supplied by a profile revision.
 
 `maint_prof_defs`
-: Future common work-definition templates. The provisional profile-v1 `maintenancePlans`/`triggers` representation is input compatibility only and is revised before profile installation becomes a product contract.
+: Future persisted profile work-definition templates. Profile v2 already defines the current `workDefinitions`/`schedule` import vocabulary; profile v1 `maintenancePlans`/`triggers` remains compatibility input requiring explicit mapping.
 
 `maint_asset_prof`
 : Which profile revision was materialized into an asset.
@@ -87,16 +87,28 @@ corrected observation must fit between the nearest effective observations on
 both sides of its timestamp. Corrections insert a new reading that supersedes
 the old row; existing readings are never updated or deleted.
 
-## Plans, triggers, and work
+## Work definitions and schedules
 
-The future maintenance model uses a common **work definition** for scheduled and
+> Implementation status: v0.1.5 candidate materializes `maint_work_groups`, `maint_work_defs`, and `maint_work_sched`.
+
+`maint_work_groups`
+: Asset-scoped, user/profile-defined display/catalog groups with stable UUID/key, sort order, revision, and tombstone.
+
+`maint_work_defs`
+: Common scheduled/unscheduled work definitions. `schedule_type = none` is directly filterable as unscheduled; non-`none` definitions carry normalized rules.
+
+`maint_work_sched`
+: Ordered normalized calendar, business-day, or meter rules. Meter rules retain original interval value/unit plus canonical value and a real meter reference.
+
+The maintenance model uses a common **work definition** for scheduled and
 unscheduled work. A definition describes what may/should be done; an activity
 records what actually happened.
 
-A work definition contains a required scheduling property named `schedule`.
+A work definition contains a required scheduling property named `schedule`. Missing `schedule` is invalid; the service and profile-v2 schema do not default it.
 `schedule: none` means unscheduled/ad-hoc work. Any non-`none` policy means
-scheduled maintenance and may reference time, distance, runtime hours, use
-counts, condition measurements, or a reviewed combination policy. Oil changes,
+scheduled maintenance. The v0.1.5 rules cover calendar time, configurable
+business days, distance, runtime hours, use counts, and reviewed combinations;
+condition measurements remain a future rule type. Oil changes,
 inspections, turbocharger repairs, and transmission repairs therefore share one
 underlying definition shape instead of separate scheduled/repair record types.
 

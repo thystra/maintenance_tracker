@@ -269,7 +269,68 @@ Before the API is marked stable:
 - upload association and verified file ownership;
 - generated OpenAPI checked in CI.
 
-Planned resources include profiles/imports, common work definitions and occurrences, activities/service records, evidence, parts/costs, fuel entries, trips, calendar bindings, public report shares, external submissions, TCO reports, and mileage reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any non-`none` schedule policy is scheduled maintenance.
+
+## Work groups and work definitions
+
+The v0.1.5 candidate uses `maintenance_definition.read` for Owner/Manager/Contributor/Viewer reads and `maintenance_definition.manage` for Owner/Manager configuration. Every create request MUST contain `definition.schedule`; omission returns 400. The server does not default a missing field to `none`.
+
+### `GET /assets/{assetUuid}/work-groups?workspace=<uuid>`
+
+Lists active asset-scoped work groups.
+
+### `POST /assets/{assetUuid}/work-groups?workspace=<uuid>`
+
+Creates a work group. Client UUID retries are idempotent when the payload matches.
+
+### `PATCH /work-groups/{uuid}?workspace=<uuid>` / `DELETE /work-groups/{uuid}?workspace=<uuid>`
+
+Update/archive using `expectedRevision`. A group referenced by an active work definition cannot be archived.
+
+### `GET /assets/{assetUuid}/work-definitions?scheduled=true|false&workspace=<uuid>`
+
+Lists active common work definitions. Omit `scheduled` for all; `true` selects non-`none` schedules and `false` selects `schedule: none`.
+
+### `POST /assets/{assetUuid}/work-definitions?workspace=<uuid>`
+
+Creates a definition. Minimum unscheduled example:
+
+```json
+{
+  "definition": {
+    "key": "turbo_repair",
+    "title": "Turbo repair",
+    "kind": "repair",
+    "schedule": "none"
+  }
+}
+```
+
+Scheduled example uses OR semantics:
+
+```json
+{
+  "definition": {
+    "key": "oil_change",
+    "title": "Engine oil change",
+    "kind": "maintenance",
+    "schedule": {
+      "combination": "any",
+      "rules": [
+        {"type": "meter", "meterUuid": "<uuid>", "interval": {"value": 7500, "unit": "mi"}},
+        {"type": "calendar", "interval": {"value": 12, "unit": "month"}}
+      ]
+    }
+  }
+}
+```
+
+Business-day rules use `type: business_days`, interval unit `business_day`, and an explicit unique weekday list such as `["mon","tue","wed","thu","fri"]`. Meter rules must reference a meter on the same asset and use a compatible unit.
+
+### `GET /work-definitions/{uuid}` / `PATCH /work-definitions/{uuid}` / `DELETE /work-definitions/{uuid}`
+
+Read, update, or archive a definition. Mutations use `expectedRevision`. Component target is immutable; schedule may be replaced explicitly on update.
+
+Future resources include profile installation/imports, due occurrences/projections, activities/service records, evidence, parts/costs, fuel entries, trips, calendar bindings, public report shares, external submissions, TCO reports, and mileage reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any non-`none` schedule policy is scheduled maintenance.
 
 User/owner IDs are never accepted when they can be derived from authentication.
 

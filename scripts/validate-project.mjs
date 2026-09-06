@@ -22,6 +22,7 @@ const packageJson = JSON.parse(await read('package.json'))
 const packageLock = JSON.parse(await read('package-lock.json'))
 const genericProfile = JSON.parse(await read('profiles/generic-car.json'))
 const profileSchema = JSON.parse(await read('schemas/profile-v1.schema.json'))
+const profileSchemaV2 = JSON.parse(await read('schemas/profile-v2.schema.json'))
 const attributes = await read('.gitattributes')
 const nextcloudIgnore = await read('.nextcloudignore')
 const forgejoCi = await read('.forgejo/workflows/ci.yml')
@@ -34,9 +35,15 @@ const auditService = await read('lib/Service/AuditService.php')
 const auditEvents = await read('lib/Service/AuditEventCatalog.php')
 const migration1030 = await read('lib/Migration/Version1030Date20260904000000.php')
 const migration1040 = await read('lib/Migration/Version1040Date20260905000000.php')
+const migration1050 = await read('lib/Migration/Version1050Date20260905020000.php')
 const readingMapper = await read('lib/Db/ReadingMapper.php')
 const meterValueConverter = await read('lib/Service/MeterValueConverter.php')
 const meterService = await read('lib/Service/MeterService.php')
+const workDefinitionEntity = await read('lib/Db/WorkDefinition.php')
+const workDefinitionService = await read('lib/Service/WorkDefinitionService.php')
+const workSchedulePolicy = await read('lib/Service/WorkSchedulePolicy.php')
+const workScheduleRuleEntity = await read('lib/Db/WorkScheduleRule.php')
+const workScheduleRuleMapper = await read('lib/Db/WorkScheduleRuleMapper.php')
 const capabilities = await read('lib/Capability.php')
 const architecture = await read('docs/architecture.md')
 const domainModel = await read('docs/domain-model.md')
@@ -80,6 +87,8 @@ expect(info.includes(`<repository>${projectUrl}</repository>`), 'Nextcloud app r
 expect(info.includes(`<bugs>${projectUrl}/issues</bugs>`), 'Nextcloud app issue URL must use Forgejo.')
 expect(genericProfile.provenance?.sourceUrl === projectUrl, 'Bundled first-party profile provenance must use the authoritative repository URL.')
 expect(profileSchema.$id === `${projectUrl}/src/branch/main/schemas/profile-v1.schema.json`, 'Profile schema identity must use the authoritative Forgejo repository URL.')
+expect(profileSchemaV2.$id === `${projectUrl}/src/branch/main/schemas/profile-v2.schema.json`, 'Profile-v2 schema identity must use the authoritative Forgejo repository URL.')
+expect(genericProfile.schemaVersion === 2, 'Bundled generic-car profile must use profile schema v2.')
 expect(attributes.includes('/.forgejo export-ignore'), '.gitattributes must exclude Forgejo contributor workflows from release archives.')
 expect(attributes.includes('/AGENTS.md export-ignore'), '.gitattributes must exclude project agent guidance from release archives.')
 expect(attributes.includes('/ci export-ignore'), '.gitattributes must exclude CI image definitions from release archives.')
@@ -122,6 +131,9 @@ expect(managerMatch !== null && managerMatch[1].includes('METER_MANAGE') && mana
 expect(contributorMatch !== null && contributorMatch[1].includes('METER_READ') && contributorMatch[1].includes('READING_CREATE'), 'Contributor must be able to read meters and create readings.')
 expect(contributorMatch !== null && !contributorMatch[1].includes('METER_MANAGE') && !contributorMatch[1].includes('READING_CORRECT'), 'Contributor must not configure meters or correct historical readings.')
 expect(viewerMatch !== null && viewerMatch[1].includes('METER_READ') && !viewerMatch[1].includes('READING_CREATE'), 'Viewer must remain read-only for meters/readings.')
+expect(managerMatch !== null && managerMatch[1].includes('MAINTENANCE_DEFINITION_READ') && managerMatch[1].includes('MAINTENANCE_DEFINITION_MANAGE'), 'Manager must explicitly receive work-definition read/manage capabilities.')
+expect(contributorMatch !== null && contributorMatch[1].includes('MAINTENANCE_DEFINITION_READ') && !contributorMatch[1].includes('MAINTENANCE_DEFINITION_MANAGE'), 'Contributor must read but not manage work definitions.')
+expect(viewerMatch !== null && viewerMatch[1].includes('MAINTENANCE_DEFINITION_READ') && !viewerMatch[1].includes('MAINTENANCE_DEFINITION_MANAGE'), 'Viewer must read but not manage work definitions.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -138,7 +150,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -163,6 +175,12 @@ for (const eventType of [
 	'meter.archived',
 	'reading.created',
 	'reading.corrected',
+	'work_group.created',
+	'work_group.updated',
+	'work_group.archived',
+	'work_definition.created',
+	'work_definition.updated',
+	'work_definition.archived',
 	'workspace.member.added',
 	'workspace.member.role_changed',
 	'workspace.member.removed',
@@ -181,13 +199,29 @@ expect(meterValueConverter.includes("'mi' => 1609344") && meterValueConverter.in
 expect(meterValueConverter.includes('MAX_CANONICAL_VALUE = 9007199254740991'), 'Meter canonical values must remain within the JavaScript JSON safe-integer range.')
 expect(meterService.includes('!$meter->getMonotonic() && $monotonic') && meterService.includes('$this->assertHistoryCanBeMonotonic($meter);'), 'Enabling monotonic mode must validate all existing effective readings first.')
 
+expect(migration1050.includes("table: 'maint_work_groups'") && migration1050.includes("table: 'maint_work_defs'") && migration1050.includes("table: 'maint_work_sched'"), 'v0.1.5 migration must create work-group, work-definition, and schedule-rule tables.')
+expect(workDefinitionService.includes("foreach (['key', 'title', 'kind', 'schedule'] as $required)"), 'Work-definition creation must explicitly require schedule.')
+expect(workDefinitionService.includes('throw new ValidationException("{$required} is required")'), 'Missing work-definition schedule must be rejected explicitly.')
+expect(!workDefinitionService.includes("['schedule'] ?? 'none'"), 'Work-definition service must never infer schedule: none for a missing schedule.')
+expect(!workDefinitionEntity.includes("$scheduleType = 'none'"), 'Work-definition entity must not carry an implicit schedule: none default.')
+expect(workDefinitionEntity.includes('protected ?string $scheduleType = null;'), 'Work-definition entity must use a null pre-persistence schedule sentinel so Nextcloud Entity setters never read an uninitialized typed property.')
+expect(workScheduleRuleEntity.includes('protected ?int $position = null;'), 'Work schedule rules must use a null pre-persistence position sentinel so zero is written by Nextcloud QBMapper inserts.')
+expect(!workScheduleRuleEntity.includes('protected int $position = 0;'), 'Work schedule rules must not default position to zero because Nextcloud Entity setters would omit the first rule position from inserts.')
+expect(migration1050.includes("addColumn('schedule_type', Types::STRING, ['notnull' => true"), 'Persisted work definitions must require a non-null schedule type.')
+expect(workSchedulePolicy.includes("if ($schedule === 'none')") && workSchedulePolicy.includes("'combination'] !== 'any'"), 'Schedule policy must retain explicit none and reviewed any/OR semantics.')
+expect(workSchedulePolicy.includes("'calendar'") && workSchedulePolicy.includes("'business_days'") && workSchedulePolicy.includes("'meter'"), 'Schedule policy must retain calendar, business-day, and meter rule types.')
+expect(workScheduleRuleMapper.includes('countActiveForMeter') && meterService.includes('countActiveForMeter') && meterService.includes('Meter is referenced by an active work-definition schedule'), 'Active work-definition meter references must block meter archival.')
+const profileV2WorkDefinition = profileSchemaV2.$defs?.workDefinition
+expect(profileV2WorkDefinition?.required?.includes('schedule') === true, 'Profile-v2 work definitions must require schedule.')
+expect(profileSchemaV2.$defs?.schedulePolicy?.oneOf?.some((entry) => entry.const === 'none') === true, 'Profile-v2 schedule policy must explicitly support schedule: none.')
+
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
 }
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -202,7 +236,9 @@ expect(api.includes('GET /audit') && api.includes('/members'), 'API documentatio
 expect(domainModel.includes('distance -> millimetres (`mm`)') && domainModel.includes('runtime/engine hours -> seconds (`s`)') && domainModel.includes('usage/event counts -> integer count (`count`)'), 'Domain documentation must define integer canonical meter units.')
 expect(domainModel.includes('supersede') && security.includes('append-only observations'), 'Documentation must preserve immutable reading correction-by-supersession semantics.')
 expect(api.includes('/meters/{meterUuid}/readings') && api.includes('/readings/{readingUuid}/corrections'), 'API documentation must cover meter readings and immutable corrections.')
-expect(roadmap.includes('[x] v0.1.3') && roadmap.includes('v0.1.4 meters'), 'Roadmap must record qualified v0.1.3 and the v0.1.4 meter/readings tranche.')
+expect(roadmap.includes('[x] v0.1.4') && roadmap.includes('CI #13') && roadmap.includes('v0.1.5'), 'Roadmap must record qualified v0.1.4 and the v0.1.5 work-definition tranche.')
+expect(docs.includes('missing') && docs.includes('never') && docs.includes('schedule'), 'Documentation must state that missing schedule is invalid and never implicitly defaulted.')
+expect(api.includes('/work-definitions') && api.includes('/work-groups'), 'API documentation must cover work groups and work definitions.')
 
 try {
 	await access('.github/workflows/ci.yml')

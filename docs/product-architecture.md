@@ -35,14 +35,17 @@ Part requirements and compatible products are relational. Compatible, preferred,
 > calculation, not maintenance activities by themselves.
 
 Maintenance definitions use one common work-definition model. The scheduling
-property is named `schedule`: `schedule: none` means unscheduled/ad-hoc work;
+property is named `schedule` and the property is required: `schedule: none` means unscheduled/ad-hoc work;
 anything else is scheduled maintenance. This supports a direct scheduled versus
 unscheduled filter without separate record types.
 
-Non-`none` schedules may be time-, business-day-, distance-, runtime/hour-,
-usage/event-, or condition-driven and may combine reviewed limits. Condition
-monitoring (for example oil-life percentage) is an optional asset capability and
-may be combined with hard maximum distance/runtime/calendar thresholds.
+> Implementation status: v0.1.5 candidate materializes work groups/definitions and supports `combination: any` with calendar, configurable business-day, and meter interval rules. Due-state calculation remains later work.
+
+The v0.1.5 rule set covers time, configurable business days, distance,
+runtime/hour, and usage/event counts, and may combine those reviewed limits.
+Condition monitoring (for example oil-life percentage) remains a future optional
+asset capability; when implemented it may be combined with hard maximum
+distance/runtime/calendar thresholds.
 
 Profiles define their own work-definition groups and catalogs rather than relying
 on hard-coded application categories. A quick "I used this today" action is a

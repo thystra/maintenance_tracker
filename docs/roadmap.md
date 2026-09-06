@@ -54,10 +54,11 @@ Planned sequence:
 1. [x] custom categories, asset classes, component instances, and structured specifications;
 2. [x] typed asset relationships and effective-dated assignments;
 3. [x] v0.1.3 capability authorization, multi-user membership lifecycle, and append-only audit foundation (Forgejo CI #10 qualified);
-4. [ ] v0.1.4 meters and immutable readings (distance, runtime hours, usage counts), including correction-by-supersession and role/capability boundaries;
-5. common work definitions with `schedule: none` for unscheduled work, non-`none` scheduling policies, due calculation, and occurrences;
-6. activity/service records and free-form notes;
-7. validated local profile installation into real domain records;
+4. [x] v0.1.4 meters and immutable readings (distance, runtime hours, usage counts), including correction-by-supersession and role/capability boundaries; qualified in PR #6 with CI #12 and merge CI #13;
+5. [ ] v0.1.5 common work definitions and explicit scheduling foundation: required `schedule`, `schedule: none`, calendar/business-day/meter policies, profile-v2, authorization/audit/lifecycle integration; implementation candidate awaiting qualification;
+6. due calculation, forecasting inputs, and occurrence materialization;
+7. activity/service records and free-form notes;
+8. validated local profile installation into real domain records;
 8. parts, compatible part numbers, store links, and central cost entries;
 9. first-class evidence in Nextcloud Files (photo/video/receipt/invoice/document/other);
 10. Nextcloud Activity, notifications, and writable-calendar projection;

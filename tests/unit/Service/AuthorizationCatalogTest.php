@@ -25,6 +25,8 @@ final class AuthorizationCatalogTest extends TestCase {
 		self::assertFalse($this->catalog->allows('manager', 'workspace.members.manage'));
 		self::assertTrue($this->catalog->allows('manager', 'meter.manage'));
 		self::assertTrue($this->catalog->allows('manager', 'reading.correct'));
+		self::assertTrue($this->catalog->allows('manager', 'maintenance_definition.read'));
+		self::assertTrue($this->catalog->allows('manager', 'maintenance_definition.manage'));
 	}
 
 	public function testContributorCanReadButCannotConfigureInventory(): void {
@@ -35,6 +37,8 @@ final class AuthorizationCatalogTest extends TestCase {
 		self::assertTrue($this->catalog->allows('contributor', 'reading.create'));
 		self::assertFalse($this->catalog->allows('contributor', 'meter.manage'));
 		self::assertFalse($this->catalog->allows('contributor', 'reading.correct'));
+		self::assertTrue($this->catalog->allows('contributor', 'maintenance_definition.read'));
+		self::assertFalse($this->catalog->allows('contributor', 'maintenance_definition.manage'));
 	}
 
 	public function testViewerIsReadOnlyForImplementedSurface(): void {
@@ -43,6 +47,8 @@ final class AuthorizationCatalogTest extends TestCase {
 		self::assertFalse($this->catalog->allows('viewer', 'inventory.manage'));
 		self::assertTrue($this->catalog->allows('viewer', 'meter.read'));
 		self::assertFalse($this->catalog->allows('viewer', 'reading.create'));
+		self::assertTrue($this->catalog->allows('viewer', 'maintenance_definition.read'));
+		self::assertFalse($this->catalog->allows('viewer', 'maintenance_definition.manage'));
 	}
 
 	public function testLegacyEditorNormalizesToManager(): void {

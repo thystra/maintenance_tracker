@@ -21,6 +21,8 @@ import type {
 	CreateReading,
 	CreateRelationship,
 	CreateSpecification,
+	CreateWorkDefinition,
+	CreateWorkGroup,
 	Meter,
 	MeterList,
 	Reading,
@@ -30,6 +32,10 @@ import type {
 	RelationshipTypeList,
 	Specification,
 	SpecificationList,
+	WorkDefinition,
+	WorkDefinitionList,
+	WorkGroup,
+	WorkGroupList,
 } from '../types.ts'
 
 import axios from '@nextcloud/axios'
@@ -156,4 +162,23 @@ export async function getReadings(meterUuid: string): Promise<ReadingList> {
 
 export async function createReading(meterUuid: string, reading: CreateReading): Promise<Reading> {
 	return data(await axios.post<OcsEnvelope<Reading>>(endpoint(`/meters/${meterUuid}/readings`), { reading }, requestOptions))
+}
+
+export async function getWorkGroups(assetUuid: string): Promise<WorkGroupList> {
+	return data(await axios.get<OcsEnvelope<WorkGroupList>>(endpoint(`/assets/${assetUuid}/work-groups`), requestOptions))
+}
+
+export async function createWorkGroup(assetUuid: string, group: CreateWorkGroup): Promise<WorkGroup> {
+	return data(await axios.post<OcsEnvelope<WorkGroup>>(endpoint(`/assets/${assetUuid}/work-groups`), { group }, requestOptions))
+}
+
+export async function getWorkDefinitions(assetUuid: string, scheduled: boolean | null = null): Promise<WorkDefinitionList> {
+	return data(await axios.get<OcsEnvelope<WorkDefinitionList>>(endpoint(`/assets/${assetUuid}/work-definitions`), {
+		...requestOptions,
+		params: scheduled === null ? undefined : { scheduled: scheduled ? 'true' : 'false' },
+	}))
+}
+
+export async function createWorkDefinition(assetUuid: string, definition: CreateWorkDefinition): Promise<WorkDefinition> {
+	return data(await axios.post<OcsEnvelope<WorkDefinition>>(endpoint(`/assets/${assetUuid}/work-definitions`), { definition }, requestOptions))
 }
