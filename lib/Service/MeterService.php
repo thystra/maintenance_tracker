@@ -13,6 +13,7 @@ use OCA\MaintenanceTracker\Db\Component;
 use OCA\MaintenanceTracker\Db\Meter;
 use OCA\MaintenanceTracker\Db\MeterMapper;
 use OCA\MaintenanceTracker\Db\ReadingMapper;
+use OCA\MaintenanceTracker\Db\WorkScheduleRuleMapper;
 use OCA\MaintenanceTracker\Exception\NotFoundException;
 use OCA\MaintenanceTracker\Exception\RevisionConflictException;
 use OCA\MaintenanceTracker\Exception\ValidationException;
@@ -27,6 +28,7 @@ final class MeterService {
 		private ComponentService $components,
 		private MeterMapper $mapper,
 		private ReadingMapper $readings,
+		private WorkScheduleRuleMapper $scheduleRules,
 		private MeterValueConverter $values,
 		private UuidGenerator $uuidGenerator,
 		private ChangeJournal $journal,
@@ -180,6 +182,9 @@ final class MeterService {
 		$meter = $this->find($context, $uuid);
 		if ($meter->getRevision() !== $expectedRevision) {
 			throw new RevisionConflictException('The meter has changed since it was last read');
+		}
+		if ($this->scheduleRules->countActiveForMeter($meter->getWorkspaceId(), $meter->getId()) > 0) {
+			throw new ValidationException('Meter is referenced by an active work-definition schedule');
 		}
 		$now = $this->timeFactory->getTime();
 		$meter->setRevision($expectedRevision + 1);

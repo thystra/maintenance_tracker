@@ -157,3 +157,54 @@ export interface Reading {
 }
 export interface ReadingList { workspace: string, items: Reading[] }
 export interface CreateReading { uuid?: string, observedAt: string, value: string | number, unit?: string, source?: ReadingSource, notes?: string | null }
+
+export interface WorkGroup {
+	uuid: string
+	key: string
+	name: string
+	description: string | null
+	sortOrder: number
+	revision: number
+	createdAt: string
+	updatedAt: string
+	deletedAt: string | null
+}
+export interface WorkGroupList { workspace: string, items: WorkGroup[] }
+export interface CreateWorkGroup { uuid?: string, key: string, name: string, description?: string | null, sortOrder?: number }
+
+export type CalendarScheduleUnit = 'day' | 'week' | 'month' | 'year'
+export type BusinessWeekday = 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat'
+export interface CalendarScheduleRule { type: 'calendar', interval: { value: number, unit: CalendarScheduleUnit } }
+export interface BusinessDaysScheduleRule { type: 'business_days', interval: { value: number, unit: 'business_day' }, weekdays: BusinessWeekday[] }
+export interface MeterScheduleRule { type: 'meter', meterUuid: string, interval: { value: string | number, unit: string } }
+export type WorkScheduleRule = CalendarScheduleRule | BusinessDaysScheduleRule | MeterScheduleRule
+export type WorkSchedule = 'none' | { combination: 'any', rules: WorkScheduleRule[] }
+export interface WorkDefinition {
+	uuid: string
+	componentUuid: string | null
+	groupUuid: string | null
+	key: string
+	title: string
+	kind: string
+	instructions: string | null
+	notes: string | null
+	status: AssetStatus
+	schedule: WorkSchedule
+	revision: number
+	createdAt: string
+	updatedAt: string
+	deletedAt: string | null
+}
+export interface WorkDefinitionList { workspace: string, items: WorkDefinition[] }
+export interface CreateWorkDefinition {
+	uuid?: string
+	componentUuid?: string | null
+	groupUuid?: string | null
+	key: string
+	title: string
+	kind: string
+	instructions?: string | null
+	notes?: string | null
+	status?: AssetStatus
+	schedule: WorkSchedule
+}

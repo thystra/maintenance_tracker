@@ -8,6 +8,7 @@ import type {
 	Asset,
 	AssetClass,
 	Assignment,
+	BusinessWeekday,
 	Capabilities,
 	Category,
 	Component,
@@ -18,6 +19,9 @@ import type {
 	Relationship,
 	RelationshipType,
 	Specification,
+	WorkDefinition,
+	WorkGroup,
+	WorkSchedule,
 } from './types.ts'
 
 import { computed, onMounted, reactive, ref } from 'vue'
@@ -32,6 +36,8 @@ import {
 	createReading,
 	createRelationship,
 	createSpecification,
+	createWorkDefinition,
+	createWorkGroup,
 	getAssets,
 	getAssignments,
 	getCapabilities,
@@ -42,6 +48,8 @@ import {
 	getRelationships,
 	getRelationshipTypes,
 	getSpecifications,
+	getWorkDefinitions,
+	getWorkGroups,
 } from './services/api.ts'
 
 const assets = ref<Asset[]>([])
@@ -52,6 +60,8 @@ const components = ref<Record<string, Component[]>>({})
 const specifications = ref<Record<string, Specification[]>>({})
 const meters = ref<Record<string, Meter[]>>({})
 const readings = ref<Record<string, Reading[]>>({})
+const workGroups = ref<Record<string, WorkGroup[]>>({})
+const workDefinitions = ref<Record<string, WorkDefinition[]>>({})
 const relationshipTypes = ref<RelationshipType[]>([])
 const relationships = ref<Relationship[]>([])
 const assignments = ref<Assignment[]>([])
@@ -65,9 +75,34 @@ const componentDraft = reactive({ name: '', type: 'component', parentUuid: '' })
 const specificationDraft = reactive({ key: '', label: '', value: '', unit: '', regime: '', componentUuid: '' })
 const meterDraft = reactive({ key: '', name: '', dimension: 'distance' as MeterDimension, displayUnit: 'mi', monotonic: true, componentUuid: '' })
 const readingDraft = reactive({ meterUuid: '', value: '', observedAt: '', unit: 'mi' })
+const workGroupDraft = reactive({ key: '', name: '', description: '', sortOrder: 100 })
+const workDefinitionDraft = reactive({
+	key: '',
+	title: '',
+	kind: 'maintenance',
+	groupUuid: '',
+	componentUuid: '',
+	scheduleMode: 'none' as 'none' | 'calendar' | 'business_days' | 'meter' | 'meter_calendar',
+	calendarValue: 12,
+	calendarUnit: 'month' as 'day' | 'week' | 'month' | 'year',
+	businessDaysValue: 10,
+	businessWeekdays: ['mon', 'tue', 'wed', 'thu', 'fri'] as BusinessWeekday[],
+	meterUuid: '',
+	meterValue: '7500',
+	meterUnit: 'mi',
+})
 const relationshipDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'general', isDefault: false })
 const assignmentDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'trip', isPrimary: true, effectiveFrom: '', effectiveUntil: '' })
 const empty = computed(() => !loading.value && assets.value.length === 0)
+const businessWeekdayOptions: Array<{ value: BusinessWeekday, label: string }> = [
+	{ value: 'sun', label: 'Sun' },
+	{ value: 'mon', label: 'Mon' },
+	{ value: 'tue', label: 'Tue' },
+	{ value: 'wed', label: 'Wed' },
+	{ value: 'thu', label: 'Thu' },
+	{ value: 'fri', label: 'Fri' },
+	{ value: 'sat', label: 'Sat' },
+]
 
 function categoryLabel(key: string): string {
 	return categories.value.find((category) => category.key === key)?.name ?? key
@@ -92,6 +127,56 @@ function syncReadingUnit(): void {
 	if (meter) {
 		readingDraft.unit = meter.displayUnit
 	}
+}
+
+function syncWorkMeterUnit(assetUuid: string): void {
+	const meter = (meters.value[assetUuid] ?? []).find((item) => item.uuid === workDefinitionDraft.meterUuid)
+	if (meter) {
+		workDefinitionDraft.meterUnit = meter.displayUnit
+	}
+}
+
+function workScheduleLabel(schedule: WorkSchedule): string {
+	if (schedule === 'none') {
+		return 'unscheduled'
+	}
+	return schedule.rules.map((rule) => {
+		if (rule.type === 'calendar') {
+			return `every ${rule.interval.value} ${rule.interval.unit}`
+		}
+		if (rule.type === 'business_days') {
+			return `every ${rule.interval.value} business days (${rule.weekdays.map((day) => day.slice(0, 1).toUpperCase() + day.slice(1)).join(', ')})`
+		}
+		return `every ${rule.interval.value} ${rule.interval.unit}`
+	}).join(' OR ')
+}
+
+function buildWorkSchedule(): WorkSchedule {
+	if (workDefinitionDraft.scheduleMode === 'none') {
+		return 'none'
+	}
+	const rules: Exclude<WorkSchedule, 'none'>['rules'] = []
+	if (workDefinitionDraft.scheduleMode === 'calendar' || workDefinitionDraft.scheduleMode === 'meter_calendar') {
+		rules.push({
+			type: 'calendar',
+			interval: { value: workDefinitionDraft.calendarValue, unit: workDefinitionDraft.calendarUnit },
+		})
+	}
+	if (workDefinitionDraft.scheduleMode === 'business_days') {
+		rules.push({
+			type: 'business_days',
+			interval: { value: workDefinitionDraft.businessDaysValue, unit: 'business_day' },
+			weekdays: [...workDefinitionDraft.businessWeekdays],
+		})
+	}
+	if (workDefinitionDraft.scheduleMode === 'meter' || workDefinitionDraft.scheduleMode === 'meter_calendar') {
+		rules.push({
+			type: 'meter',
+			meterUuid: workDefinitionDraft.meterUuid,
+			interval: { value: workDefinitionDraft.meterValue, unit: workDefinitionDraft.meterUnit },
+		})
+	}
+	return { combination: 'any', rules }
 }
 
 function latestReading(meterUuid: string): Reading | null {
@@ -197,16 +282,20 @@ async function toggleAsset(asset: Asset): Promise<void> {
 	}
 	expandedAsset.value = asset.uuid
 	try {
-		const [componentList, specificationList, meterList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid)])
+		const [componentList, specificationList, meterList, workGroupList, workDefinitionList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid)])
 		components.value[asset.uuid] = componentList.items
 		specifications.value[asset.uuid] = specificationList.items
 		meters.value[asset.uuid] = meterList.items
+		workGroups.value[asset.uuid] = workGroupList.items
+		workDefinitions.value[asset.uuid] = workDefinitionList.items
 		await Promise.all(meterList.items.map(async (meter) => {
 			readings.value[meter.uuid] = (await getReadings(meter.uuid)).items
 		}))
 		readingDraft.meterUuid = meterList.items[0]?.uuid ?? ''
+		workDefinitionDraft.meterUuid = meterList.items[0]?.uuid ?? ''
 		readingDraft.observedAt = localNow()
 		syncReadingUnit()
+		syncWorkMeterUnit(asset.uuid)
 	} catch (reason) {
 		error.value = readableError(reason)
 	}
@@ -303,6 +392,63 @@ async function submitReading(): Promise<void> {
 		readings.value[readingDraft.meterUuid] = [...(readings.value[readingDraft.meterUuid] ?? []), created]
 		readingDraft.value = ''
 		readingDraft.observedAt = localNow()
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function submitWorkGroup(asset: Asset): Promise<void> {
+	if (workGroupDraft.key.trim() === '' || workGroupDraft.name.trim() === '') {
+		return
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const created = await createWorkGroup(asset.uuid, {
+			key: workGroupDraft.key.trim(),
+			name: workGroupDraft.name.trim(),
+			description: workGroupDraft.description.trim() || null,
+			sortOrder: workGroupDraft.sortOrder,
+		})
+		workGroups.value[asset.uuid] = [...(workGroups.value[asset.uuid] ?? []), created]
+		workGroupDraft.key = ''
+		workGroupDraft.name = ''
+		workGroupDraft.description = ''
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function submitWorkDefinition(asset: Asset): Promise<void> {
+	if (workDefinitionDraft.key.trim() === '' || workDefinitionDraft.title.trim() === '') {
+		return
+	}
+	if ((workDefinitionDraft.scheduleMode === 'meter' || workDefinitionDraft.scheduleMode === 'meter_calendar') && workDefinitionDraft.meterUuid === '') {
+		error.value = 'Select a meter for the schedule.'
+		return
+	}
+	if (workDefinitionDraft.scheduleMode === 'business_days' && workDefinitionDraft.businessWeekdays.length === 0) {
+		error.value = 'Select at least one business day.'
+		return
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const created = await createWorkDefinition(asset.uuid, {
+			key: workDefinitionDraft.key.trim(),
+			title: workDefinitionDraft.title.trim(),
+			kind: workDefinitionDraft.kind.trim() || 'maintenance',
+			groupUuid: workDefinitionDraft.groupUuid || null,
+			componentUuid: workDefinitionDraft.componentUuid || null,
+			schedule: buildWorkSchedule(),
+		})
+		workDefinitions.value[asset.uuid] = [...(workDefinitions.value[asset.uuid] ?? []), created]
+		workDefinitionDraft.key = ''
+		workDefinitionDraft.title = ''
 	} catch (reason) {
 		error.value = readableError(reason)
 	} finally {
@@ -619,6 +765,123 @@ onMounted(load)
 										</button>
 									</form>
 								</section>
+								<section class="work-section">
+									<h4>Maintenance definitions</h4>
+									<p class="panel-copy">
+										Every definition carries an explicit schedule. Choose Unscheduled for ad-hoc work.
+									</p>
+									<ul class="compact-list">
+										<li v-for="definition in workDefinitions[asset.uuid] ?? []" :key="definition.uuid">
+											<strong>{{ definition.title }}</strong>
+											<span>{{ definition.kind }} · {{ workScheduleLabel(definition.schedule) }}</span>
+										</li>
+									</ul>
+									<form class="work-group-form" @submit.prevent="submitWorkGroup(asset)">
+										<input
+											v-model="workGroupDraft.key"
+											pattern="[a-z0-9][a-z0-9_-]*"
+											placeholder="engine"
+											required>
+										<input v-model="workGroupDraft.name" placeholder="Engine" required>
+										<input v-model="workGroupDraft.description" placeholder="Description (optional)">
+										<input v-model.number="workGroupDraft.sortOrder" type="number" placeholder="Sort order">
+										<button type="submit">
+											Add work group
+										</button>
+									</form>
+									<form class="work-definition-form" @submit.prevent="submitWorkDefinition(asset)">
+										<input
+											v-model="workDefinitionDraft.key"
+											pattern="[a-z0-9][a-z0-9_-]*"
+											placeholder="oil_change"
+											required>
+										<input v-model="workDefinitionDraft.title" placeholder="Oil change" required>
+										<input v-model="workDefinitionDraft.kind" placeholder="maintenance" required>
+										<select v-model="workDefinitionDraft.groupUuid">
+											<option value="">
+												No work group
+											</option>
+											<option v-for="group in workGroups[asset.uuid] ?? []" :key="group.uuid" :value="group.uuid">
+												{{ group.name }}
+											</option>
+										</select>
+										<select v-model="workDefinitionDraft.componentUuid">
+											<option value="">
+												Whole asset
+											</option>
+											<option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
+												{{ component.name }}
+											</option>
+										</select>
+										<select v-model="workDefinitionDraft.scheduleMode">
+											<option value="none">
+												Unscheduled (schedule: none)
+											</option>
+											<option value="calendar">
+												Calendar interval
+											</option>
+											<option value="business_days">
+												Business-day interval
+											</option>
+											<option value="meter">
+												Meter interval
+											</option>
+											<option value="meter_calendar">
+												Meter OR calendar
+											</option>
+										</select>
+										<template v-if="workDefinitionDraft.scheduleMode === 'calendar' || workDefinitionDraft.scheduleMode === 'meter_calendar'">
+											<input
+												v-model.number="workDefinitionDraft.calendarValue"
+												type="number"
+												min="1"
+												required>
+											<select v-model="workDefinitionDraft.calendarUnit">
+												<option value="day">
+													days
+												</option><option value="week">
+													weeks
+												</option><option value="month">
+													months
+												</option><option value="year">
+													years
+												</option>
+											</select>
+										</template>
+										<template v-if="workDefinitionDraft.scheduleMode === 'business_days'">
+											<input
+												v-model.number="workDefinitionDraft.businessDaysValue"
+												type="number"
+												min="1"
+												required>
+											<div class="weekday-picker" aria-label="Business days">
+												<label v-for="day in businessWeekdayOptions" :key="day.value" class="weekday-option">
+													<input v-model="workDefinitionDraft.businessWeekdays" type="checkbox" :value="day.value">
+													<span>{{ day.label }}</span>
+												</label>
+											</div>
+										</template>
+										<template v-if="workDefinitionDraft.scheduleMode === 'meter' || workDefinitionDraft.scheduleMode === 'meter_calendar'">
+											<select v-model="workDefinitionDraft.meterUuid" required @change="syncWorkMeterUnit(asset.uuid)">
+												<option value="" disabled>
+													Schedule meter
+												</option>
+												<option v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid" :value="meter.uuid">
+													{{ meter.name }}
+												</option>
+											</select>
+											<input
+												v-model="workDefinitionDraft.meterValue"
+												inputmode="decimal"
+												placeholder="Interval"
+												required>
+											<input v-model="workDefinitionDraft.meterUnit" placeholder="unit" required>
+										</template>
+										<button type="submit">
+											Add work definition
+										</button>
+									</form>
+								</section>
 							</div>
 						</li>
 					</ul>
@@ -683,7 +946,7 @@ button:disabled { opacity: .55; }
 
 .compact-list span { color: var(--color-text-maxcontrast); }
 
-.inline-form, .spec-form, .meter-form, .reading-form { display: grid; gap: 8px; }
+.inline-form, .spec-form, .meter-form, .reading-form, .work-group-form, .work-definition-form { display: grid; gap: 8px; }
 
 .relationship-form, .assignment-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
 
@@ -699,15 +962,25 @@ button:disabled { opacity: .55; }
 
 .spec-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-.meter-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.meter-section, .work-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
 
 .meter-form { grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, minmax(120px, .7fr)) auto auto; align-items: end; }
 
 .reading-form { grid-template-columns: 1.5fr 1fr .6fr 1.2fr auto; align-items: end; margin-top: 10px; }
 
+.work-group-form { grid-template-columns: 1fr 1.4fr 2fr .7fr auto; margin-bottom: 10px; }
+
+.work-definition-form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
+
+.weekday-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 42px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--border-radius); }
+
+.weekday-option { display: flex; grid-template-columns: none; align-items: center; gap: 4px; font-weight: 500; }
+
+.weekday-option input { min-height: auto; }
+
 .spec-form button { grid-column: 3; }
 
 .empty-state { display: grid; place-items: center; min-height: 130px; color: var(--color-text-maxcontrast); }
-@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
-@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form { display: grid; grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
+@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form { display: grid; grid-template-columns: 1fr; } }
 </style>

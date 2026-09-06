@@ -9,6 +9,13 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.5 common work-definition and scheduling foundation with asset-scoped work groups and normalized schedule rules.
+- Every new work definition and every profile-v2 work-definition template must explicitly provide `schedule`; omission is invalid and is never inferred as `none`.
+- `schedule: none` explicitly represents unscheduled/ad-hoc work; non-`none` policies currently support `combination: any` with calendar, configurable business-day, and meter rules.
+- Schedule meter rules reuse canonical meter conversion and block archival of referenced meters while the definition remains active.
+- Owner/Manager definition-management capabilities, Contributor/Viewer read access, work-definition audit events, account-lifecycle purge coverage, desktop configuration UI, and Nextcloud 34 SQLite/PostgreSQL integration coverage.
+- Profile schema v2 introduces `workGroups` and `workDefinitions` while retaining profile v1 as a separately validated compatibility format.
+
 - v0.1.4 meter/readings foundation with asset- or component-targeted distance, runtime, and usage-count meters.
 - Immutable timestamped readings retain original value/unit alongside canonical integer values (`mm`, `s`, or `count`) for deterministic scheduling inputs.
 - Monotonic-series validation, historical insertion checks, and correction-by-supersession without rewriting prior observations.

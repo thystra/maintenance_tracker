@@ -121,3 +121,9 @@ membership or direct canonical-history write access.
 See Nextcloud's
 [security guidelines](https://docs.nextcloud.com/server/stable/developer_manual/prologue/security.html)
 for the platform baseline.
+## Work-definition schedule integrity
+
+- `schedule` is mandatory input for every new work definition. The server never treats an omitted field as `schedule: none`; callers must explicitly choose unscheduled work.
+- `schedule: none` is the sole unscheduled marker. Non-`none` policies currently use `combination: any` with bounded calendar, business-day, or meter rules.
+- Meter rules must reference a meter on the same asset and pass that meter dimension's canonical unit conversion. An active referenced meter cannot be archived.
+- Owner/Manager hold `maintenance_definition.manage`; Contributor/Viewer have `maintenance_definition.read` only. Work-group/definition mutations are audited and workspace-serialized.

@@ -138,10 +138,12 @@ Installing a profile materializes a snapshot of its components, structured infor
 Profile provenance includes an ID, semantic version, data license, source URL,
 and content hash. Generic first-party profiles should use CC0 where possible.
 
-## Scheduling
+## Work definitions and scheduling
+
+> Implementation status: v0.1.5 candidate materializes asset-scoped work groups, common work definitions, and normalized schedule-rule rows.
 
 Scheduling is a property of a common **work definition**, not a separate record
-type. The canonical field name is `schedule`.
+type. The canonical field name is `schedule`. It is required on work-definition creation; absence is invalid and is never inferred as `none`.
 
 ```text
 schedule: none
@@ -156,11 +158,14 @@ scheduled   = schedule != none
 unscheduled = schedule == none
 ```
 
-A non-`none` schedule may use calendar time, distance, runtime/engine hours,
-usage counts, condition measurements, or a reviewed combination such as `ANY`
-("six months or 5,000 miles, whichever comes first"). Month/year intervals stay
-calendar units; they are not approximated as seconds. Unscheduled definitions
-cover failures and ad-hoc work such as a turbocharger or transmission repair.
+The v0.1.5 policy shape uses `combination: any` (OR semantics). Its implemented
+rule types are calendar intervals, configurable business-day intervals, and
+meter intervals. Meter rules cover distance, runtime/engine hours, and usage
+counts through the v0.1.4 meter foundation, including combinations such as
+"six months or 5,000 miles, whichever comes first." Month/year intervals stay
+calendar units; they are not approximated as seconds. Condition-driven rules
+remain a future extension. Unscheduled definitions cover failures and ad-hoc
+work such as a turbocharger or transmission repair.
 
 A future periodic Nextcloud `TimedJob` will reconcile indexed due projections,
 calendar events, and notifications. The design avoids one background job per

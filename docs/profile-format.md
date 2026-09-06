@@ -3,7 +3,7 @@
 Profiles provide data templates for a class or exact model of equipment. They
 are not live maintenance records and they never contain executable code.
 
-The initial schema is [profile-v1.schema.json](../schemas/profile-v1.schema.json).
+The current common-work-definition schema is [profile-v2.schema.json](../schemas/profile-v2.schema.json). Profile v1 remains a compatibility format and is still validated; it is not silently reinterpreted as v2.
 A conservative example is
 [generic-car.json](../profiles/generic-car.json).
 
@@ -11,26 +11,29 @@ A conservative example is
 
 Each profile declares:
 
-- `schemaVersion`: currently `1`;
+- `schemaVersion`: `2` for the current common-work-definition format (`1` remains accepted as a compatibility format);
 - a globally stable reverse-DNS-style `id`;
 - semantic `version`;
 - `name`, `category`, and description;
 - data license, author, source URL, and optional source revision;
 - applicability metadata;
-- meter, component, part, and provisional maintenance-plan templates. Meter templates currently map to the implemented `distance`, `runtime`, or `usage_count` dimensions when materialization is enabled.
+- meter, component, part, work-group, and common work-definition templates. Meter templates map to `distance`, `runtime`, or `usage_count`.
 
 Changing a published profile creates a new semantic version and content hash.
 Already installed assets retain the exact revision used.
 
-### Scheduling-schema transition
+### Work-definition scheduling in profile v2
 
-The checked-in profile-v1 schema predates the common work-definition decision and
-still represents scheduling as `maintenancePlans` plus `triggers`. That shape is
-provisional foundation data, not the final installer contract. Before profile
-installation is enabled, a later schema revision will use common work definitions
-with a `schedule` property: `schedule: none` means unscheduled/ad-hoc work and any
-non-`none` policy means scheduled maintenance. Existing profile-v1 data will need
-an explicit versioned migration/import mapping rather than silent reinterpretation.
+Profile v2 is the current common-work-definition format. Every `workDefinitions`
+item is invalid unless it explicitly contains `schedule`. `schedule: none` means
+intentional unscheduled/ad-hoc work; omission never means `none`. A non-`none`
+policy currently uses `combination: "any"` with bounded calendar, configurable
+business-day, or meter rules.
+
+Profile v1 predates this model and still represents scheduling as
+`maintenancePlans` plus `triggers`. It remains a separately validated compatibility
+format. Importing v1 into the common model requires an explicit versioned mapping;
+v1 data is never silently reinterpreted as profile v2.
 
 ## Installation behavior
 
@@ -39,10 +42,10 @@ Applying a profile:
 1. validates schema, size, depth, counts, URLs, and cross-references;
 2. records profile provenance and content hash;
 3. creates one component row per declared quantity;
-4. creates meter definitions and, after the scheduling-schema transition, common work definitions;
+4. creates meter definitions and common work definitions from the selected profile revision;
 5. links compatible part alternatives;
 6. marks every created row with the source profile/key;
-7. lets the user review and suppress unwanted components or plans.
+7. lets the user review and suppress unwanted components or work definitions.
 
 The installer must not assume all assets have the same components. A generic
 vehicle profile therefore avoids a fuel filter by default; a diesel-specific
@@ -57,7 +60,7 @@ Profile upgrades show:
 
 No upgrade silently overwrites user choices.
 
-## Provisional profile-v1 trigger representation
+## Profile-v1 compatibility trigger representation
 
 Calendar trigger:
 
@@ -89,7 +92,7 @@ when the first threshold is reached.
 
 ## Compatible parts
 
-A part has a manufacturer and part number. Components/plans reference part keys,
+A part has a manufacturer and part number. Components/work definitions reference part keys,
 allowing equivalent products from multiple manufacturers. Offers contain only a
 label, SKU, and HTTPS URL. The server does not request that URL in v1.
 
@@ -102,7 +105,7 @@ Imported profiles are untrusted user data:
 
 - no HTML, scripts, expressions, credentials, or embedded binary data;
 - HTTPS source/offer URLs only;
-- bounded strings, arrays, nesting, components, and plans;
+- bounded strings, arrays, nesting, components, work definitions, and legacy v1 plans;
 - rendered as escaped text;
 - explicit SPDX data license and provenance;
 - first-party and local profiles clearly distinguished from third-party files.

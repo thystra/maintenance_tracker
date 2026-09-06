@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "org.argentwolf.maintenance.generic-car",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "name": "Generic passenger vehicle",
   "category": "vehicle",
   "description": "A conservative starter profile for a passenger vehicle. It intentionally avoids engine, fuel-filter, and propulsion-specific assumptions. Verify every interval against the vehicle manufacturer.",
@@ -11,11 +11,7 @@
     "sourceUrl": "https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud"
   },
   "applicability": {
-    "tags": [
-      "car",
-      "vehicle",
-      "generic"
-    ]
+    "tags": ["car", "vehicle", "generic"]
   },
   "meters": [
     {
@@ -52,114 +48,84 @@
     }
   ],
   "parts": [],
-  "maintenancePlans": [
+  "workGroups": [
+    {"key": "tires", "name": "Tires", "sortOrder": 100},
+    {"key": "visibility", "name": "Visibility", "sortOrder": 200},
+    {"key": "cabin", "name": "Cabin", "sortOrder": 300},
+    {"key": "administration", "name": "Administration", "sortOrder": 400}
+  ],
+  "workDefinitions": [
     {
       "key": "inspect_tires",
       "title": "Inspect tires and pressure",
       "kind": "inspection",
+      "groupKey": "tires",
       "componentKey": "tire",
       "enabledByDefault": true,
-      "combination": "any",
       "instructions": "Inspect condition, pressure, tread, and visible damage. Use the vehicle manufacturer's pressure specification.",
-      "triggers": [
-        {
-          "type": "calendar",
-          "interval": {
-            "value": 1,
-            "unit": "month"
-          }
-        }
-      ],
+      "schedule": {"combination": "any", "rules": [{"type": "calendar", "interval": {"value": 1, "unit": "month"}}]},
       "compatiblePartKeys": []
     },
     {
       "key": "rotate_tires",
       "title": "Review tire rotation",
       "kind": "maintenance",
+      "groupKey": "tires",
       "componentKey": "tire",
       "enabledByDefault": true,
-      "combination": "any",
       "instructions": "Use the pattern and interval specified by the vehicle and tire manufacturers.",
-      "triggers": [
-        {
-          "type": "meter",
-          "meterKey": "odometer",
-          "interval": {
-            "value": 7500,
-            "unit": "mi"
-          }
-        },
-        {
-          "type": "calendar",
-          "interval": {
-            "value": 12,
-            "unit": "month"
-          }
-        }
-      ],
+      "schedule": {
+        "combination": "any",
+        "rules": [
+          {"type": "meter", "meterKey": "odometer", "interval": {"value": 7500, "unit": "mi"}},
+          {"type": "calendar", "interval": {"value": 12, "unit": "month"}}
+        ]
+      },
       "compatiblePartKeys": []
     },
     {
       "key": "inspect_wipers",
       "title": "Inspect wiper blades",
       "kind": "inspection",
+      "groupKey": "visibility",
       "componentKey": "wiper_blade",
       "enabledByDefault": true,
-      "combination": "any",
-      "triggers": [
-        {
-          "type": "calendar",
-          "interval": {
-            "value": 6,
-            "unit": "month"
-          }
-        }
-      ],
+      "schedule": {"combination": "any", "rules": [{"type": "calendar", "interval": {"value": 6, "unit": "month"}}]},
       "compatiblePartKeys": []
     },
     {
       "key": "registration",
       "title": "Renew registration",
       "kind": "administration",
+      "groupKey": "administration",
       "enabledByDefault": true,
-      "combination": "any",
       "notes": "Adjust the due date and renewal details for the applicable jurisdiction.",
-      "triggers": [
-        {
-          "type": "calendar",
-          "interval": {
-            "value": 1,
-            "unit": "year"
-          }
-        }
-      ],
+      "schedule": {"combination": "any", "rules": [{"type": "calendar", "interval": {"value": 1, "unit": "year"}}]},
       "compatiblePartKeys": []
     },
     {
       "key": "replace_cabin_filter",
       "title": "Review cabin air filter replacement",
       "kind": "maintenance",
+      "groupKey": "cabin",
       "componentKey": "cabin_filter",
       "enabledByDefault": false,
-      "combination": "any",
       "instructions": "Enable only when the vehicle has this component. Replace according to manufacturer guidance and operating conditions.",
-      "triggers": [
-        {
-          "type": "calendar",
-          "interval": {
-            "value": 1,
-            "unit": "year"
-          }
-        },
-        {
-          "type": "meter",
-          "meterKey": "odometer",
-          "interval": {
-            "value": 15000,
-            "unit": "mi"
-          }
-        }
-      ],
+      "schedule": {
+        "combination": "any",
+        "rules": [
+          {"type": "calendar", "interval": {"value": 1, "unit": "year"}},
+          {"type": "meter", "meterKey": "odometer", "interval": {"value": 15000, "unit": "mi"}}
+        ]
+      },
+      "compatiblePartKeys": []
+    },
+    {
+      "key": "record_unscheduled_repair",
+      "title": "Record unscheduled repair",
+      "kind": "repair",
+      "enabledByDefault": true,
+      "schedule": "none",
       "compatiblePartKeys": []
     }
   ]

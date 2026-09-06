@@ -18,6 +18,9 @@ use Throwable;
 
 final class UserLifecycleService {
 	private const WORKSPACE_PURGE_ORDER = [
+		'maint_work_sched',
+		'maint_work_defs',
+		'maint_work_groups',
 		'maint_readings',
 		'maint_meters',
 		'maint_assignments',

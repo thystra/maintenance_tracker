@@ -49,10 +49,11 @@ app directory must be named `maintenance_tracker` so it matches
 - Shared-workspace membership API with lifecycle-safe grants and role changes
 - Append-only audit events for implemented domain and membership mutations
 - Asset/component meters with immutable distance, runtime, and usage-count readings
+- Work groups and common work definitions with explicit calendar, business-day, and meter schedules
 - Bounded cursor pagination and account-lifecycle cleanup
 - Change journal foundation for future mobile delta synchronization
 - Versioned, data-only JSON profile schema with a generic starter profile
-- Common future work-definition model where `schedule: none` means unscheduled/ad-hoc work
+- Common work-definition/scheduling foundation with required explicit `schedule`; `schedule: none` means unscheduled/ad-hoc work
 - Architecture, domain, API, security, licensing, and delivery roadmap
 
 The UI and API are explicitly pre-release. Do not treat the current API as a

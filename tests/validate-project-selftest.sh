@@ -12,17 +12,19 @@ trap cleanup EXIT
 
 fixture_paths=(
 	.gitattributes .nextcloudignore appinfo/info.xml composer.json package.json package-lock.json
-	profiles/generic-car.json schemas/profile-v1.schema.json lib/AppInfo/Application.php
+	profiles/generic-car.json schemas/profile-v1.schema.json schemas/profile-v2.schema.json lib/AppInfo/Application.php
 	.forgejo/workflows/ci.yml ci/images/qualified-images.json lib/Capability.php
 	lib/Migration/Version1000Date20260723000000.php
 	lib/Migration/Version1010Date20260902000000.php
 	lib/Migration/Version1020Date20260903000000.php
 	lib/Migration/Version1030Date20260904000000.php
 	lib/Migration/Version1040Date20260905000000.php
+	lib/Migration/Version1050Date20260905020000.php
 	lib/Service/UserLifecycleService.php lib/Service/WorkspaceService.php
 	lib/Service/AuthorizationCatalog.php lib/Service/AuditService.php
 	lib/Service/AuditEventCatalog.php lib/Db/AuditMapper.php
 	lib/Db/ReadingMapper.php lib/Service/MeterValueConverter.php lib/Service/MeterService.php
+	lib/Db/WorkDefinition.php lib/Db/WorkScheduleRule.php lib/Service/WorkDefinitionService.php lib/Service/WorkSchedulePolicy.php lib/Db/WorkScheduleRuleMapper.php
 	lib/Controller docs AGENTS.md README.md
 )
 
@@ -165,10 +167,13 @@ python3 - "$tmp/fixture/lib/Service/AuthorizationCatalog.php" <<'PY'
 from pathlib import Path
 import sys
 p=Path(sys.argv[1]); s=p.read_text()
-needle="\t\t\tself::METER_READ,\n\t\t\tself::READING_CREATE,\n\t\t],\n\t\t'viewer'"
-replacement="\t\t\tself::METER_READ,\n\t\t\tself::READING_CREATE,\n\t\t\tself::READING_CORRECT,\n\t\t],\n\t\t'viewer'"
-if needle not in s: raise SystemExit('contributor fixture marker missing')
-p.write_text(s.replace(needle,replacement,1))
+start=s.index("\t\t'contributor' => [")
+end=s.index("\n\t\t],\n\t\t'viewer'", start)
+block=s[start:end]
+needle="\t\t\tself::READING_CREATE,\n"
+if needle not in block: raise SystemExit('contributor fixture marker missing')
+block=block.replace(needle, needle+"\t\t\tself::READING_CORRECT,\n", 1)
+p.write_text(s[:start]+block+s[end:])
 PY
 expect_rejected 'Contributor historical correction' 'Contributor must not configure meters or correct historical readings.' "$tmp/contributor-correct.out"
 
@@ -179,5 +184,102 @@ expect_rejected 'meter/read feature removal' 'Capability discovery must advertis
 copy_fixture
 sed -i 's/schedule: none/schedule: disabled/g' "$tmp/fixture/docs/architecture.md" "$tmp/fixture/docs/domain-model.md" "$tmp/fixture/docs/product-architecture.md" "$tmp/fixture/docs/roadmap.md" "$tmp/fixture/docs/security.md" "$tmp/fixture/docs/api.md" "$tmp/fixture/AGENTS.md" "$tmp/fixture/README.md" || true
 expect_rejected 'loss of schedule-none terminology' 'Architecture documentation must preserve schedule: none as the unscheduled work-definition policy.' "$tmp/schedule-none.out"
+
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/WorkDefinitionService.php" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+s=s.replace("foreach (['key', 'title', 'kind', 'schedule'] as $required)", "foreach (['key', 'title', 'kind'] as $required)", 1)
+p.write_text(s)
+PY
+expect_rejected 'optional work-definition schedule' 'Work-definition creation must explicitly require schedule.' "$tmp/work-definition-schedule-required.out"
+
+copy_fixture
+python3 - "$tmp/fixture/schemas/profile-v2.schema.json" <<'PY'
+import json, sys
+from pathlib import Path
+p=Path(sys.argv[1]); data=json.loads(p.read_text())
+data['$defs']['workDefinition']['required'].remove('schedule')
+p.write_text(json.dumps(data))
+PY
+expect_rejected 'profile-v2 without required schedule' 'Profile-v2 work definitions must require schedule.' "$tmp/profile-v2-schedule-required.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/WorkDefinitionService.php" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); marker='public function create(WorkspaceContext $context, string $assetUuid, array $input): array {'
+p.write_text(s.replace(marker, marker+"\n\t\t$scheduleFixture = $input['schedule'] ?? 'none';", 1))
+PY
+expect_rejected 'implicit schedule none default' 'Work-definition service must never infer schedule: none for a missing schedule.' "$tmp/work-definition-schedule-default.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Db/WorkDefinition.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+s=s.replace('protected ?string $scheduleType = null;', "protected ?string $scheduleType = 'none';", 1)
+p.write_text(s)
+PY2
+expect_rejected 'entity-level implicit schedule none default' 'Work-definition entity must not carry an implicit schedule: none default.' "$tmp/work-definition-entity-schedule-default.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Db/WorkDefinition.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+s=s.replace('protected ?string $scheduleType = null;', 'protected string $scheduleType;', 1)
+p.write_text(s)
+PY2
+expect_rejected 'uninitialized work-definition schedule property' 'Work-definition entity must use a null pre-persistence schedule sentinel so Nextcloud Entity setters never read an uninitialized typed property.' "$tmp/work-definition-entity-uninitialized-schedule.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Db/WorkScheduleRule.php" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1])
+s=p.read_text()
+s=s.replace('protected ?int $position = null;', 'protected int $position = 0;', 1)
+p.write_text(s)
+PY
+expect_rejected 'work schedule rule zero position default' 'Work schedule rules must not default position to zero because Nextcloud Entity setters would omit the first rule position from inserts.' "$tmp/work-schedule-rule-position-default.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/AuthorizationCatalog.php" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+start=s.index("\t\t'contributor' => [")
+end=s.index("\n\t\t],\n\t\t'viewer'", start)
+block=s[start:end]
+needle="\t\t\tself::MAINTENANCE_DEFINITION_READ,"
+if needle not in block: raise SystemExit('contributor work-definition fixture marker missing')
+block=block.replace(needle, needle+"\n\t\t\tself::MAINTENANCE_DEFINITION_MANAGE,", 1)
+p.write_text(s[:start]+block+s[end:])
+PY
+expect_rejected 'Contributor work-definition management' 'Contributor must read but not manage work definitions.' "$tmp/contributor-work-definition-manage.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/MeterService.php" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+start=s.find("\t\tif ($this->scheduleRules->countActiveForMeter(")
+if start < 0: raise SystemExit('meter schedule reference guard marker missing')
+end=s.find("\n\t\t}", start)
+if end < 0: raise SystemExit('meter schedule reference guard end missing')
+p.write_text(s[:start]+s[end+4:])
+PY
+expect_rejected 'meter archive without work-definition reference guard' 'Active work-definition meter references must block meter archival.' "$tmp/meter-work-definition-guard.out"
+
+copy_fixture
+sed -i "/'maint_work_defs',/d" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+expect_rejected 'work-definition cleanup omission' 'Account deletion purge registry must cover workspace-scoped table maint_work_defs.' "$tmp/work-definition-purge.out"
+
+copy_fixture
+sed -i "/'work-definitions-schedules',/d" "$tmp/fixture/lib/Capability.php"
+expect_rejected 'work-definition feature removal' 'Capability discovery must advertise implemented feature work-definitions-schedules.' "$tmp/work-definition-feature.out"
 
 echo 'Project validator self-tests passed.'

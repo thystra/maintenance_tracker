@@ -88,7 +88,7 @@ Preserve these invariants:
 - every migration-created table with `workspace_id` must remain in the account
   deletion purge registry, with child/history tables removed before assets;
 - profiles are bounded, data-only, non-executable input;
-- the common work-definition scheduling field is named `schedule`; `schedule: none` is unscheduled/ad-hoc work and any non-`none` policy is scheduled maintenance;
+- the common work-definition scheduling field is named `schedule` and is REQUIRED on creation/profile-v2 input; never infer or default a missing schedule; `schedule: none` is explicitly unscheduled/ad-hoc work and any non-`none` policy is scheduled maintenance;
 - receipt/photo bytes belong in Nextcloud Files, not database blobs or a public
   app directory;
 - calendar, Activity, and notifications are projections/integrations, not the

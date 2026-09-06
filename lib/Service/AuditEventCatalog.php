@@ -37,6 +37,12 @@ final class AuditEventCatalog {
 			'level' => 'info',
 			'detailKeys' => ['supersedesReadingUuid'],
 		],
+		'work_group.created' => ['subjectType' => 'work_group', 'level' => 'info', 'detailKeys' => []],
+		'work_group.updated' => ['subjectType' => 'work_group', 'level' => 'info', 'detailKeys' => []],
+		'work_group.archived' => ['subjectType' => 'work_group', 'level' => 'info', 'detailKeys' => []],
+		'work_definition.created' => ['subjectType' => 'work_definition', 'level' => 'info', 'detailKeys' => []],
+		'work_definition.updated' => ['subjectType' => 'work_definition', 'level' => 'info', 'detailKeys' => []],
+		'work_definition.archived' => ['subjectType' => 'work_definition', 'level' => 'info', 'detailKeys' => []],
 		'workspace.member.added' => [
 			'subjectType' => 'workspace_member',
 			'level' => 'security',
