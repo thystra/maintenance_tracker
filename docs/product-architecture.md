@@ -116,3 +116,9 @@ mobile sync and portable work bundles.
 ## Guiding invariant
 
 Configure the thing and its maintenance model on desktop; record actual work and usage in the field; keep Nextcloud authoritative; and ensure every field record can be created offline and later arrive through either OCS sync or a portable bundle without changing its semantic identity.
+
+## Executed maintenance activities
+
+The task-first mobile workflow ultimately submits an activity transaction, not a mutation of a work definition. One activity can contain multiple performed work items and multiple meter snapshots. The initial desktop UI may expose a simpler one-item ticket, but the OCS/domain contract is multi-item from the start so offline mobile bundles do not require a later incompatible schema change.
+
+Evidence, parts, costs, public report shares, and external mechanic submissions attach to this stable activity ledger in later tranches; they are not part of v0.1.6.

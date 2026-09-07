@@ -9,6 +9,11 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.6 maintenance activity/execution ledger with revisioned activity headers, immutable performed-work items, and immutable meter snapshots.
+- Contributor activity creation/read access with Owner/Manager descriptive correction/archive capabilities, plus activity audit and lifecycle cleanup coverage.
+- Atomic activity-created meter readings with explicit units and activity source provenance; offline retries remain idempotent across later work-definition renames.
+- Desktop maintenance-history entry surface and expanded Nextcloud 34 SQLite/PostgreSQL activity-lifecycle integration coverage.
+
 - v0.1.5 common work-definition and scheduling foundation with asset-scoped work groups and normalized schedule rules.
 - Every new work definition and every profile-v2 work-definition template must explicitly provide `schedule`; omission is invalid and is never inferred as `none`.
 - `schedule: none` explicitly represents unscheduled/ad-hoc work; non-`none` policies currently support `combination: any` with calendar, configurable business-day, and meter rules.

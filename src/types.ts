@@ -208,3 +208,39 @@ export interface CreateWorkDefinition {
 	status?: AssetStatus
 	schedule: WorkSchedule
 }
+
+export interface ActivityItem {
+	uuid: string
+	definitionUuid: string | null
+	componentUuid: string | null
+	componentName: string | null
+	title: string
+	kind: string
+	notes: string | null
+}
+export interface ActivityMeterSnapshot {
+	uuid: string
+	meterUuid: string
+	meterName: string
+	readingUuid: string
+	observedAt: string
+	canonicalValue: number
+	originalValue: string
+	originalUnit: string
+}
+export interface Activity {
+	uuid: string
+	performedAt: string
+	summary: string | null
+	notes: string | null
+	revision: number
+	items: ActivityItem[]
+	meters: ActivityMeterSnapshot[]
+	createdAt: string
+	updatedAt: string
+	deletedAt: string | null
+}
+export interface ActivityList { workspace: string, items: Activity[] }
+export interface CreateActivityItem { uuid: string, definitionUuid?: string | null, componentUuid?: string | null, title?: string, kind?: string, notes?: string | null }
+export interface CreateActivityMeter { uuid: string, meterUuid: string, readingUuid?: string, reading?: { uuid: string, value: string | number, unit: string, notes?: string | null } }
+export interface CreateActivity { uuid: string, performedAt: string, summary?: string | null, notes?: string | null, items: CreateActivityItem[], meters?: CreateActivityMeter[] }

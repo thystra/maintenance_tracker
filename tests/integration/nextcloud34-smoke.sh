@@ -206,6 +206,7 @@ assert_contains "$capabilities" '"workspace-membership"' 'capabilities'
 assert_contains "$capabilities" '"append-only-audit"' 'capabilities'
 assert_contains "$capabilities" '"meters-readings"' 'capabilities'
 assert_contains "$capabilities" '"work-definitions-schedules"' 'capabilities'
+assert_contains "$capabilities" '"activity-ledger"' 'capabilities'
 
 categories=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -492,6 +493,79 @@ oil_change_retry=$(docker exec "$container" curl --silent --show-error \
 	--data "{\"definition\":{\"uuid\":\"${oil_change_uuid}\",\"groupUuid\":\"${work_group_uuid}\",\"key\":\"oil_change\",\"title\":\"Engine oil change\",\"kind\":\"maintenance\",\"schedule\":{\"combination\":\"any\",\"rules\":[{\"type\":\"meter\",\"meterUuid\":\"${odometer_meter_uuid}\",\"interval\":{\"value\":7500,\"unit\":\"mi\"}},{\"type\":\"calendar\",\"interval\":{\"value\":12,\"unit\":\"month\"}}]}}}" \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/work-definitions?format=json')
 assert_contains "$oil_change_retry" '"statuscode":201' 'scheduled work definition idempotent retry'
+
+
+activity_uuid='a1111111-1111-4111-8111-111111111111'
+activity_item_uuid='b1111111-1111-4111-8111-111111111111'
+activity_component_item_uuid='b1111111-2222-4111-8111-111111111111'
+activity_meter_uuid='c1111111-1111-4111-8111-111111111111'
+activity_reading_uuid='d1111111-1111-4111-8111-111111111111'
+activity_create=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${activity_uuid}\",\"performedAt\":\"2026-09-04T12:00:00Z\",\"summary\":\"Oil service\",\"items\":[{\"uuid\":\"${activity_item_uuid}\",\"definitionUuid\":\"${oil_change_uuid}\"},{\"uuid\":\"${activity_component_item_uuid}\",\"componentUuid\":\"${component_uuid}\",\"title\":\"Inspect primary fuel filter\",\"kind\":\"inspection\"}],\"meters\":[{\"uuid\":\"${activity_meter_uuid}\",\"meterUuid\":\"${odometer_meter_uuid}\",\"reading\":{\"uuid\":\"${activity_reading_uuid}\",\"value\":\"100300\",\"unit\":\"mi\",\"notes\":\"Service odometer\"}}]}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/activities?format=json')
+assert_contains "$activity_create" '"statuscode":201' 'activity create'
+assert_contains "$activity_create" "\"definitionUuid\":\"${oil_change_uuid}\"" 'activity definition snapshot'
+assert_contains "$activity_create" "\"componentUuid\":\"${component_uuid}\"" 'activity component identity snapshot'
+assert_contains "$activity_create" '"componentName":"Primary fuel filter"' 'activity component name snapshot'
+assert_contains "$activity_create" "\"readingUuid\":\"${activity_reading_uuid}\"" 'activity meter reading snapshot'
+
+renamed_oil_change=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request PATCH \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":1,"definition":{"title":"Oil service definition"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/work-definitions/${oil_change_uuid}?format=json")
+assert_contains "$renamed_oil_change" '"statuscode":200' 'work definition rename after activity'
+
+activity_retry=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${activity_uuid}\",\"performedAt\":\"2026-09-04T12:00:00Z\",\"summary\":\"Oil service\",\"items\":[{\"uuid\":\"${activity_item_uuid}\",\"definitionUuid\":\"${oil_change_uuid}\"},{\"uuid\":\"${activity_component_item_uuid}\",\"componentUuid\":\"${component_uuid}\",\"title\":\"Inspect primary fuel filter\",\"kind\":\"inspection\"}],\"meters\":[{\"uuid\":\"${activity_meter_uuid}\",\"meterUuid\":\"${odometer_meter_uuid}\",\"reading\":{\"uuid\":\"${activity_reading_uuid}\",\"value\":\"100300\",\"unit\":\"mi\",\"notes\":\"Service odometer\"}}]}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/activities?format=json')
+assert_contains "$activity_retry" '"statuscode":201' 'activity retry after definition rename'
+
+activity_component_omission_conflict=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${activity_uuid}\",\"performedAt\":\"2026-09-04T12:00:00Z\",\"summary\":\"Oil service\",\"items\":[{\"uuid\":\"${activity_item_uuid}\",\"definitionUuid\":\"${oil_change_uuid}\"},{\"uuid\":\"${activity_component_item_uuid}\",\"title\":\"Inspect primary fuel filter\",\"kind\":\"inspection\"}],\"meters\":[{\"uuid\":\"${activity_meter_uuid}\",\"meterUuid\":\"${odometer_meter_uuid}\",\"reading\":{\"uuid\":\"${activity_reading_uuid}\",\"value\":\"100300\",\"unit\":\"mi\",\"notes\":\"Service odometer\"}}]}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/activities?format=json')
+assert_contains "$activity_component_omission_conflict" '"statuscode":412' 'activity retry component omission conflict'
+
+activity_conflict=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${activity_uuid}\",\"performedAt\":\"2026-09-04T12:00:00Z\",\"summary\":\"Oil service\",\"items\":[{\"uuid\":\"${activity_item_uuid}\",\"definitionUuid\":\"${oil_change_uuid}\"},{\"uuid\":\"${activity_component_item_uuid}\",\"componentUuid\":\"${component_uuid}\",\"title\":\"Inspect primary fuel filter\",\"kind\":\"inspection\"}],\"meters\":[{\"uuid\":\"${activity_meter_uuid}\",\"meterUuid\":\"${odometer_meter_uuid}\",\"reading\":{\"uuid\":\"${activity_reading_uuid}\",\"value\":\"100300\",\"unit\":\"mi\",\"notes\":\"Changed retry\"}}]}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/activities?format=json')
+assert_contains "$activity_conflict" '"statuscode":412' 'activity nested reading retry conflict'
+
+
+archived_activity_meter_uuid='91111111-1111-4111-8111-111111111111'
+archived_activity_meter=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"meter\":{\"uuid\":\"${archived_activity_meter_uuid}\",\"key\":\"retired_service_counter\",\"name\":\"Retired service counter\",\"dimension\":\"usage_count\",\"displayUnit\":\"use\",\"monotonic\":true}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/meters?format=json')
+assert_contains "$archived_activity_meter" '"statuscode":201' 'offline activity meter fixture create'
+
+archived_activity_meter_delete=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request DELETE \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":1}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${archived_activity_meter_uuid}?format=json")
+assert_contains "$archived_activity_meter_delete" '"statuscode":200' 'offline activity meter fixture archive'
+
+offline_activity_uuid='a3333333-3333-4333-8333-333333333333'
+offline_activity_item_uuid='b3333333-3333-4333-8333-333333333333'
+offline_activity_snapshot_uuid='c3333333-3333-4333-8333-333333333333'
+offline_activity_reading_uuid='d3333333-3333-4333-8333-333333333333'
+offline_activity=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${offline_activity_uuid}\",\"performedAt\":\"2026-09-04T13:00:00Z\",\"summary\":\"Delayed field sync\",\"items\":[{\"uuid\":\"${offline_activity_item_uuid}\",\"title\":\"Exercise retired counter\",\"kind\":\"inspection\"}],\"meters\":[{\"uuid\":\"${offline_activity_snapshot_uuid}\",\"meterUuid\":\"${archived_activity_meter_uuid}\",\"reading\":{\"uuid\":\"${offline_activity_reading_uuid}\",\"value\":\"1\",\"unit\":\"use\"}}]}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/activities?format=json')
+assert_contains "$offline_activity" '"statuscode":201' 'offline activity create against archived meter'
+assert_contains "$offline_activity" '"meterName":"Retired service counter"' 'offline activity archived-meter name snapshot'
 
 business_definition_uuid='6c3ad4e5-8f60-4b72-ac43-5d6e7f8091a2'
 business_definition=$(docker exec "$container" curl --silent --show-error \
@@ -819,6 +893,22 @@ contributor_work_definitions=$(docker exec "$container" curl --silent --show-err
 assert_contains "$contributor_work_definitions" '"statuscode":200' 'contributor work-definition read'
 assert_contains "$contributor_work_definitions" "\"uuid\":\"${trailer_repair_uuid}\"" 'contributor work-definition read'
 
+
+contributor_activity_uuid='e1111111-1111-4111-8111-111111111111'
+contributor_activity_item_uuid='f1111111-1111-4111-8111-111111111111'
+contributor_activity=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${contributor_activity_uuid}\",\"performedAt\":\"2026-09-05T13:00:00Z\",\"items\":[{\"uuid\":\"${contributor_activity_item_uuid}\",\"definitionUuid\":\"${trailer_repair_uuid}\"}]}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/activities?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_activity" '"statuscode":201' 'contributor activity create'
+contributor_activity_update_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request PATCH \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":1,"activity":{"summary":"Forbidden correction"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/activities/${contributor_activity_uuid}?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_activity_update_denied" '"statuscode":403' 'contributor activity correction rejection'
+
 contributor_work_definition_denied=$(docker exec "$container" curl --silent --show-error \
 	--user "${collab_user}:${collab_password}" --request POST \
 	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
@@ -877,6 +967,15 @@ assert_contains "$member_promoted" '"statuscode":200' 'manager promotion'
 assert_contains "$member_promoted" '"role":"manager"' 'manager promotion'
 
 
+manager_activity_update=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request PATCH \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":1,"activity":{"summary":"Manager reviewed repair"}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/activities/${contributor_activity_uuid}?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$manager_activity_update" '"statuscode":200' 'manager activity correction'
+assert_contains "$manager_activity_update" '"revision":2' 'manager activity correction revision'
+
+
 manager_correction_uuid='f63d7349-3b8f-4d2c-9588-41342d37caf0'
 manager_correction=$(docker exec "$container" curl --silent --show-error \
 	--user "${collab_user}:${collab_password}" --request POST \
@@ -926,6 +1025,7 @@ assert_contains "$manager_audit" '"eventType":"asset.created"' 'manager audit do
 assert_contains "$manager_audit" '"eventType":"reading.corrected"' 'manager audit reading correction event'
 assert_contains "$manager_audit" '"eventType":"work_definition.created"' 'manager audit work-definition event'
 assert_contains "$manager_audit" "\"subjectId\":\"${manager_work_definition_uuid}\"" 'manager audit work-definition subject'
+assert_contains "$manager_audit" '"eventType":"activity.updated"' 'manager audit activity update event'
 assert_contains "$manager_audit" "\"supersedesReadingUuid\":\"${contributor_reading_uuid}\"" 'manager audit reading correction detail'
 assert_contains "$manager_audit" "\"actorUid\":\"${collab_user}\"" 'manager audit actor attribution'
 assert_contains "$manager_audit" "\"subjectId\":\"${shared_asset_uuid}\"" 'manager audit subject attribution'
@@ -970,6 +1070,11 @@ work_definitions_after_member_delete=$(docker exec "$container" curl --silent --
 	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/work-definitions?workspace=${admin_workspace_uuid}&format=json")
 assert_contains "$work_definitions_after_member_delete" "\"uuid\":\"${manager_work_definition_uuid}\"" 'shared manager work-definition retention after member deletion'
+
+activities_after_member_delete=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/activities?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$activities_after_member_delete" "\"uuid\":\"${contributor_activity_uuid}\"" 'shared contributor activity retention after member deletion'
 
 audit_after_member_delete=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -1066,6 +1171,16 @@ cleanup_work_definition=$(docker exec "$container" curl --silent --show-error \
 	--data "{\"definition\":{\"uuid\":\"${cleanup_work_definition_uuid}\",\"groupUuid\":\"${cleanup_work_group_uuid}\",\"key\":\"service_after_uses\",\"title\":\"Service after uses\",\"kind\":\"maintenance\",\"schedule\":{\"combination\":\"any\",\"rules\":[{\"type\":\"meter\",\"meterUuid\":\"${cleanup_meter_uuid}\",\"interval\":{\"value\":10,\"unit\":\"use\"}}]}}}" \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/267ace84-cb7c-41ff-8cc0-94de71c50a43/work-definitions?format=json')
 assert_contains "$cleanup_work_definition" '"statuscode":201' 'cleanup work definition create'
+
+cleanup_activity_uuid='a2222222-2222-4222-8222-222222222222'
+cleanup_activity_item_uuid='b2222222-2222-4222-8222-222222222222'
+cleanup_activity_meter_uuid='c2222222-2222-4222-8222-222222222222'
+cleanup_activity=$(docker exec "$container" curl --silent --show-error \
+	--user "${cleanup_user}:${cleanup_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${cleanup_activity_uuid}\",\"performedAt\":\"2026-09-04T12:00:00Z\",\"items\":[{\"uuid\":\"${cleanup_activity_item_uuid}\",\"definitionUuid\":\"${cleanup_work_definition_uuid}\"}],\"meters\":[{\"uuid\":\"${cleanup_activity_meter_uuid}\",\"meterUuid\":\"${cleanup_meter_uuid}\",\"readingUuid\":\"${cleanup_reading_uuid}\"}]}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/267ace84-cb7c-41ff-8cc0-94de71c50a43/activities?format=json')
+assert_contains "$cleanup_activity" '"statuscode":201' 'cleanup activity create'
 
 cleanup_relationship=$(docker exec "$container" curl --silent --show-error \
 	--user "${cleanup_user}:${cleanup_password}" \
@@ -1167,6 +1282,13 @@ cleanup_work_definition_reused=$(docker exec "$container" curl --silent --show-e
 	--data "{\"definition\":{\"uuid\":\"${cleanup_work_definition_uuid}\",\"groupUuid\":\"${cleanup_work_group_uuid}\",\"key\":\"service_after_uses\",\"title\":\"Service after uses\",\"kind\":\"maintenance\",\"schedule\":{\"combination\":\"any\",\"rules\":[{\"type\":\"meter\",\"meterUuid\":\"${cleanup_meter_uuid}\",\"interval\":{\"value\":10,\"unit\":\"use\"}}]}}}" \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/267ace84-cb7c-41ff-8cc0-94de71c50a43/work-definitions?format=json')
 assert_contains "$cleanup_work_definition_reused" '"statuscode":201' 'cleanup work definition UUID reuse'
+
+cleanup_activity_reused=$(docker exec "$container" curl --silent --show-error \
+	--user "${cleanup_user}:${cleanup_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${cleanup_activity_uuid}\",\"performedAt\":\"2026-09-04T12:00:00Z\",\"items\":[{\"uuid\":\"${cleanup_activity_item_uuid}\",\"definitionUuid\":\"${cleanup_work_definition_uuid}\"}],\"meters\":[{\"uuid\":\"${cleanup_activity_meter_uuid}\",\"meterUuid\":\"${cleanup_meter_uuid}\",\"readingUuid\":\"${cleanup_reading_uuid}\"}]}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/267ace84-cb7c-41ff-8cc0-94de71c50a43/activities?format=json')
+assert_contains "$cleanup_activity_reused" '"statuscode":201' 'cleanup activity child UUID reuse'
 
 cleanup_relationship_reused=$(docker exec "$container" curl --silent --show-error \
 	--user "${cleanup_user}:${cleanup_password}" --request POST \

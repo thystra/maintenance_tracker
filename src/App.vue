@@ -5,6 +5,7 @@
 
 <script setup lang="ts">
 import type {
+	Activity,
 	Asset,
 	AssetClass,
 	Assignment,
@@ -28,6 +29,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import {
+	createActivity,
 	createAsset,
 	createAssignment,
 	createCategory,
@@ -38,6 +40,7 @@ import {
 	createSpecification,
 	createWorkDefinition,
 	createWorkGroup,
+	getActivities,
 	getAssets,
 	getAssignments,
 	getCapabilities,
@@ -62,6 +65,7 @@ const meters = ref<Record<string, Meter[]>>({})
 const readings = ref<Record<string, Reading[]>>({})
 const workGroups = ref<Record<string, WorkGroup[]>>({})
 const workDefinitions = ref<Record<string, WorkDefinition[]>>({})
+const activities = ref<Record<string, Activity[]>>({})
 const relationshipTypes = ref<RelationshipType[]>([])
 const relationships = ref<Relationship[]>([])
 const assignments = ref<Assignment[]>([])
@@ -89,6 +93,17 @@ const workDefinitionDraft = reactive({
 	businessWeekdays: ['mon', 'tue', 'wed', 'thu', 'fri'] as BusinessWeekday[],
 	meterUuid: '',
 	meterValue: '7500',
+	meterUnit: 'mi',
+})
+const activityDraft = reactive({
+	definitionUuid: '',
+	title: '',
+	kind: 'maintenance',
+	performedAt: '',
+	summary: '',
+	notes: '',
+	meterUuid: '',
+	meterValue: '',
 	meterUnit: 'mi',
 })
 const relationshipDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'general', isDefault: false })
@@ -282,17 +297,20 @@ async function toggleAsset(asset: Asset): Promise<void> {
 	}
 	expandedAsset.value = asset.uuid
 	try {
-		const [componentList, specificationList, meterList, workGroupList, workDefinitionList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid)])
+		const [componentList, specificationList, meterList, workGroupList, workDefinitionList, activityList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid), getActivities(asset.uuid)])
 		components.value[asset.uuid] = componentList.items
 		specifications.value[asset.uuid] = specificationList.items
 		meters.value[asset.uuid] = meterList.items
 		workGroups.value[asset.uuid] = workGroupList.items
 		workDefinitions.value[asset.uuid] = workDefinitionList.items
+		activities.value[asset.uuid] = activityList.items
 		await Promise.all(meterList.items.map(async (meter) => {
 			readings.value[meter.uuid] = (await getReadings(meter.uuid)).items
 		}))
 		readingDraft.meterUuid = meterList.items[0]?.uuid ?? ''
 		workDefinitionDraft.meterUuid = meterList.items[0]?.uuid ?? ''
+		activityDraft.meterUuid = meterList.items[0]?.uuid ?? ''
+		activityDraft.performedAt = localNow()
 		readingDraft.observedAt = localNow()
 		syncReadingUnit()
 		syncWorkMeterUnit(asset.uuid)
@@ -449,6 +467,44 @@ async function submitWorkDefinition(asset: Asset): Promise<void> {
 		workDefinitions.value[asset.uuid] = [...(workDefinitions.value[asset.uuid] ?? []), created]
 		workDefinitionDraft.key = ''
 		workDefinitionDraft.title = ''
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function submitActivity(asset: Asset): Promise<void> {
+	if (activityDraft.performedAt === '') {
+		return
+	}
+	if (activityDraft.definitionUuid === '' && activityDraft.title.trim() === '') {
+		error.value = 'Choose a work definition or enter ad-hoc work.'
+		return
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const item = activityDraft.definitionUuid !== ''
+			? { uuid: crypto.randomUUID(), definitionUuid: activityDraft.definitionUuid, notes: null }
+			: { uuid: crypto.randomUUID(), title: activityDraft.title.trim(), kind: activityDraft.kind.trim() || 'maintenance', notes: null }
+		const meterList = activityDraft.meterUuid !== '' && activityDraft.meterValue.trim() !== ''
+			? [{ uuid: crypto.randomUUID(), meterUuid: activityDraft.meterUuid, reading: { uuid: crypto.randomUUID(), value: activityDraft.meterValue, unit: activityDraft.meterUnit } }]
+			: []
+		const created = await createActivity(asset.uuid, {
+			uuid: crypto.randomUUID(),
+			performedAt: new Date(activityDraft.performedAt).toISOString().replace('.000Z', 'Z'),
+			summary: activityDraft.summary.trim() || null,
+			notes: activityDraft.notes.trim() || null,
+			items: [item],
+			meters: meterList,
+		})
+		activities.value[asset.uuid] = [created, ...(activities.value[asset.uuid] ?? [])]
+		activityDraft.title = ''
+		activityDraft.summary = ''
+		activityDraft.notes = ''
+		activityDraft.meterValue = ''
+		activityDraft.performedAt = localNow()
 	} catch (reason) {
 		error.value = readableError(reason)
 	} finally {
@@ -882,6 +938,48 @@ onMounted(load)
 										</button>
 									</form>
 								</section>
+								<section class="activity-section">
+									<h4>Maintenance activity</h4>
+									<p class="panel-copy">
+										Record what actually happened. Work items and meter snapshots are immutable ledger facts.
+									</p>
+									<ul class="compact-list">
+										<li v-for="activity in activities[asset.uuid] ?? []" :key="activity.uuid">
+											<strong>{{ activity.summary || activity.items[0]?.title || 'Maintenance activity' }}</strong>
+											<span>{{ new Date(activity.performedAt).toLocaleString() }}</span>
+											<span v-if="activity.items[0]?.componentName">{{ activity.items[0]?.componentName }}</span>
+										</li>
+									</ul>
+									<form class="activity-form" @submit.prevent="submitActivity(asset)">
+										<select v-model="activityDraft.definitionUuid">
+											<option value="">
+												Ad-hoc work
+											</option>
+											<option v-for="definition in workDefinitions[asset.uuid] ?? []" :key="definition.uuid" :value="definition.uuid">
+												{{ definition.title }}
+											</option>
+										</select>
+										<input
+											v-if="activityDraft.definitionUuid === ''"
+											v-model="activityDraft.title"
+											placeholder="Ad-hoc work title"
+											required>
+										<input v-model="activityDraft.performedAt" type="datetime-local" required>
+										<input v-model="activityDraft.summary" placeholder="Summary (optional)">
+										<select v-model="activityDraft.meterUuid">
+											<option value="">
+												No meter reading
+											</option><option v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid" :value="meter.uuid">
+												{{ meter.name }}
+											</option>
+										</select>
+										<input v-model="activityDraft.meterValue" placeholder="Meter value (optional)">
+										<input v-model="activityDraft.meterUnit" placeholder="unit">
+										<button type="submit">
+											Record activity
+										</button>
+									</form>
+								</section>
 							</div>
 						</li>
 					</ul>
@@ -946,7 +1044,7 @@ button:disabled { opacity: .55; }
 
 .compact-list span { color: var(--color-text-maxcontrast); }
 
-.inline-form, .spec-form, .meter-form, .reading-form, .work-group-form, .work-definition-form { display: grid; gap: 8px; }
+.inline-form, .spec-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form { display: grid; gap: 8px; }
 
 .relationship-form, .assignment-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
 
@@ -962,7 +1060,7 @@ button:disabled { opacity: .55; }
 
 .spec-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-.meter-section, .work-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.meter-section, .work-section, .activity-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
 
 .meter-form { grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, minmax(120px, .7fr)) auto auto; align-items: end; }
 
@@ -971,6 +1069,8 @@ button:disabled { opacity: .55; }
 .work-group-form { grid-template-columns: 1fr 1.4fr 2fr .7fr auto; margin-bottom: 10px; }
 
 .work-definition-form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
+
+.activity-form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
 
 .weekday-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 42px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--border-radius); }
 
@@ -981,6 +1081,6 @@ button:disabled { opacity: .55; }
 .spec-form button { grid-column: 3; }
 
 .empty-state { display: grid; place-items: center; min-height: 130px; color: var(--color-text-maxcontrast); }
-@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
-@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form { display: grid; grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
+@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form { display: grid; grid-template-columns: 1fr; } }
 </style>

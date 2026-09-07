@@ -238,3 +238,9 @@ A Nextcloud App Store artifact is a signed `.tar.gz` containing exactly one
 top-level `maintenance_tracker/` directory. Compiled `js/` and `css/` ship;
 tests, source, lock/build tooling, and CI configuration do not. The final staged
 tree must be integrity-signed before the archive is created.
+
+## Activity ledger boundary
+
+The execution ledger is intentionally separate from maintenance definitions and future due-state materialization. Activity headers are revisioned for descriptive corrections, while work-item and meter-snapshot children use append/read-only persistence. This preserves historical truth and gives later scheduling/due calculations a stable completion baseline.
+
+Activity-created readings reuse the v0.1.4 immutable-reading service and execute inside the existing serialized workspace transaction. A failed child insert therefore cannot leave a half-recorded maintenance activity or orphan service reading.

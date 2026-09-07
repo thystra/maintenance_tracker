@@ -1,6 +1,6 @@
 # Domain model
 
-This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, append-only audit events, categories, component instances, structured specifications, relationships, assignments, meters, immutable meter readings, work groups, common work definitions, and normalized schedule rules. Remaining tables arrive with their vertical slices.
+This document describes the target model and identifies the portions already materialized. The current additive migrations create workspaces, memberships, assets, the change journal, append-only audit events, categories, component instances, structured specifications, relationships, assignments, meters, immutable meter readings, work groups, common work definitions, normalized schedule rules, activity headers, immutable activity work items, and immutable activity meter snapshots. Remaining tables arrive with their vertical slices.
 
 All table names stay under Nextcloud's recommended 23-character limit. API IDs
 are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
@@ -234,3 +234,15 @@ report snapshots are append-only where practical.
 - Calendar data is a projection, not the source of truth.
 - TCO never combines currencies without an explicit conversion policy.
 - A tax report preserves the exact rate/version and source records it used.
+
+## Activity execution ledger (v0.1.6)
+
+Work definitions describe what may or should be done. Activities describe what actually happened.
+
+- `maint_activities` stores the asset-scoped activity header, `performed_at`, optional summary/notes, optimistic revision, and archive tombstone.
+- `maint_activity_items` stores immutable performed-work rows. Each row has its own client UUID and may snapshot a linked work-definition UUID/component UUID plus the component display name and work title/kind, or describe ad-hoc work without a definition.
+- `maint_activity_meters` stores immutable meter context for the activity: client UUID, meter/reading UUIDs, meter-name snapshot, observation time, canonical value, and original value/unit.
+
+`performedAt`, work-item membership, definition/component snapshots, and meter snapshots are execution facts. They are never edited in place. Owner/Manager correction is limited to activity-header `summary` and `notes`; changing execution facts requires archiving the activity and creating a replacement.
+
+Activity creation is an atomic workspace mutation. When an activity creates a meter reading, the reading and its activity source provenance are committed or rolled back with the activity header, work items, meter snapshots, change journal, and audit event.

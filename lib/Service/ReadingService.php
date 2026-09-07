@@ -56,8 +56,8 @@ final class ReadingService {
 	}
 
 	/** @param array<string, mixed> $input @return array<string, mixed> */
-	public function create(WorkspaceContext $context, string $meterUuid, array $input): array {
-		$meter = $this->meters->find($context, $meterUuid);
+	public function create(WorkspaceContext $context, string $meterUuid, array $input, bool $allowArchivedMeter = false): array {
+		$meter = $this->meters->find($context, $meterUuid, $allowArchivedMeter);
 		$values = $this->validateInput($meter, $input, true, null);
 		return $this->insert($context, $meter, $values, null, 'reading.created', []);
 	}

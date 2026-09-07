@@ -330,7 +330,7 @@ Business-day rules use `type: business_days`, interval unit `business_day`, and 
 
 Read, update, or archive a definition. Mutations use `expectedRevision`. Component target is immutable; schedule may be replaced explicitly on update.
 
-Future resources include profile installation/imports, due occurrences/projections, activities/service records, evidence, parts/costs, fuel entries, trips, calendar bindings, public report shares, external submissions, TCO reports, and mileage reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any non-`none` schedule policy is scheduled maintenance.
+Future resources include profile installation/imports, due occurrences/projections, evidence, parts/costs, fuel entries, trips, calendar bindings, public report shares, external submissions, TCO reports, and mileage reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any non-`none` schedule policy is scheduled maintenance.
 
 User/owner IDs are never accepted when they can be derived from authentication.
 
@@ -413,3 +413,17 @@ DELETE creates a revisioned tombstone.
 
 Relationship/default and primary-assignment checks execute under a workspace
 write serialization point. This matters for shared workspaces because two different member accounts otherwise have independent account-lifecycle locks.
+
+## Activity ledger — v0.1.6
+
+Implemented OCS endpoints:
+
+- `GET /assets/{assetUuid}/activities` — list active activity history for an asset (`activity.read`).
+- `POST /assets/{assetUuid}/activities` — atomically create an activity and immutable children (`activity.create`).
+- `GET /activities/{uuid}` — read one activity (`activity.read`).
+- `PATCH /activities/{uuid}` — Owner/Manager-only descriptive correction; only `summary` and `notes` are accepted (`activity.manage`).
+- `DELETE /activities/{uuid}` — Owner/Manager archive/void operation with optimistic revision (`activity.manage`).
+
+Creation requires a client-generated activity UUID and client UUIDs for every work item and meter snapshot. At least one work item is required. A work item may reference a work definition or provide explicit ad-hoc `title` and `kind` data. Meter snapshots either reference an existing reading observed exactly at `performedAt`, or provide a nested reading containing only `uuid`, `value`, `unit`, and optional `notes`. UUID, value, and unit are required. Nested readings are created with `source.type = activity` and the activity UUID as their source reference; callers cannot override observation time or source provenance. A delayed activity may create its reading against a meter that was archived after the field record was captured, while the ordinary standalone reading endpoint still requires an active meter.
+
+Retries of the same activity UUID are idempotent when the semantic references and immutable child payload match. Snapshot comparison does not depend on the current mutable title of a linked work definition, so a delayed offline retry remains valid after configuration is renamed. Reusing a UUID with changed execution facts is a precondition conflict.

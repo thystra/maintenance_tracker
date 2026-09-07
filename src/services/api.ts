@@ -4,6 +4,8 @@
  */
 
 import type {
+	Activity,
+	ActivityList,
 	Asset,
 	AssetList,
 	Assignment,
@@ -13,6 +15,7 @@ import type {
 	CategoryList,
 	Component,
 	ComponentList,
+	CreateActivity,
 	CreateAsset,
 	CreateAssignment,
 	CreateCategory,
@@ -181,4 +184,12 @@ export async function getWorkDefinitions(assetUuid: string, scheduled: boolean |
 
 export async function createWorkDefinition(assetUuid: string, definition: CreateWorkDefinition): Promise<WorkDefinition> {
 	return data(await axios.post<OcsEnvelope<WorkDefinition>>(endpoint(`/assets/${assetUuid}/work-definitions`), { definition }, requestOptions))
+}
+
+export async function getActivities(assetUuid: string): Promise<ActivityList> {
+	return data(await axios.get<OcsEnvelope<ActivityList>>(endpoint(`/assets/${assetUuid}/activities`), requestOptions))
+}
+
+export async function createActivity(assetUuid: string, activity: CreateActivity): Promise<Activity> {
+	return data(await axios.post<OcsEnvelope<Activity>>(endpoint(`/assets/${assetUuid}/activities`), { activity }, requestOptions))
 }
