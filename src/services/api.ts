@@ -26,6 +26,8 @@ import type {
 	CreateSpecification,
 	CreateWorkDefinition,
 	CreateWorkGroup,
+	MaintenanceForecastList,
+	MaintenanceOccurrenceList,
 	MaintenanceStatusList,
 	Meter,
 	MeterList,
@@ -34,6 +36,7 @@ import type {
 	Relationship,
 	RelationshipList,
 	RelationshipTypeList,
+	ReminderPolicy,
 	Specification,
 	SpecificationList,
 	WorkDefinition,
@@ -200,4 +203,33 @@ export async function getActivities(assetUuid: string): Promise<ActivityList> {
 
 export async function createActivity(assetUuid: string, activity: CreateActivity): Promise<Activity> {
 	return data(await axios.post<OcsEnvelope<Activity>>(endpoint(`/assets/${assetUuid}/activities`), { activity }, requestOptions))
+}
+
+export async function getMaintenanceForecast(assetUuid: string, asOf: string | null = null): Promise<MaintenanceForecastList> {
+	return data(await axios.get<OcsEnvelope<MaintenanceForecastList>>(endpoint(`/assets/${assetUuid}/maintenance-forecast`), {
+		...requestOptions,
+		params: asOf === null ? undefined : { asOf },
+	}))
+}
+
+export async function getMaintenanceOccurrences(assetUuid: string, includeClosed = false, asOf: string | null = null): Promise<MaintenanceOccurrenceList> {
+	return data(await axios.get<OcsEnvelope<MaintenanceOccurrenceList>>(endpoint(`/assets/${assetUuid}/maintenance-occurrences`), {
+		...requestOptions,
+		params: { ...(includeClosed ? { includeClosed: 'true' } : {}), ...(asOf === null ? {} : { asOf }) },
+	}))
+}
+
+export async function reconcileMaintenanceOccurrences(assetUuid: string, asOf: string | null = null): Promise<MaintenanceOccurrenceList> {
+	return data(await axios.post<OcsEnvelope<MaintenanceOccurrenceList>>(endpoint(`/assets/${assetUuid}/maintenance-occurrences/reconcile`), null, {
+		...requestOptions,
+		params: asOf === null ? undefined : { asOf },
+	}))
+}
+
+export async function getReminderPolicy(): Promise<ReminderPolicy> {
+	return data(await axios.get<OcsEnvelope<ReminderPolicy>>(endpoint('/reminder-policy'), requestOptions))
+}
+
+export async function updateReminderPolicy(expectedRevision: number, policy: Partial<Pick<ReminderPolicy, 'calendarLeadDays' | 'meterLeadPercent'>>): Promise<ReminderPolicy> {
+	return data(await axios.patch<OcsEnvelope<ReminderPolicy>>(endpoint('/reminder-policy'), { expectedRevision, policy }, requestOptions))
 }

@@ -137,3 +137,10 @@ The server retains definition/component/meter/reading UUID snapshots and meter v
 ### Derived status integrity
 
 Maintenance due state is read-only derived data and is not accepted from clients or persisted as authoritative state. Access uses the existing work-definition read capability. Historical `asOf` evaluation cannot mutate activity, meter, reading, or schedule records.
+
+
+### Forecast and occurrence integrity
+
+Forecast reads use dedicated read capabilities and never mutate due state. Reminder policy changes and occurrence reconciliation are separate write capabilities granted to Owner and Manager, not Contributor or Viewer. Reconciliation executes inside the serialized workspace write boundary.
+
+Occurrences are intentionally non-authoritative projections. They cannot be client-created with arbitrary due claims and their table has no fields for due dates, due state, remaining meter values, or thresholds. The unique open marker prevents duplicate active work items under concurrent reconciliation, while current status is always re-derived before presentation.

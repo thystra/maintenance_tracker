@@ -437,3 +437,14 @@ Optional query parameter `asOf` accepts an ISO-8601 timestamp including seconds 
 Response fields include `assetUuid`, `asOf`, and `items`. Each item embeds the current work definition plus `state`, `reason`, `lastPerformedAt`, `lastActivityUuid`, `rules`, and `triggerRulePosition`. Date rules expose `dueOn` and `remainingDays`; meter rules expose meter identity, current reading context, canonical baseline/due/remaining values, and the original schedule interval.
 
 States are `inactive`, `unscheduled`, `baseline_required`, `upcoming`, `due`, `overdue`, and `unknown`. Due state is derived on every request and is never written to a database table. v0.1.7 intentionally does not invent a fixed "due soon" warning horizon; clients receive exact remaining values so a future explicit notification policy can be configured without changing the maintenance truth model.
+
+
+## Maintenance forecast and reminder policy — v0.1.8
+
+`GET /assets/{assetUuid}/maintenance-forecast` returns the v0.1.7 maintenance-status projection plus the effective workspace reminder policy and a `forecast` object on each definition. The maintenance `state` remains one of the v0.1.7 truth states; the nested policy state is separately `not_due`, `due_soon`, `due`, `overdue`, `setup_required`, `blocked`, `inactive`, or `unscheduled`.
+
+The default policy is explicit and server-owned: 14 calendar days and 10 percent of the configured meter interval. `GET /reminder-policy` returns the effective values with `revision: 0` and `source: default` until a workspace policy is stored. `PATCH /reminder-policy` requires `expectedRevision`; Owner and Manager may set `calendarLeadDays` from 0 through 3650 and `meterLeadPercent` from 0 through 100. Contributor and Viewer may read but not change policy.
+
+`GET /assets/{assetUuid}/maintenance-occurrences` returns the materialized work queue. By default only open occurrences are returned; `includeClosed=true` includes history. Each occurrence exposes its UUID, work-definition UUID, completion-baseline activity UUID, lifecycle timestamps/reason, revision, and a `current` field containing the live forecast/status projection. Occurrence storage does not contain due dates, due state, remaining values, or meter thresholds.
+
+`POST /assets/{assetUuid}/maintenance-occurrences/reconcile` is an explicit serialized projection write for Owner/Manager. Reconciliation creates an occurrence when the current forecast is `due_soon`, `due`, or `overdue`; preserves the existing row while the same completion baseline remains actionable; closes it as `completed` when a later linked activity becomes the baseline; and closes it as `not_actionable` or `definition_unavailable` when configuration no longer warrants an open work item. A database uniqueness constraint enforces one open occurrence per work definition.

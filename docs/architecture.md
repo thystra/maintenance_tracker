@@ -248,3 +248,10 @@ Activity-created readings reuse the v0.1.4 immutable-reading service and execute
 ### Derived due-state projection
 
 v0.1.7 computes maintenance status at read time from work-definition schedules, immutable activity history, and effective meter readings. It does not materialize or cache due-state rows. This keeps schedule changes, archived/corrected activities, and reading supersession immediately consistent. Shared-workspace calendar semantics are UTC until a workspace-level timezone policy is introduced explicitly.
+
+
+### Forecast policy and occurrence materialization
+
+v0.1.8 keeps three concerns separate. `MaintenanceStatusService` remains the only maintenance-truth calculation. `MaintenanceForecastService` decorates that projection with an explicit reminder policy; `due_soon` therefore means “inside the configured attention window,” never “due.” `MaintenanceOccurrenceService` materializes an actionable work queue from the forecast.
+
+`maint_reminder_policy` stores at most one policy row per workspace. `maint_occurrences` stores workflow lifecycle and a completion-baseline UUID but intentionally omits due dates, due state, meter values, and thresholds. The nullable `open_marker` plus a unique `(workspace_id, definition_id, open_marker)` key gives PostgreSQL, SQLite, and MariaDB/MySQL the same one open occurrence per definition behavior while allowing multiple historical closed rows. Reconciliation is a write-capability operation so it runs behind the existing workspace serialization boundary.

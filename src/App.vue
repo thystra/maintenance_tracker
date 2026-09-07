@@ -14,12 +14,14 @@ import type {
 	Category,
 	Component,
 	CreateAsset,
+	MaintenanceOccurrence,
 	MaintenanceStatusItem,
 	Meter,
 	MeterDimension,
 	Reading,
 	Relationship,
 	RelationshipType,
+	ReminderPolicy,
 	Specification,
 	WorkDefinition,
 	WorkGroup,
@@ -47,14 +49,18 @@ import {
 	getCapabilities,
 	getCategories,
 	getComponents,
+	getMaintenanceOccurrences,
 	getMaintenanceStatus,
 	getMeters,
 	getReadings,
 	getRelationships,
 	getRelationshipTypes,
+	getReminderPolicy,
 	getSpecifications,
 	getWorkDefinitions,
 	getWorkGroups,
+	reconcileMaintenanceOccurrences,
+	updateReminderPolicy,
 } from './services/api.ts'
 
 const assets = ref<Asset[]>([])
@@ -69,6 +75,8 @@ const workGroups = ref<Record<string, WorkGroup[]>>({})
 const workDefinitions = ref<Record<string, WorkDefinition[]>>({})
 const activities = ref<Record<string, Activity[]>>({})
 const maintenanceStatus = ref<Record<string, MaintenanceStatusItem[]>>({})
+const maintenanceOccurrences = ref<Record<string, MaintenanceOccurrence[]>>({})
+const reminderPolicy = ref<ReminderPolicy | null>(null)
 const relationshipTypes = ref<RelationshipType[]>([])
 const relationships = ref<Relationship[]>([])
 const assignments = ref<Assignment[]>([])
@@ -111,6 +119,7 @@ const activityDraft = reactive({
 })
 const relationshipDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'general', isDefault: false })
 const assignmentDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'trip', isPrimary: true, effectiveFrom: '', effectiveUntil: '' })
+const reminderPolicyDraft = reactive({ calendarLeadDays: 14, meterLeadPercent: 10 })
 const empty = computed(() => !loading.value && assets.value.length === 0)
 const businessWeekdayOptions: Array<{ value: BusinessWeekday, label: string }> = [
 	{ value: 'sun', label: 'Sun' },
@@ -269,13 +278,14 @@ async function load(): Promise<void> {
 	loading.value = true
 	error.value = ''
 	try {
-		const [serverCapabilities, firstPage, categoryList, typeList, relationshipList, assignmentList] = await Promise.all([
+		const [serverCapabilities, firstPage, categoryList, typeList, relationshipList, assignmentList, policy] = await Promise.all([
 			getCapabilities(),
 			getAssets(),
 			getCategories(),
 			getRelationshipTypes(),
 			getRelationships(),
 			getAssignments(),
+			getReminderPolicy(),
 		])
 		const allAssets = [...firstPage.items]
 		let nextCursor = firstPage.nextCursor
@@ -289,6 +299,9 @@ async function load(): Promise<void> {
 		relationshipTypes.value = typeList.items
 		relationships.value = relationshipList.items
 		assignments.value = assignmentList.items
+		reminderPolicy.value = policy
+		reminderPolicyDraft.calendarLeadDays = policy.calendarLeadDays
+		reminderPolicyDraft.meterLeadPercent = policy.meterLeadPercent
 		assets.value = allAssets.sort((left, right) => left.name.localeCompare(right.name))
 	} catch (reason) {
 		error.value = readableError(reason)
@@ -342,7 +355,7 @@ async function toggleAsset(asset: Asset): Promise<void> {
 	}
 	expandedAsset.value = asset.uuid
 	try {
-		const [componentList, specificationList, meterList, workGroupList, workDefinitionList, activityList, statusList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid), getActivities(asset.uuid), getMaintenanceStatus(asset.uuid)])
+		const [componentList, specificationList, meterList, workGroupList, workDefinitionList, activityList, statusList, occurrenceList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid), getActivities(asset.uuid), getMaintenanceStatus(asset.uuid), getMaintenanceOccurrences(asset.uuid)])
 		components.value[asset.uuid] = componentList.items
 		specifications.value[asset.uuid] = specificationList.items
 		meters.value[asset.uuid] = meterList.items
@@ -350,6 +363,7 @@ async function toggleAsset(asset: Asset): Promise<void> {
 		workDefinitions.value[asset.uuid] = workDefinitionList.items
 		activities.value[asset.uuid] = activityList.items
 		maintenanceStatus.value[asset.uuid] = statusList.items
+		maintenanceOccurrences.value[asset.uuid] = occurrenceList.items
 		await Promise.all(meterList.items.map(async (meter) => {
 			readings.value[meter.uuid] = (await getReadings(meter.uuid)).items
 		}))
@@ -563,6 +577,45 @@ async function submitActivity(asset: Asset): Promise<void> {
 	}
 }
 
+async function reconcileWorkQueue(assetUuid: string): Promise<void> {
+	saving.value = true
+	error.value = ''
+	try {
+		maintenanceOccurrences.value[assetUuid] = (await reconcileMaintenanceOccurrences(assetUuid)).items
+		await refreshMaintenanceStatus(assetUuid)
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function submitReminderPolicy(): Promise<void> {
+	if (reminderPolicy.value === null) {
+		return
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const updated = await updateReminderPolicy(reminderPolicy.value.revision, {
+			calendarLeadDays: reminderPolicyDraft.calendarLeadDays,
+			meterLeadPercent: reminderPolicyDraft.meterLeadPercent,
+		})
+		reminderPolicy.value = updated
+		reminderPolicyDraft.calendarLeadDays = updated.calendarLeadDays
+		reminderPolicyDraft.meterLeadPercent = updated.meterLeadPercent
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+function forecastLabel(occurrence: MaintenanceOccurrence): string {
+	const state = occurrence.current?.forecast.state
+	return state === 'due_soon' ? 'Due soon' : state === 'due' ? 'Due' : state === 'overdue' ? 'Overdue' : state ?? 'Unavailable'
+}
+
 async function submitRelationship(): Promise<void> {
 	if (relationshipDraft.sourceAssetUuid === '' || relationshipDraft.targetAssetUuid === '') {
 		return
@@ -747,6 +800,31 @@ onMounted(load)
 				</section>
 
 				<section class="panel">
+					<h2>Maintenance forecast policy</h2>
+					<p class="panel-copy">
+						These lead values decide when upcoming maintenance enters the work queue. They do not change whether maintenance is actually due.
+					</p>
+					<form v-if="reminderPolicy" class="reminder-policy-form" @submit.prevent="submitReminderPolicy">
+						<label><span>Calendar lead days</span><input
+							v-model.number="reminderPolicyDraft.calendarLeadDays"
+							type="number"
+							min="0"
+							max="3650"
+							required></label>
+						<label><span>Meter lead percent</span><input
+							v-model.number="reminderPolicyDraft.meterLeadPercent"
+							type="number"
+							min="0"
+							max="100"
+							required></label>
+						<button type="submit" :disabled="saving">
+							Save forecast policy
+						</button>
+						<span class="policy-source">{{ reminderPolicy.source === 'default' ? 'Using application defaults' : `Workspace policy · revision ${reminderPolicy.revision}` }}</span>
+					</form>
+				</section>
+
+				<section class="panel">
 					<div class="section-heading">
 						<div>
 							<h2>Your items</h2><p v-if="!loading">
@@ -885,6 +963,33 @@ onMounted(load)
 											</div>
 											<span>{{ maintenanceRuleLabel(item) }}</span>
 											<span v-if="item.lastPerformedAt">Last completed {{ new Date(item.lastPerformedAt).toLocaleString() }}</span>
+										</li>
+									</ul>
+								</section>
+								<section class="occurrence-section">
+									<div class="section-heading section-heading--compact">
+										<div>
+											<h4>Maintenance work queue</h4><p class="panel-copy">
+												Due soon is policy-layer attention; each row still displays current derived status.
+											</p>
+										</div>
+										<button
+											class="button--secondary"
+											type="button"
+											:disabled="saving"
+											@click="reconcileWorkQueue(asset.uuid)">
+											Reconcile work queue
+										</button>
+									</div>
+									<p v-if="(maintenanceOccurrences[asset.uuid] ?? []).length === 0" class="empty-inline">
+										No open maintenance occurrences.
+									</p>
+									<ul v-else class="compact-list occurrence-list">
+										<li v-for="occurrence in maintenanceOccurrences[asset.uuid] ?? []" :key="occurrence.uuid">
+											<div class="status-line">
+												<strong>{{ occurrence.current?.definition.title ?? occurrence.definitionUuid }}</strong><span class="status-chip" :data-state="occurrence.current?.forecast.state">{{ forecastLabel(occurrence) }}</span>
+											</div>
+											<span>Opened {{ new Date(occurrence.openedAt).toLocaleString() }}<template v-if="occurrence.current?.lastPerformedAt"> · baseline {{ new Date(occurrence.current.lastPerformedAt).toLocaleString() }}</template></span>
 										</li>
 									</ul>
 								</section>
@@ -1111,7 +1216,7 @@ button:disabled { opacity: .55; }
 
 .compact-list span { color: var(--color-text-maxcontrast); }
 
-.inline-form, .spec-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form { display: grid; gap: 8px; }
+.inline-form, .spec-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form, .reminder-policy-form { display: grid; gap: 8px; }
 
 .relationship-form, .assignment-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
 
@@ -1127,7 +1232,7 @@ button:disabled { opacity: .55; }
 
 .spec-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-.meter-section, .status-section, .work-section, .activity-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.meter-section, .status-section, .occurrence-section, .work-section, .activity-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
 
 .meter-form { grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, minmax(120px, .7fr)) auto auto; align-items: end; }
 
@@ -1141,11 +1246,17 @@ button:disabled { opacity: .55; }
 
 .status-chip[data-state="due"], .status-chip[data-state="overdue"] { border-color: var(--color-error); color: var(--color-error); }
 
-.status-chip[data-state="baseline_required"], .status-chip[data-state="unknown"] { border-color: var(--color-warning); color: var(--color-warning); }
+.status-chip[data-state="baseline_required"], .status-chip[data-state="unknown"], .status-chip[data-state="due_soon"] { border-color: var(--color-warning); color: var(--color-warning); }
 
 .work-definition-form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
 
 .activity-form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
+
+.reminder-policy-form { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; }
+
+.policy-source, .empty-inline { color: var(--color-text-maxcontrast); font-size: .9rem; }
+
+.section-heading--compact { align-items: end; margin-bottom: 8px; }
 
 .weekday-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 42px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--border-radius); }
 
@@ -1156,6 +1267,6 @@ button:disabled { opacity: .55; }
 .spec-form button { grid-column: 3; }
 
 .empty-state { display: grid; place-items: center; min-height: 130px; color: var(--color-text-maxcontrast); }
-@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
-@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form { display: grid; grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .form-grid, .form-grid--category, .asset-details { grid-template-columns: 1fr 1fr; }.inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form, .reminder-policy-form { grid-template-columns: 1fr 1fr; }.spec-form button { grid-column: auto; } }
+@media (max-width: 600px) { .page-shell { width: min(100% - 20px, 1180px); padding-top: 22px; }.page-header, .asset-summary, .form-grid, .form-grid--category, .asset-details, .inline-form, .spec-form, .relationship-form, .assignment-form, .meter-form, .reading-form, .work-group-form, .work-definition-form, .activity-form, .reminder-policy-form { display: grid; grid-template-columns: 1fr; } }
 </style>

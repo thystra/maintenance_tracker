@@ -9,6 +9,11 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.8 configurable maintenance forecast/reminder policy with explicit calendar lead days and meter lead percentage.
+- Read-only maintenance forecast projection adds policy-layer `due_soon`, `not_due`, `setup_required`, and `blocked` states without changing v0.1.7 due truth.
+- Materialized maintenance occurrence work queue with a portable one-open-occurrence-per-definition database invariant and explicit reconciliation.
+- Occurrence rows store workflow lifecycle only; due dates, due states, and meter thresholds remain read-time projections.
+
 - v0.1.7 derived maintenance due-state projection with `inactive`, `unscheduled`, `baseline_required`, `upcoming`, `due`, `overdue`, and `unknown` states.
 - Calendar intervals use UTC calendar dates with end-of-month/leap-day clamping; configurable business-day schedules count only selected weekdays.
 - Meter schedules derive thresholds from the latest completed linked activity plus effective meter history and preserve `combination: any` semantics without persisting stale status rows.

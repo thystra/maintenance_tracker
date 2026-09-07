@@ -71,13 +71,13 @@ This file is generated from multiple sources. Included packages:
 	- version: 1.18.1
 	- license: MIT
 - dompurify
-	- version: 3.4.12
+	- version: 3.4.15
 	- license: (MPL-2.0 OR Apache-2.0)
 - escape-html
 	- version: 1.0.3
 	- license: MIT
 - maintenance_tracker
-	- version: 0.1.7
+	- version: 0.1.8
 	- license: AGPL-3.0-or-later
 - semver
 	- version: 7.8.5

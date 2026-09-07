@@ -588,6 +588,59 @@ business_status=$(printf '%s' "$maintenance_upcoming" | docker exec --interactiv
 [ "$business_status" = 'baseline_required' ] || { echo "maintenance status expected business baseline_required, got: $business_status" >&2; exit 1; }
 assert_contains "$maintenance_upcoming" '"lastActivityUuid":"'"${activity_uuid}"'"' 'maintenance status completion baseline'
 
+reminder_policy_default=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/reminder-policy?format=json')
+assert_contains "$reminder_policy_default" '"statuscode":200' 'default reminder policy read'
+assert_contains "$reminder_policy_default" '"calendarLeadDays":14' 'default calendar forecast lead'
+assert_contains "$reminder_policy_default" '"meterLeadPercent":10' 'default meter forecast lead'
+assert_contains "$reminder_policy_default" '"revision":0' 'default reminder policy revision'
+assert_contains "$reminder_policy_default" '"source":"default"' 'default reminder policy source'
+
+reminder_policy_saved=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request PATCH \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":0,"policy":{"calendarLeadDays":14,"meterLeadPercent":10}}' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/reminder-policy?format=json')
+assert_contains "$reminder_policy_saved" '"statuscode":200' 'reminder policy save'
+assert_contains "$reminder_policy_saved" '"revision":1' 'reminder policy stored revision'
+assert_contains "$reminder_policy_saved" '"source":"workspace"' 'reminder policy workspace source'
+
+forecast_soon_reading_uuid='d4444444-4444-4444-8444-444444444444'
+forecast_soon_reading=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"reading":{"uuid":"'"${forecast_soon_reading_uuid}"'","observedAt":"2026-09-30T12:00:00Z","value":"107100","unit":"mi","source":{"type":"manual","reference":"forecast smoke"}}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$forecast_soon_reading" '"statuscode":201' 'forecast due-soon meter reading create'
+
+maintenance_forecast_soon=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-forecast?asOf=2026-09-30T12%3A00%3A00Z&format=json')
+assert_contains "$maintenance_forecast_soon" '"statuscode":200' 'maintenance forecast due-soon projection'
+oil_forecast_state=$(printf '%s' "$maintenance_forecast_soon" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definition"]["uuid"]??"")==="'"${oil_change_uuid}"'"){echo $i["forecast"]["state"]??"";}}')
+business_forecast_state=$(printf '%s' "$maintenance_forecast_soon" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definition"]["uuid"]??"")==="'"${business_definition_uuid}"'"){echo $i["forecast"]["state"]??"";}}')
+[ "$oil_forecast_state" = 'due_soon' ] || { echo "maintenance forecast expected oil due_soon, got: $oil_forecast_state" >&2; echo "$maintenance_forecast_soon" >&2; exit 1; }
+[ "$business_forecast_state" = 'setup_required' ] || { echo "maintenance forecast expected business setup_required, got: $business_forecast_state" >&2; exit 1; }
+assert_contains "$maintenance_forecast_soon" '"materialize":true' 'maintenance forecast materialization policy'
+
+maintenance_occurrences_first=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-occurrences/reconcile?asOf=2026-09-30T12%3A00%3A00Z&format=json')
+assert_contains "$maintenance_occurrences_first" '"statuscode":200' 'maintenance occurrence reconcile'
+occurrence_uuid=$(printf '%s' "$maintenance_occurrences_first" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definitionUuid"]??"")==="'"${oil_change_uuid}"'" && ($i["open"]??false)){echo $i["uuid"]??"";}}')
+[ -n "$occurrence_uuid" ] || { echo "maintenance occurrence was not materialized for due-soon oil work" >&2; echo "$maintenance_occurrences_first" >&2; exit 1; }
+
+maintenance_occurrences_retry=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-occurrences/reconcile?asOf=2026-09-30T12%3A00%3A00Z&format=json')
+occurrence_retry_uuid=$(printf '%s' "$maintenance_occurrences_retry" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definitionUuid"]??"")==="'"${oil_change_uuid}"'" && ($i["open"]??false)){echo $i["uuid"]??"";}}')
+[ "$occurrence_retry_uuid" = "$occurrence_uuid" ] || { echo "maintenance occurrence reconcile was not idempotent" >&2; exit 1; }
+open_oil_occurrence_count=$(printf '%s' "$maintenance_occurrences_retry" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); $n=0; foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definitionUuid"]??"")==="'"${oil_change_uuid}"'" && ($i["open"]??false)){$n++;}} echo $n;')
+[ "$open_oil_occurrence_count" = '1' ] || { echo "expected exactly one open occurrence per definition, got: $open_oil_occurrence_count" >&2; exit 1; }
+
 maintenance_invalid_asof=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-status?asOf=not-a-time&format=json')
@@ -619,6 +672,37 @@ maintenance_overdue=$(docker exec "$container" curl --silent --show-error \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-status?asOf=2026-10-02T12%3A00%3A00Z&format=json')
 oil_overdue_status=$(printf '%s' "$maintenance_overdue" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definition"]["uuid"]??"")==="'"${oil_change_uuid}"'"){echo $i["state"]??"";}}')
 [ "$oil_overdue_status" = 'overdue' ] || { echo "maintenance status expected oil overdue, got: $oil_overdue_status" >&2; echo "$maintenance_overdue" >&2; exit 1; }
+
+maintenance_occurrences_overdue=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-occurrences?asOf=2026-10-02T12%3A00%3A00Z&format=json')
+overdue_occurrence_uuid=$(printf '%s' "$maintenance_occurrences_overdue" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definitionUuid"]??"")==="'"${oil_change_uuid}"'" && ($i["open"]??false)){echo $i["uuid"]??"";}}')
+overdue_occurrence_forecast=$(printf '%s' "$maintenance_occurrences_overdue" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definitionUuid"]??"")==="'"${oil_change_uuid}"'" && ($i["open"]??false)){echo $i["current"]["forecast"]["state"]??"";}}')
+[ "$overdue_occurrence_uuid" = "$occurrence_uuid" ] || { echo "occurrence identity changed as derived forecast advanced" >&2; exit 1; }
+[ "$overdue_occurrence_forecast" = 'overdue' ] || { echo "open occurrence did not expose live overdue forecast, got: $overdue_occurrence_forecast" >&2; exit 1; }
+
+completion_activity_uuid='d2222222-2222-4222-8222-222222222222'
+completion_activity_item_uuid='e2222222-2222-4222-8222-222222222222'
+completion_activity_meter_uuid='f2222222-2222-4222-8222-222222222222'
+completion_activity=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"activity\":{\"uuid\":\"${completion_activity_uuid}\",\"performedAt\":\"2026-10-02T12:00:00Z\",\"summary\":\"Completed forecasted oil service\",\"items\":[{\"uuid\":\"${completion_activity_item_uuid}\",\"definitionUuid\":\"${oil_change_uuid}\"}],\"meters\":[{\"uuid\":\"${completion_activity_meter_uuid}\",\"meterUuid\":\"${odometer_meter_uuid}\",\"readingUuid\":\"${maintenance_overdue_reading_uuid}\"}]}}" \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/activities?format=json')
+assert_contains "$completion_activity" '"statuscode":201' 'forecast occurrence completion activity'
+
+maintenance_occurrences_completed=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-occurrences/reconcile?asOf=2026-10-02T12%3A00%3A00Z&format=json')
+open_after_completion=$(printf '%s' "$maintenance_occurrences_completed" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); $n=0; foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definitionUuid"]??"")==="'"${oil_change_uuid}"'" && ($i["open"]??false)){$n++;}} echo $n;')
+[ "$open_after_completion" = '0' ] || { echo "completed maintenance occurrence remained open" >&2; exit 1; }
+
+maintenance_occurrence_history=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-occurrences?includeClosed=true&asOf=2026-10-02T12%3A00%3A00Z&format=json')
+closed_occurrence_reason=$(printf '%s' "$maintenance_occurrence_history" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["uuid"]??"")==="'"${occurrence_uuid}"'"){echo $i["closedReason"]??"";}}')
+[ "$closed_occurrence_reason" = 'completed' ] || { echo "closed occurrence expected completed reason, got: $closed_occurrence_reason" >&2; exit 1; }
 
 invalid_meter_schedule=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" --request POST \
@@ -950,6 +1034,37 @@ contributor_maintenance_status=$(docker exec "$container" curl --silent --show-e
 	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/maintenance-status?workspace=${admin_workspace_uuid}&asOf=2026-10-02T12%3A00%3A00Z&format=json")
 assert_contains "$contributor_maintenance_status" '"statuscode":200' 'contributor maintenance-status read'
+
+contributor_forecast=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/maintenance-forecast?workspace=${admin_workspace_uuid}&asOf=2026-10-02T12%3A00%3A00Z&format=json")
+assert_contains "$contributor_forecast" '"statuscode":200' 'contributor maintenance-forecast read'
+
+contributor_occurrences=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/maintenance-occurrences?workspace=${admin_workspace_uuid}&asOf=2026-10-02T12%3A00%3A00Z&format=json")
+assert_contains "$contributor_occurrences" '"statuscode":200' 'contributor maintenance-occurrence read'
+
+contributor_reconcile_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/maintenance-occurrences/reconcile?workspace=${admin_workspace_uuid}&asOf=2026-10-02T12%3A00%3A00Z&format=json")
+assert_contains "$contributor_reconcile_denied" '"statuscode":403' 'contributor maintenance-occurrence reconcile rejection'
+
+contributor_reminder_policy=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/reminder-policy?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_reminder_policy" '"statuscode":200' 'contributor reminder-policy read'
+
+contributor_reminder_policy_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request PATCH \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"expectedRevision":1,"policy":{"calendarLeadDays":30}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/reminder-policy?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_reminder_policy_denied" '"statuscode":403' 'contributor reminder-policy management rejection'
 
 
 contributor_activity_uuid='e1111111-1111-4111-8111-111111111111'
