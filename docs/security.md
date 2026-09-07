@@ -38,6 +38,29 @@ data even though the app is not a medical product.
 - Database access uses Nextcloud query builders and named parameters.
 - GET routes never mutate state.
 
+### Profile installation boundary
+
+- `profile.read` is available to Owner, Manager, Contributor, and Viewer;
+  `profile.install` is intentionally limited to Owner and Manager.
+- Runtime installation accepts profile v2 only. Legacy v1 validation does not grant
+  permission to reinterpret or install v1 content.
+- Server validation is repeated immediately before materialization; client preview
+  is never trusted as authorization or validation evidence.
+- Canonical profile JSON and SHA-256 identify the immutable source revision. Object keys and meter-interval decimal representations are normalized before hashing, preventing representation-only numeric differences from manufacturing distinct revisions. The
+  content snapshot is configuration provenance, not executable code.
+- Local and bundled data follow the same validator. A profile is considered
+  first-party only when ID, version, and canonical content hash exactly match a
+  bundled profile.
+- Profile `sourceUrl` and future offer URLs are metadata only; the server does not
+  make arbitrary outbound requests during validation or installation.
+- Multi-instance parent/task references and component-parent cycles are rejected
+  rather than resolving ambiguously.
+- Part-bearing profiles fail closed until parts have canonical storage; no validated
+  profile facts are silently discarded.
+- Installation uses the canonical component/meter/work-definition services inside
+  the workspace write transaction, and only bounded identity/hash metadata enters
+  the append-only audit event.
+
 ## Files
 
 - Upload bytes go through Nextcloud Files/WebDAV, not a web-accessible app path.

@@ -129,14 +129,35 @@ The current change table is foundation work, not yet a public sync endpoint.
 
 ## Profiles
 
-Profiles are untrusted, data-only JSON documents validated against a versioned
-schema. They cannot include PHP, JavaScript, templates, executable expressions,
-or credentials.
+> Implementation status: v0.1.9 materializes validated profile-v2 components,
+> meters, work groups, and work definitions through the existing domain services.
 
-Installing a profile materializes a snapshot of its components, structured information fields, work definitions, meters, and parts into an asset. A later profile revision produces an explicit diff. It never silently rewrites user-adjusted `schedule` policies or re-enables suppressed components. Profiles may define their own display groups (for example Engine, Transmission, Cooling, or HVAC); those groups are data, not application constants.
+Profiles are untrusted, data-only JSON documents. Runtime installation has its own
+server-side bounded validator; it accepts profile v2 only and does not silently
+reinterpret profile v1. Bundled profiles use the same validator. HTTPS source URLs
+are provenance facts and are never server-side fetch instructions.
+
+The profile installer is an orchestration service, not an alternate persistence
+model. It runs behind `profile.install`, the same workspace write serialization and
+account-lifecycle transaction used by other mutations, then calls
+`ComponentService`, `MeterService`, `WorkGroupService`, `WorkDefinitionService`,
+and `AssetService`. Consequently profile-created records obey the same key, unit,
+schedule, revision, journal, and audit invariants as manually created records.
+
+`maint_profiles` records workspace profile identity/trust; `maint_prof_revs` keeps
+an immutable canonical JSON snapshot plus SHA-256/provenance. Canonicalization sorts object keys and normalizes meter-interval decimal values before hashing so representation-only numeric differences do not create false profile revisions; `maint_asset_prof`
+records the one current v0.1.9 materialization and client installation UUID; and
+`maint_prof_bind` maps source type/key/ordinal to each materialized UUID. Profile
+revision content never becomes mutable domain truth after installation.
+
+A later profile revision produces an explicit user-approved diff. It never silently
+rewrites user-adjusted `schedule` policies or re-enables suppressed components.
+Multi-instance source references must be unambiguous, and profile-v2 parts fail
+installation until the canonical parts subsystem exists rather than being dropped.
 
 Profile provenance includes an ID, semantic version, data license, source URL,
-and content hash. Generic first-party profiles should use CC0 where possible.
+optional source revision, and content hash. Generic first-party profiles should use
+CC0 where possible.
 
 ## Work definitions and scheduling
 

@@ -26,7 +26,13 @@ for (const version of [1, 2]) {
 	validators.set(version, ajv.compile(schema))
 }
 
-const dimensionUnits = {
+const displayUnits = {
+	distance: new Set(['mi', 'km', 'm', 'mm']),
+	runtime: new Set(['hour', 'min', 's']),
+	usage_count: new Set(['use']),
+}
+
+const meterIntervalUnits = {
 	distance: new Set(['mi', 'km', 'm', 'mm']),
 	runtime: new Set(['hour', 'min', 's']),
 	usage_count: new Set(['use', 'count']),
@@ -47,6 +53,7 @@ function semanticErrorsV2(profile) {
 	const errors = []
 	const meterByKey = new Map(profile.meters.map((meter) => [meter.key, meter]))
 	const componentKeys = new Set(profile.components.map((component) => component.key))
+	const componentByKey = new Map(profile.components.map((component) => [component.key, component]))
 	const partKeys = new Set(profile.parts.map((part) => part.key))
 	const groupKeys = new Set(profile.workGroups.map((group) => group.key))
 
@@ -63,13 +70,15 @@ function semanticErrorsV2(profile) {
 	}
 
 	for (const meter of profile.meters) {
-		if (!dimensionUnits[meter.dimension]?.has(meter.displayUnit)) {
+		if (!displayUnits[meter.dimension]?.has(meter.displayUnit)) {
 			errors.push(`meter ${meter.key} displayUnit is incompatible with ${meter.dimension}`)
 		}
 	}
 	for (const component of profile.components) {
 		if (component.parentKey && !componentKeys.has(component.parentKey)) {
 			errors.push(`component ${component.key} references unknown parentKey ${component.parentKey}`)
+		} else if (component.parentKey && componentByKey.get(component.parentKey)?.quantity !== 1) {
+			errors.push(`component ${component.key} parentKey ${component.parentKey} is ambiguous because parent quantity is greater than one`)
 		}
 		for (const partKey of component.compatiblePartKeys) {
 			if (!partKeys.has(partKey)) {
@@ -77,6 +86,20 @@ function semanticErrorsV2(profile) {
 			}
 		}
 	}
+
+	for (const component of profile.components) {
+		const seen = new Set([component.key])
+		let current = component
+		while (current?.parentKey) {
+			if (seen.has(current.parentKey)) {
+				errors.push(`component parent cycle includes ${component.key}`)
+				break
+			}
+			seen.add(current.parentKey)
+			current = componentByKey.get(current.parentKey)
+		}
+	}
+
 	for (const definition of profile.workDefinitions) {
 		if (!Object.hasOwn(definition, 'schedule')) {
 			errors.push(`work definition ${definition.key} is missing required schedule`)
@@ -86,6 +109,8 @@ function semanticErrorsV2(profile) {
 		}
 		if (definition.componentKey && !componentKeys.has(definition.componentKey)) {
 			errors.push(`work definition ${definition.key} references unknown component ${definition.componentKey}`)
+		} else if (definition.componentKey && componentByKey.get(definition.componentKey)?.quantity !== 1) {
+			errors.push(`work definition ${definition.key} component ${definition.componentKey} is ambiguous because component quantity is greater than one`)
 		}
 		for (const partKey of definition.compatiblePartKeys) {
 			if (!partKeys.has(partKey)) {
@@ -104,7 +129,7 @@ function semanticErrorsV2(profile) {
 				errors.push(`work definition ${definition.key} references unknown meter ${rule.meterKey}`)
 				continue
 			}
-			if (!dimensionUnits[meter.dimension]?.has(rule.interval.unit)) {
+			if (!meterIntervalUnits[meter.dimension]?.has(rule.interval.unit)) {
 				errors.push(`work definition ${definition.key} uses ${rule.interval.unit} with ${meter.dimension} meter ${rule.meterKey}`)
 			}
 		}

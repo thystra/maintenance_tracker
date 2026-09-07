@@ -4,9 +4,9 @@ Maintenance Tracker is a self-hosted Nextcloud app for recurring maintenance,
 usage meters, service history, costs, vehicle mileage, and supporting documents.
 
 The project is in its early 0.1-series implementation phase. The current vertical
-slices provide the Nextcloud 34 foundation plus inventory categories, component
-instances, structured specifications, typed cross-asset relationships, and
-effective-dated operational assignments. The architecture deliberately supports
+slices provide the Nextcloud 34 foundation plus inventory, relationships, meters,
+work definitions, activity history, due/forecast workflow, and validated local or
+bundled profile installation into canonical domain records. The architecture deliberately supports
 a future offline-first mobile client without making the first release depend on it.
 
 ## Repository authority
@@ -54,7 +54,7 @@ app directory must be named `maintenance_tracker` so it matches
 - Configurable maintenance forecasting plus a materialized one-open-occurrence work queue
 - Bounded cursor pagination and account-lifecycle cleanup
 - Change journal foundation for future mobile delta synchronization
-- Versioned, data-only JSON profile schema with a generic starter profile
+- Validated profile-v2 installation from bundled or local JSON, with immutable SHA-256 revision provenance, source bindings, preview/conflict checks, and a generic starter profile
 - Common work-definition/scheduling foundation with required explicit `schedule`; `schedule: none` means unscheduled/ad-hoc work
 - Architecture, domain, API, security, licensing, and delivery roadmap
 

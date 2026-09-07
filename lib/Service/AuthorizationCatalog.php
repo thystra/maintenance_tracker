@@ -30,6 +30,8 @@ final class AuthorizationCatalog {
 	public const MAINTENANCE_OCCURRENCE_RECONCILE = 'maintenance_occurrence.reconcile';
 	public const REMINDER_POLICY_READ = 'reminder_policy.read';
 	public const REMINDER_POLICY_MANAGE = 'reminder_policy.manage';
+	public const PROFILE_READ = 'profile.read';
+	public const PROFILE_INSTALL = 'profile.install';
 
 	/**
 	 * Reserved vocabulary is deliberately present before its subsystem exists.
@@ -58,6 +60,8 @@ final class AuthorizationCatalog {
 		self::MAINTENANCE_OCCURRENCE_RECONCILE => ['implemented' => true, 'write' => true],
 		self::REMINDER_POLICY_READ => ['implemented' => true, 'write' => false],
 		self::REMINDER_POLICY_MANAGE => ['implemented' => true, 'write' => true],
+		self::PROFILE_READ => ['implemented' => true, 'write' => false],
+		self::PROFILE_INSTALL => ['implemented' => true, 'write' => true],
 
 		'maintenance_definition.*' => ['implemented' => false, 'write' => false],
 		'activity.*' => ['implemented' => false, 'write' => false],
@@ -100,6 +104,8 @@ final class AuthorizationCatalog {
 			self::MAINTENANCE_OCCURRENCE_RECONCILE,
 			self::REMINDER_POLICY_READ,
 			self::REMINDER_POLICY_MANAGE,
+			self::PROFILE_READ,
+			self::PROFILE_INSTALL,
 		],
 		'manager' => [
 			self::WORKSPACE_READ,
@@ -121,6 +127,8 @@ final class AuthorizationCatalog {
 			self::MAINTENANCE_OCCURRENCE_RECONCILE,
 			self::REMINDER_POLICY_READ,
 			self::REMINDER_POLICY_MANAGE,
+			self::PROFILE_READ,
+			self::PROFILE_INSTALL,
 		],
 		'contributor' => [
 			self::WORKSPACE_READ,
@@ -133,6 +141,7 @@ final class AuthorizationCatalog {
 			self::MAINTENANCE_FORECAST_READ,
 			self::MAINTENANCE_OCCURRENCE_READ,
 			self::REMINDER_POLICY_READ,
+			self::PROFILE_READ,
 		],
 		'viewer' => [
 			self::WORKSPACE_READ,
@@ -143,6 +152,7 @@ final class AuthorizationCatalog {
 			self::MAINTENANCE_FORECAST_READ,
 			self::MAINTENANCE_OCCURRENCE_READ,
 			self::REMINDER_POLICY_READ,
+			self::PROFILE_READ,
 		],
 	];
 

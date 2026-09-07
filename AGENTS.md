@@ -87,7 +87,7 @@ Preserve these invariants:
   the same shared workspace concurrently;
 - every migration-created table with `workspace_id` must remain in the account
   deletion purge registry, with child/history tables removed before assets;
-- profiles are bounded, data-only, non-executable input;
+- profiles are bounded, data-only, non-executable input; runtime installation accepts profile v2 only, never fetches provenance URLs, and must fail rather than discard unsupported profile facts;
 - the common work-definition scheduling field is named `schedule` and is REQUIRED on creation/profile-v2 input; never infer or default a missing schedule; `schedule: none` is explicitly unscheduled/ad-hoc work and any non-`none` policy is scheduled maintenance;
 - receipt/photo bytes belong in Nextcloud Files, not database blobs or a public
   app directory;
@@ -221,3 +221,15 @@ Maintenance due state is derived only. Do not add a mutable due-status table or 
 ## v0.1.8 forecast/occurrence invariant
 
 Forecasting is a policy layer over `MaintenanceStatusService`; it must never become a second due-calculation implementation. `due_soon` is configurable attention policy, not maintenance truth. Materialized occurrences are workflow rows only: they may store occurrence identity, the definition identity, the completion-baseline UUID, and lifecycle timestamps/reasons, but they must not store authoritative due dates, due states, remaining values, or meter thresholds. Reconciliation must preserve at most one open occurrence per work definition and must close an occurrence when a later linked completion establishes a new baseline.
+
+## v0.1.9 profile-installation invariant
+
+Profile installation is orchestration over canonical domain services, not a second
+persistence path. Preserve the immutable canonical JSON/SHA-256 revision snapshot
+and source type/key/ordinal bindings. Only exact bundled ID/version/hash matches
+are first-party. `profile.read` is read-only for all workspace roles;
+`profile.install` remains an Owner/Manager serialized write. Do not silently map
+profile v1, select one instance from a multi-instance source key, fetch arbitrary
+profile/source URLs, or ignore profile-v2 parts before the parts subsystem can
+materialize them. Upgrade handling must be an explicit user-approved diff/merge,
+not a reinstall that overwrites customized records.
