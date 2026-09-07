@@ -246,3 +246,13 @@ Work definitions describe what may or should be done. Activities describe what a
 `performedAt`, work-item membership, definition/component snapshots, and meter snapshots are execution facts. They are never edited in place. Owner/Manager correction is limited to activity-header `summary` and `notes`; changing execution facts requires archiving the activity and creating a replacement.
 
 Activity creation is an atomic workspace mutation. When an activity creates a meter reading, the reading and its activity source provenance are committed or rolled back with the activity header, work items, meter snapshots, change journal, and audit event.
+
+## Derived maintenance status (v0.1.7)
+
+Maintenance status is a projection, not a stored record. The authoritative inputs are the current work definition and its explicit `schedule`, the latest non-archived activity that contains an item linked to that definition, and effective meter readings/snapshots.
+
+Definition states are `inactive`, `unscheduled`, `baseline_required`, `upcoming`, `due`, `overdue`, and `unknown`. A scheduled definition with no linked completed activity is `baseline_required`; this avoids claiming an existing asset is overdue when no service baseline has been established. `unknown` means a schedule exists and a completion baseline exists, but required meter history is insufficient or inconsistent.
+
+For `combination: any`, an overdue rule makes the definition overdue; otherwise a due rule makes it due. If no rule is due but any rule is unknown, the aggregate is unknown rather than falsely reporting upcoming. Calendar and business-day rules are evaluated by UTC calendar date. Meter rules use the activity's immutable meter snapshot when present, otherwise the effective reading at or before the completion time, then compare against the effective current reading at the requested `asOf` time.
+
+No v0.1.7 migration stores due dates, thresholds, or state. Schedule edits, activity corrections/archives, and reading supersession therefore take effect immediately in the next projection.

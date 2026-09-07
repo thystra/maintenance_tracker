@@ -50,6 +50,9 @@ const workDefinitionService = await read('lib/Service/WorkDefinitionService.php'
 const workSchedulePolicy = await read('lib/Service/WorkSchedulePolicy.php')
 const workScheduleRuleEntity = await read('lib/Db/WorkScheduleRule.php')
 const workScheduleRuleMapper = await read('lib/Db/WorkScheduleRuleMapper.php')
+const dueStatePolicy = await read('lib/Service/DueStatePolicy.php')
+const maintenanceStatusService = await read('lib/Service/MaintenanceStatusService.php')
+const maintenanceStatusController = await read('lib/Controller/MaintenanceStatusController.php')
 const capabilities = await read('lib/Capability.php')
 const architecture = await read('docs/architecture.md')
 const domainModel = await read('docs/domain-model.md')
@@ -159,7 +162,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -240,6 +243,15 @@ expect(activityService.includes("source']=['type'=>'activity','reference'=>$a->g
 expect(!activityItemMapper.includes('->update(') && !activityItemMapper.includes('->delete('), 'Activity item mapper must remain append/read-only.')
 expect(!activityMeterMapper.includes('->update(') && !activityMeterMapper.includes('->delete('), 'Activity meter snapshot mapper must remain append/read-only.')
 
+// v0.1.7 maintenance status is a deterministic read-time projection, never stored truth.
+expect(maintenanceStatusController.includes('/maintenance-status') && maintenanceStatusController.includes('MAINTENANCE_DEFINITION_READ'), 'Maintenance status endpoint must remain read-only behind maintenance.definition.read.')
+expect(!maintenanceStatusService.includes('->insert(') && !maintenanceStatusService.includes('->update(') && !maintenanceStatusService.includes('->delete('), 'Maintenance due state must remain derived and must not persist mutable status rows.')
+expect(maintenanceStatusService.includes("'baseline_required'") && maintenanceStatusService.includes("'unknown'") && maintenanceStatusService.includes("'overdue'"), 'Maintenance status projection must retain baseline-required, unknown, and overdue states.')
+expect(maintenanceStatusService.includes("if (in_array('overdue', $states, true))") && maintenanceStatusService.includes("if (in_array('due', $states, true))") && maintenanceStatusService.includes("if (in_array('unknown', $states, true)) {\n\t\t\treturn 'unknown';"), 'combination:any status aggregation must prioritize overdue/due before unknown and must not falsely report upcoming with incomplete rule data.')
+expect(maintenanceStatusService.includes('findEffectivePredecessor') && maintenanceStatusService.includes('findForActivity'), 'Maintenance status must derive meter baselines/current values from effective readings and immutable activity snapshots.')
+expect(dueStatePolicy.includes("format('t')") && !dueStatePolicy.includes('cal_days_in_month'), 'Calendar due-state arithmetic must clamp month/year boundaries without depending on the optional PHP calendar extension.')
+expect(dueStatePolicy.includes('$fullWeeks = intdiv($interval, $daysPerWeek);'), 'Business-day due-state calculation must skip complete weeks instead of iterating unbounded configured intervals day-by-day.')
+
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
 }
@@ -266,6 +278,8 @@ expect(docs.includes('missing') && docs.includes('never') && docs.includes('sche
 expect(api.includes('/work-definitions') && api.includes('/work-groups'), 'API documentation must cover work groups and work definitions.')
 expect(api.includes('/activities') && domainModel.includes('maint_activities') && domainModel.includes('maint_activity_items') && domainModel.includes('maint_activity_meters'), 'Documentation must cover the activity execution ledger.')
 expect(docs.includes('immutable') && docs.includes('activity'), 'Documentation must preserve immutable activity execution-fact semantics.')
+expect(api.includes('/maintenance-status') && docs.includes('baseline_required') && docs.includes('unknown'), 'Documentation must cover the derived maintenance-status projection and incomplete-baseline states.')
+expect(docs.includes('not persisted') || docs.includes('never written') || docs.includes('not stored'), 'Documentation must state that maintenance due state is derived rather than persisted.')
 
 try {
 	await access('.github/workflows/ci.yml')

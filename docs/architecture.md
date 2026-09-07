@@ -244,3 +244,7 @@ tree must be integrity-signed before the archive is created.
 The execution ledger is intentionally separate from maintenance definitions and future due-state materialization. Activity headers are revisioned for descriptive corrections, while work-item and meter-snapshot children use append/read-only persistence. This preserves historical truth and gives later scheduling/due calculations a stable completion baseline.
 
 Activity-created readings reuse the v0.1.4 immutable-reading service and execute inside the existing serialized workspace transaction. A failed child insert therefore cannot leave a half-recorded maintenance activity or orphan service reading.
+
+### Derived due-state projection
+
+v0.1.7 computes maintenance status at read time from work-definition schedules, immutable activity history, and effective meter readings. It does not materialize or cache due-state rows. This keeps schedule changes, archived/corrected activities, and reading supersession immediately consistent. Shared-workspace calendar semantics are UTC until a workspace-level timezone policy is introduced explicitly.

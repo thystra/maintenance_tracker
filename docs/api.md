@@ -427,3 +427,13 @@ Implemented OCS endpoints:
 Creation requires a client-generated activity UUID and client UUIDs for every work item and meter snapshot. At least one work item is required. A work item may reference a work definition or provide explicit ad-hoc `title` and `kind` data. Meter snapshots either reference an existing reading observed exactly at `performedAt`, or provide a nested reading containing only `uuid`, `value`, `unit`, and optional `notes`. UUID, value, and unit are required. Nested readings are created with `source.type = activity` and the activity UUID as their source reference; callers cannot override observation time or source provenance. A delayed activity may create its reading against a meter that was archived after the field record was captured, while the ordinary standalone reading endpoint still requires an active meter.
 
 Retries of the same activity UUID are idempotent when the semantic references and immutable child payload match. Snapshot comparison does not depend on the current mutable title of a linked work definition, so a delayed offline retry remains valid after configuration is renamed. Reusing a UUID with changed execution facts is a precondition conflict.
+
+## Maintenance status — v0.1.7
+
+`GET /assets/{assetUuid}/maintenance-status` returns a read-only derived projection for every non-deleted work definition on the asset. It uses the same `maintenance.definition.read` capability as work-definition reads.
+
+Optional query parameter `asOf` accepts an ISO-8601 timestamp including seconds and timezone and is primarily useful for deterministic clients, reporting, and tests. If omitted, server time is used.
+
+Response fields include `assetUuid`, `asOf`, and `items`. Each item embeds the current work definition plus `state`, `reason`, `lastPerformedAt`, `lastActivityUuid`, `rules`, and `triggerRulePosition`. Date rules expose `dueOn` and `remainingDays`; meter rules expose meter identity, current reading context, canonical baseline/due/remaining values, and the original schedule interval.
+
+States are `inactive`, `unscheduled`, `baseline_required`, `upcoming`, `due`, `overdue`, and `unknown`. Due state is derived on every request and is never written to a database table. v0.1.7 intentionally does not invent a fixed "due soon" warning horizon; clients receive exact remaining values so a future explicit notification policy can be configured without changing the maintenance truth model.

@@ -14,6 +14,7 @@ import type {
 	Category,
 	Component,
 	CreateAsset,
+	MaintenanceStatusItem,
 	Meter,
 	MeterDimension,
 	Reading,
@@ -46,6 +47,7 @@ import {
 	getCapabilities,
 	getCategories,
 	getComponents,
+	getMaintenanceStatus,
 	getMeters,
 	getReadings,
 	getRelationships,
@@ -66,6 +68,7 @@ const readings = ref<Record<string, Reading[]>>({})
 const workGroups = ref<Record<string, WorkGroup[]>>({})
 const workDefinitions = ref<Record<string, WorkDefinition[]>>({})
 const activities = ref<Record<string, Activity[]>>({})
+const maintenanceStatus = ref<Record<string, MaintenanceStatusItem[]>>({})
 const relationshipTypes = ref<RelationshipType[]>([])
 const relationships = ref<Relationship[]>([])
 const assignments = ref<Assignment[]>([])
@@ -149,6 +152,48 @@ function syncWorkMeterUnit(assetUuid: string): void {
 	if (meter) {
 		workDefinitionDraft.meterUnit = meter.displayUnit
 	}
+}
+
+function dueStateLabel(state: MaintenanceStatusItem['state']): string {
+	return ({
+		inactive: 'Inactive',
+		unscheduled: 'Unscheduled',
+		baseline_required: 'Baseline needed',
+		upcoming: 'Upcoming',
+		due: 'Due',
+		overdue: 'Overdue',
+		unknown: 'Needs data',
+	} satisfies Record<MaintenanceStatusItem['state'], string>)[state]
+}
+
+function maintenanceRuleLabel(item: MaintenanceStatusItem): string {
+	if (item.state === 'baseline_required') {
+		return 'Record the first completed activity to establish the schedule baseline.'
+	}
+	if (item.state === 'unknown') {
+		return 'One or more schedule rules need meter history before status can be determined.'
+	}
+	const trigger = item.rules.find((rule) => rule.position === item.triggerRulePosition) ?? item.rules[0]
+	if (!trigger) {
+		return workScheduleLabel(item.definition.schedule)
+	}
+	if (trigger.dueOn) {
+		const remaining = trigger.remainingDays ?? 0
+		if (remaining === 0) {
+			return `Due ${trigger.dueOn}`
+		}
+		return remaining > 0
+			? `Due ${trigger.dueOn} · ${remaining} days remaining`
+			: `Due ${trigger.dueOn} · ${Math.abs(remaining)} days overdue`
+	}
+	if (trigger.meter && trigger.current) {
+		return `${trigger.meter.name}: ${trigger.current.originalValue} ${trigger.current.originalUnit} · ${workScheduleLabel(item.definition.schedule)}`
+	}
+	return workScheduleLabel(item.definition.schedule)
+}
+
+async function refreshMaintenanceStatus(assetUuid: string): Promise<void> {
+	maintenanceStatus.value[assetUuid] = (await getMaintenanceStatus(assetUuid)).items
 }
 
 function workScheduleLabel(schedule: WorkSchedule): string {
@@ -297,13 +342,14 @@ async function toggleAsset(asset: Asset): Promise<void> {
 	}
 	expandedAsset.value = asset.uuid
 	try {
-		const [componentList, specificationList, meterList, workGroupList, workDefinitionList, activityList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid), getActivities(asset.uuid)])
+		const [componentList, specificationList, meterList, workGroupList, workDefinitionList, activityList, statusList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid), getActivities(asset.uuid), getMaintenanceStatus(asset.uuid)])
 		components.value[asset.uuid] = componentList.items
 		specifications.value[asset.uuid] = specificationList.items
 		meters.value[asset.uuid] = meterList.items
 		workGroups.value[asset.uuid] = workGroupList.items
 		workDefinitions.value[asset.uuid] = workDefinitionList.items
 		activities.value[asset.uuid] = activityList.items
+		maintenanceStatus.value[asset.uuid] = statusList.items
 		await Promise.all(meterList.items.map(async (meter) => {
 			readings.value[meter.uuid] = (await getReadings(meter.uuid)).items
 		}))
@@ -408,6 +454,9 @@ async function submitReading(): Promise<void> {
 			observedAt: new Date(readingDraft.observedAt).toISOString().replace(/\.\d{3}Z$/, 'Z'),
 		})
 		readings.value[readingDraft.meterUuid] = [...(readings.value[readingDraft.meterUuid] ?? []), created]
+		if (expandedAsset.value !== null) {
+			await refreshMaintenanceStatus(expandedAsset.value)
+		}
 		readingDraft.value = ''
 		readingDraft.observedAt = localNow()
 	} catch (reason) {
@@ -465,6 +514,7 @@ async function submitWorkDefinition(asset: Asset): Promise<void> {
 			schedule: buildWorkSchedule(),
 		})
 		workDefinitions.value[asset.uuid] = [...(workDefinitions.value[asset.uuid] ?? []), created]
+		await refreshMaintenanceStatus(asset.uuid)
 		workDefinitionDraft.key = ''
 		workDefinitionDraft.title = ''
 	} catch (reason) {
@@ -500,6 +550,7 @@ async function submitActivity(asset: Asset): Promise<void> {
 			meters: meterList,
 		})
 		activities.value[asset.uuid] = [created, ...(activities.value[asset.uuid] ?? [])]
+		await refreshMaintenanceStatus(asset.uuid)
 		activityDraft.title = ''
 		activityDraft.summary = ''
 		activityDraft.notes = ''
@@ -821,6 +872,22 @@ onMounted(load)
 										</button>
 									</form>
 								</section>
+								<section class="status-section">
+									<h4>Maintenance status</h4>
+									<p class="panel-copy">
+										Derived from the current schedules, completed activity, and effective meter history. Due state is not stored.
+									</p>
+									<ul class="compact-list status-list">
+										<li v-for="item in maintenanceStatus[asset.uuid] ?? []" :key="item.definition.uuid">
+											<div class="status-line">
+												<strong>{{ item.definition.title }}</strong>
+												<span class="status-chip" :data-state="item.state">{{ dueStateLabel(item.state) }}</span>
+											</div>
+											<span>{{ maintenanceRuleLabel(item) }}</span>
+											<span v-if="item.lastPerformedAt">Last completed {{ new Date(item.lastPerformedAt).toLocaleString() }}</span>
+										</li>
+									</ul>
+								</section>
 								<section class="work-section">
 									<h4>Maintenance definitions</h4>
 									<p class="panel-copy">
@@ -1060,13 +1127,21 @@ button:disabled { opacity: .55; }
 
 .spec-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-.meter-section, .work-section, .activity-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.meter-section, .status-section, .work-section, .activity-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
 
 .meter-form { grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, minmax(120px, .7fr)) auto auto; align-items: end; }
 
 .reading-form { grid-template-columns: 1.5fr 1fr .6fr 1.2fr auto; align-items: end; margin-top: 10px; }
 
 .work-group-form { grid-template-columns: 1fr 1.4fr 2fr .7fr auto; margin-bottom: 10px; }
+
+.status-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+.status-chip { padding: 2px 8px; border: 1px solid var(--color-border); border-radius: var(--border-radius-pill); font-size: .78rem; font-weight: 700; }
+
+.status-chip[data-state="due"], .status-chip[data-state="overdue"] { border-color: var(--color-error); color: var(--color-error); }
+
+.status-chip[data-state="baseline_required"], .status-chip[data-state="unknown"] { border-color: var(--color-warning); color: var(--color-warning); }
 
 .work-definition-form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
 

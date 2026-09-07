@@ -133,3 +133,7 @@ for the platform baseline.
 Activity execution facts are immutable. Contributors may create and read activities but may not rewrite or archive them; Viewer is read-only; Owner and Manager may correct only descriptive header fields or archive an entry. Work-item and meter-snapshot mappers expose append/read paths only.
 
 The server retains definition/component/meter/reading UUID snapshots and meter values in the activity ledger so later configuration changes cannot rewrite historical claims. Activity-created readings require an explicit unit and activity source provenance. Personal-workspace account deletion purges activity meter snapshots and work items before activity headers; shared-workspace activities remain after an author account is deleted, with audit actor attribution retained.
+
+### Derived status integrity
+
+Maintenance due state is read-only derived data and is not accepted from clients or persisted as authoritative state. Access uses the existing work-definition read capability. Historical `asOf` evaluation cannot mutate activity, meter, reading, or schedule records.

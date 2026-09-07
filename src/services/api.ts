@@ -26,6 +26,7 @@ import type {
 	CreateSpecification,
 	CreateWorkDefinition,
 	CreateWorkGroup,
+	MaintenanceStatusList,
 	Meter,
 	MeterList,
 	Reading,
@@ -184,6 +185,13 @@ export async function getWorkDefinitions(assetUuid: string, scheduled: boolean |
 
 export async function createWorkDefinition(assetUuid: string, definition: CreateWorkDefinition): Promise<WorkDefinition> {
 	return data(await axios.post<OcsEnvelope<WorkDefinition>>(endpoint(`/assets/${assetUuid}/work-definitions`), { definition }, requestOptions))
+}
+
+export async function getMaintenanceStatus(assetUuid: string, asOf: string | null = null): Promise<MaintenanceStatusList> {
+	return data(await axios.get<OcsEnvelope<MaintenanceStatusList>>(endpoint(`/assets/${assetUuid}/maintenance-status`), {
+		...requestOptions,
+		params: asOf === null ? undefined : { asOf },
+	}))
 }
 
 export async function getActivities(assetUuid: string): Promise<ActivityList> {
