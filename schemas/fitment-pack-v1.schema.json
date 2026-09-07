@@ -1,0 +1,447 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/src/branch/main/schemas/fitment-pack-v1.schema.json",
+  "title": "Maintenance Tracker fitment pack v1",
+  "description": "Portable data-only equipment/slot/part compatibility matrix.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "vocabularyVersion",
+    "id",
+    "version",
+    "name",
+    "description",
+    "dataLicense",
+    "provenance",
+    "equipment",
+    "slots",
+    "parts",
+    "offers",
+    "fitments"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "vocabularyVersion": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/globalKey"
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "name": {
+      "$ref": "#/$defs/displayName"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "dataLicense": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9.+-]+$"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "equipment": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": {
+        "$ref": "#/$defs/equipment"
+      }
+    },
+    "slots": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2048,
+      "items": {
+        "$ref": "#/$defs/slot"
+      }
+    },
+    "parts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20000,
+      "items": {
+        "$ref": "#/$defs/part"
+      }
+    },
+    "offers": {
+      "type": "array",
+      "maxItems": 50000,
+      "items": {
+        "$ref": "#/$defs/offer"
+      }
+    },
+    "fitments": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "items": {
+        "$ref": "#/$defs/fitment"
+      }
+    }
+  },
+  "$defs": {
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "shortKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "globalKey": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "semver": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "year": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 9999
+    },
+    "httpsUrl": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048,
+      "pattern": "^https://"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "author",
+        "sourceUrl"
+      ],
+      "properties": {
+        "author": {
+          "$ref": "#/$defs/displayName"
+        },
+        "sourceUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "sourceRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      }
+    },
+    "aliasSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manufacturer",
+        "model"
+      ],
+      "properties": {
+        "manufacturer": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/displayName"
+          }
+        },
+        "model": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/displayName"
+          }
+        }
+      }
+    },
+    "qualifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value",
+        "aliases",
+        "match"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/globalKey"
+        },
+        "value": {
+          "$ref": "#/$defs/displayName"
+        },
+        "aliases": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/displayName"
+          }
+        },
+        "match": {
+          "enum": [
+            "required",
+            "optional"
+          ]
+        }
+      }
+    },
+    "modelIdentifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespace",
+        "value"
+      ],
+      "properties": {
+        "namespace": {
+          "$ref": "#/$defs/globalKey"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "equipment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "assetClass",
+        "manufacturer",
+        "model",
+        "aliases",
+        "identifiers",
+        "qualifiers"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/shortKey"
+        },
+        "assetClass": {
+          "enum": [
+            "vehicle",
+            "trailer",
+            "building",
+            "equipment",
+            "appliance",
+            "system",
+            "tool",
+            "medical_device",
+            "location",
+            "other"
+          ]
+        },
+        "manufacturer": {
+          "$ref": "#/$defs/displayName"
+        },
+        "model": {
+          "$ref": "#/$defs/displayName"
+        },
+        "yearFrom": {
+          "$ref": "#/$defs/year"
+        },
+        "yearTo": {
+          "$ref": "#/$defs/year"
+        },
+        "aliases": {
+          "$ref": "#/$defs/aliasSet"
+        },
+        "identifiers": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/modelIdentifier"
+          }
+        },
+        "qualifiers": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/qualifier"
+          }
+        }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "label",
+        "kind",
+        "aliases"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/globalKey"
+        },
+        "label": {
+          "$ref": "#/$defs/displayName"
+        },
+        "kind": {
+          "$ref": "#/$defs/shortKey"
+        },
+        "aliases": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/displayName"
+          }
+        }
+      }
+    },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "manufacturer",
+        "partNumber",
+        "description"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/shortKey"
+        },
+        "manufacturer": {
+          "$ref": "#/$defs/displayName"
+        },
+        "partNumber": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "partKey",
+        "label",
+        "url"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/shortKey"
+        },
+        "partKey": {
+          "$ref": "#/$defs/shortKey"
+        },
+        "label": {
+          "$ref": "#/$defs/displayName"
+        },
+        "sku": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "manufacturer",
+            "retailer_fitment",
+            "community_tested",
+            "other"
+          ]
+        },
+        "referenceUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "fitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "equipmentKey",
+        "slotKey",
+        "partKey",
+        "relation",
+        "verification",
+        "evidence"
+      ],
+      "properties": {
+        "equipmentKey": {
+          "$ref": "#/$defs/shortKey"
+        },
+        "slotKey": {
+          "$ref": "#/$defs/globalKey"
+        },
+        "partKey": {
+          "$ref": "#/$defs/shortKey"
+        },
+        "relation": {
+          "enum": [
+            "oem",
+            "compatible"
+          ]
+        },
+        "verification": {
+          "enum": [
+            "asserted",
+            "verified"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "notes": {
+          "$ref": "#/$defs/notes"
+        }
+      }
+    }
+  }
+}

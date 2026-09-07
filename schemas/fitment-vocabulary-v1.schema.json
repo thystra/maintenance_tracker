@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/src/branch/main/schemas/fitment-vocabulary-v1.schema.json",
+  "title": "Maintenance Tracker fitment vocabulary v1",
+  "description": "Built-in standardized fitment slots and equipment qualifier keys.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "version", "slots", "qualifiers"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/globalKey" },
+    "version": { "$ref": "#/$defs/semver" },
+    "slots": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2048,
+      "items": { "$ref": "#/$defs/slot" }
+    },
+    "qualifiers": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/qualifier" }
+    }
+  },
+  "$defs": {
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "shortKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "globalKey": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "semver": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "kind"],
+      "properties": {
+        "key": { "$ref": "#/$defs/globalKey" },
+        "label": { "$ref": "#/$defs/displayName" },
+        "kind": { "$ref": "#/$defs/shortKey" }
+      }
+    },
+    "qualifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label"],
+      "properties": {
+        "key": { "$ref": "#/$defs/globalKey" },
+        "label": { "$ref": "#/$defs/displayName" }
+      }
+    }
+  }
+}

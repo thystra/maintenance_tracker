@@ -11,6 +11,7 @@
 		"lint": "eslint src scripts eslint.config.mjs stylelint.config.mjs vite.config.ts package.json",
 		"stylelint": "stylelint \"src/**/*.{vue,scss,css}\"",
 		"typecheck": "vue-tsc --noEmit",
+		"validate:fitment": "node scripts/validate-fitment-packs.mjs",
 		"validate:profiles": "node scripts/validate-profiles.mjs",
 		"validate:project": "node scripts/validate-project.mjs",
 		"watch": "npm run clean:build && vite --mode development build --watch"

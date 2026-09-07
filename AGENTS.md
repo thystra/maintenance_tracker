@@ -233,3 +233,19 @@ profile v1, select one instance from a multi-instance source key, fetch arbitrar
 profile/source URLs, or ignore profile-v2 parts before the parts subsystem can
 materialize them. Upgrade handling must be an explicit user-approved diff/merge,
 not a reinstall that overwrites customized records.
+
+## v0.1.10 fitment interoperability invariant
+
+Fitment slots use stable machine keys as interoperability identity; labels and
+aliases are presentation/candidate-matching aids only. Core slot/qualifier keys
+are append-only and extension keys use reverse-DNS-style namespaces. Imported
+equipment targets describe reusable model/configuration classes, never owned-unit
+UUID/VIN/serial/private history. Alias similarity must never silently attach an
+import: Owner/Manager explicitly confirms target/slot mappings and those mappings
+do not rename either side. Canonical JSON is the lossless source/hash authority;
+CSV/ZIP is a bounded, versioned spreadsheet projection with archive traversal and
+formula-injection defenses. Community export is privacy-minimized and excludes
+local UUIDs, private identity/history/cost/preference data. Product URLs remain
+inert metadata; do not introduce arbitrary server-side fetch. Profile-v2 parts
+must eventually materialize through the same canonical parts/fitment services,
+not a profile-only catalog.

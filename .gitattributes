@@ -13,6 +13,7 @@
 /composer.lock export-ignore
 /css export-ignore
 /docs export-ignore
+/fitment/examples export-ignore
 /eslint.config.mjs export-ignore
 /js export-ignore
 /package.json export-ignore

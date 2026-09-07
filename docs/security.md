@@ -57,6 +57,23 @@ data even though the app is not a medical product.
   rather than resolving ambiguously.
 - Part-bearing profiles fail closed until parts have canonical storage; no validated
   profile facts are silently discarded.
+
+### Fitment-pack boundary
+
+- Fitment packs are local, bounded, data-only input. Source/provenance/store URLs
+  are inert HTTPS metadata and are never fetched server-side.
+- Equipment targets are generalized model/configuration descriptors. Community
+  export excludes local UUIDs, VINs/serial numbers, nicknames/private notes,
+  costs, receipts, service history, and local preference state by default.
+- Alias/string similarity only produces a preview candidate. Owner/Manager must
+  explicitly confirm imported equipment-target and nonstandard-slot mappings.
+- ZIP/CSV import uses an exact filename/header allowlist, rejects path traversal,
+  symlinks, duplicates, and excessive expanded content, and applies row limits.
+- Spreadsheet CSV export uses a versioned formula-injection escaping scheme;
+  canonical JSON remains the lossless content/hash authority.
+- Part-number comparison preserves punctuation and applies only conservative
+  Unicode/case/whitespace normalization; the importer must not invent equivalence
+  by stripping arbitrary characters.
 - Installation uses the canonical component/meter/work-definition services inside
   the workspace write transaction, and only bounded identity/hash metadata enters
   the append-only audit event.

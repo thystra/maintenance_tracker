@@ -31,7 +31,7 @@ Profile upgrade diff/merge and remote marketplace discovery remain later work.
 
 Components are individually identified maintainable instances and may be nested. Specifications are structured facts attached to an asset or component, with semantic key, typed JSON value, optional unit/regime, and provenance. Examples include fluid types/capacities, tire sizes/pressures, weights/ratings, filter requirements, and manufacturer cross-reference information.
 
-Part requirements and compatible products are relational. Compatible, preferred, and actually installed/used parts are distinct facts.
+Part requirements and compatible products are relational. Compatible, preferred, and actually installed/used parts are distinct facts. v0.1.10 also treats fitment interoperability as a separate portable dataset: standardized service-position keys identify what a product fits, generalized equipment descriptors identify model/configuration targets, and explicit local mappings bridge imported naming to owned assets without renaming either side. Canonical JSON plus bounded CSV/ZIP import/export is intended to let households and communities build, review, share, and improve compatibility matrices independently of maintenance schedules.
 
 ## Usage, measurements, and maintenance rules
 

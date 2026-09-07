@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "org.argentwolf.maintenance_tracker.fitment.core",
+  "version": "1.0.0",
+  "slots": [
+    { "key": "battery.starting.primary", "label": "Primary starting battery", "kind": "battery" },
+    { "key": "battery.starting.secondary", "label": "Secondary starting battery", "kind": "battery" },
+    { "key": "engine.air_filter", "label": "Engine air filter", "kind": "filter" },
+    { "key": "engine.oil_filter", "label": "Engine oil filter", "kind": "filter" },
+    { "key": "fuel.filter.primary", "label": "Primary fuel filter", "kind": "filter" },
+    { "key": "fuel.filter.secondary", "label": "Secondary fuel filter", "kind": "filter" },
+    { "key": "hvac.cabin_air_filter", "label": "Cabin air filter", "kind": "filter" },
+    { "key": "transmission.filter", "label": "Transmission filter", "kind": "filter" },
+    { "key": "wiper.front.left", "label": "Front left wiper blade", "kind": "wiper_blade" },
+    { "key": "wiper.front.right", "label": "Front right wiper blade", "kind": "wiper_blade" },
+    { "key": "wiper.rear", "label": "Rear wiper blade", "kind": "wiper_blade" }
+  ],
+  "qualifiers": [
+    { "key": "axle", "label": "Axle" },
+    { "key": "body_style", "label": "Body style" },
+    { "key": "drivetrain", "label": "Drivetrain" },
+    { "key": "engine", "label": "Engine" },
+    { "key": "market", "label": "Market" },
+    { "key": "transmission", "label": "Transmission" },
+    { "key": "trim", "label": "Trim" },
+    { "key": "wheelbase", "label": "Wheelbase" }
+  ]
+}

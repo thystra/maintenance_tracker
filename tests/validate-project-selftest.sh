@@ -12,7 +12,7 @@ trap cleanup EXIT
 
 fixture_paths=(
 	.gitattributes .nextcloudignore appinfo/info.xml composer.json package.json package-lock.json
-	profiles/generic-car.json schemas/profile-v1.schema.json schemas/profile-v2.schema.json scripts/validate-profiles.mjs lib/AppInfo/Application.php
+	profiles/generic-car.json schemas/profile-v1.schema.json schemas/profile-v2.schema.json schemas/fitment-vocabulary-v1.schema.json schemas/fitment-pack-v1.schema.json scripts/validate-profiles.mjs scripts/validate-fitment-packs.mjs fitment lib/AppInfo/Application.php
 	.forgejo/workflows/ci.yml ci/images/qualified-images.json lib/Capability.php
 	lib/Migration/Version1000Date20260723000000.php
 	lib/Migration/Version1010Date20260902000000.php
@@ -443,5 +443,21 @@ expect_rejected 'profile decimal canonicalization documentation removal' 'Profil
 copy_fixture
 sed -i 's#POST /profiles/validate#POST /profiles/check#' "$tmp/fixture/docs/api.md"
 expect_rejected 'profile validation API documentation removal' 'API documentation must cover the complete v0.1.9 profile catalog/validation/preview/install/read surface.' "$tmp/profile-api-doc.out"
+
+copy_fixture
+sed -i 's/engine.oil_filter/engine.lube_filter/g' "$tmp/fixture/docs/fitment-pack-v1.md"
+expect_rejected 'fitment standardized slot documentation removal' 'Fitment contract must define standardized slot identity and namespaced extensions.' "$tmp/fitment-slot-doc.out"
+
+copy_fixture
+sed -i 's/Conservative matching and explicit mapping/Automatic matching/' "$tmp/fixture/docs/fitment-pack-v1.md"
+expect_rejected 'fitment explicit mapping contract removal' 'Fitment contract must require explicit mapping and preserve both source/local identity.' "$tmp/fitment-mapping-doc.out"
+
+copy_fixture
+sed -i 's/duplicate fitment tuple/duplicate compatibility row/' "$tmp/fixture/scripts/validate-fitment-packs.mjs"
+expect_rejected 'fitment semantic duplicate guard removal' 'Fitment validator must enforce referential uniqueness, evidence, and extension-key rules.' "$tmp/fitment-validator-duplicate.out"
+
+copy_fixture
+sed -i 's/PR #11/PR #99/' "$tmp/fixture/docs/roadmap.md"
+expect_rejected 'v0.1.9 closeout evidence removal' 'Roadmap must close v0.1.9 with PR/feature-CI/merge/main-CI evidence.' "$tmp/v019-closeout.out"
 
 echo 'Project validator self-tests passed.'

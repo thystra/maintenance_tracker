@@ -237,6 +237,36 @@ retains that actor UID in audit history for shared work they already performed.
 Deleting the owner of a personal workspace purges that workspace and its audit
 rows with the rest of the personal data.
 
+## Fitment interoperability
+
+v0.1.10 introduces a design-level separation between maintenance profiles and
+portable part-fitment datasets. Profiles answer what an equipment class contains
+and how it is maintained. A fitment pack answers which product identities fit
+standardized service positions on generalized equipment configurations.
+
+The portable contract is documented in
+[`fitment-pack-v1.md`](fitment-pack-v1.md) and validated by
+[`fitment-pack-v1.schema.json`](../schemas/fitment-pack-v1.schema.json). Core slot
+keys such as `engine.oil_filter` are stable interoperability identifiers; labels
+and aliases are presentation/matching aids. Unknown equipment-specific slots and
+qualifiers use reverse-DNS-style extension namespaces.
+
+Import follows the same source-vs-domain principle established by profile
+installation: retain an immutable normalized source revision and content hash,
+then materialize through canonical parts/fitment services with source bindings.
+Target matching is advisory and reasoned; Owner/Manager explicitly confirms the
+imported equipment-target -> local-asset mapping. No importer rewrites a local
+asset or silently treats an alias as authoritative identity.
+
+Canonical JSON is the lossless export authority. A normalized CSV/ZIP projection
+supports spreadsheet/community authoring with fixed filenames/headers, bounded
+expanded size, path/symlink rejection, and versioned spreadsheet-formula escaping.
+Community export deliberately omits local UUIDs, VIN/serial identity, nicknames,
+private notes, costs, receipts, service history, and local preference state.
+
+Product/store URLs remain inert HTTPS metadata. No server-side arbitrary URL fetch
+is introduced by fitment import, validation, matching, or export.
+
 ## Reports
 
 Reports are deterministic projections over immutable or audited event records.
