@@ -25,6 +25,11 @@ final class AuthorizationCatalog {
 	public const ACTIVITY_READ = 'activity.read';
 	public const ACTIVITY_CREATE = 'activity.create';
 	public const ACTIVITY_MANAGE = 'activity.manage';
+	public const MAINTENANCE_FORECAST_READ = 'maintenance_forecast.read';
+	public const MAINTENANCE_OCCURRENCE_READ = 'maintenance_occurrence.read';
+	public const MAINTENANCE_OCCURRENCE_RECONCILE = 'maintenance_occurrence.reconcile';
+	public const REMINDER_POLICY_READ = 'reminder_policy.read';
+	public const REMINDER_POLICY_MANAGE = 'reminder_policy.manage';
 
 	/**
 	 * Reserved vocabulary is deliberately present before its subsystem exists.
@@ -48,6 +53,11 @@ final class AuthorizationCatalog {
 		self::ACTIVITY_READ => ['implemented' => true, 'write' => false],
 		self::ACTIVITY_CREATE => ['implemented' => true, 'write' => true],
 		self::ACTIVITY_MANAGE => ['implemented' => true, 'write' => true],
+		self::MAINTENANCE_FORECAST_READ => ['implemented' => true, 'write' => false],
+		self::MAINTENANCE_OCCURRENCE_READ => ['implemented' => true, 'write' => false],
+		self::MAINTENANCE_OCCURRENCE_RECONCILE => ['implemented' => true, 'write' => true],
+		self::REMINDER_POLICY_READ => ['implemented' => true, 'write' => false],
+		self::REMINDER_POLICY_MANAGE => ['implemented' => true, 'write' => true],
 
 		'maintenance_definition.*' => ['implemented' => false, 'write' => false],
 		'activity.*' => ['implemented' => false, 'write' => false],
@@ -85,6 +95,11 @@ final class AuthorizationCatalog {
 			self::ACTIVITY_READ,
 			self::ACTIVITY_CREATE,
 			self::ACTIVITY_MANAGE,
+			self::MAINTENANCE_FORECAST_READ,
+			self::MAINTENANCE_OCCURRENCE_READ,
+			self::MAINTENANCE_OCCURRENCE_RECONCILE,
+			self::REMINDER_POLICY_READ,
+			self::REMINDER_POLICY_MANAGE,
 		],
 		'manager' => [
 			self::WORKSPACE_READ,
@@ -101,6 +116,11 @@ final class AuthorizationCatalog {
 			self::ACTIVITY_READ,
 			self::ACTIVITY_CREATE,
 			self::ACTIVITY_MANAGE,
+			self::MAINTENANCE_FORECAST_READ,
+			self::MAINTENANCE_OCCURRENCE_READ,
+			self::MAINTENANCE_OCCURRENCE_RECONCILE,
+			self::REMINDER_POLICY_READ,
+			self::REMINDER_POLICY_MANAGE,
 		],
 		'contributor' => [
 			self::WORKSPACE_READ,
@@ -110,6 +130,9 @@ final class AuthorizationCatalog {
 			self::MAINTENANCE_DEFINITION_READ,
 			self::ACTIVITY_READ,
 			self::ACTIVITY_CREATE,
+			self::MAINTENANCE_FORECAST_READ,
+			self::MAINTENANCE_OCCURRENCE_READ,
+			self::REMINDER_POLICY_READ,
 		],
 		'viewer' => [
 			self::WORKSPACE_READ,
@@ -117,6 +140,9 @@ final class AuthorizationCatalog {
 			self::METER_READ,
 			self::MAINTENANCE_DEFINITION_READ,
 			self::ACTIVITY_READ,
+			self::MAINTENANCE_FORECAST_READ,
+			self::MAINTENANCE_OCCURRENCE_READ,
+			self::REMINDER_POLICY_READ,
 		],
 	];
 

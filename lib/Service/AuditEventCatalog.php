@@ -46,6 +46,8 @@ final class AuditEventCatalog {
 		'activity.created' => ['subjectType' => 'activity', 'level' => 'info', 'detailKeys' => []],
 		'activity.updated' => ['subjectType' => 'activity', 'level' => 'info', 'detailKeys' => []],
 		'activity.archived' => ['subjectType' => 'activity', 'level' => 'info', 'detailKeys' => []],
+		'reminder_policy.created' => ['subjectType' => 'reminder_policy', 'level' => 'info', 'detailKeys' => []],
+		'reminder_policy.updated' => ['subjectType' => 'reminder_policy', 'level' => 'info', 'detailKeys' => []],
 		'workspace.member.added' => [
 			'subjectType' => 'workspace_member',
 			'level' => 'security',

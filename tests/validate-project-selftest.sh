@@ -21,6 +21,7 @@ fixture_paths=(
 	lib/Migration/Version1040Date20260905000000.php
 	lib/Migration/Version1050Date20260905020000.php
 	lib/Migration/Version1060Date20260906090000.php
+	lib/Migration/Version1070Date20260907080000.php
 	lib/Service/UserLifecycleService.php lib/Service/WorkspaceService.php
 	lib/Service/AuthorizationCatalog.php lib/Service/AuditService.php
 	lib/Service/AuditEventCatalog.php lib/Db/AuditMapper.php
@@ -28,6 +29,8 @@ fixture_paths=(
 	lib/Db/WorkDefinition.php lib/Db/WorkScheduleRule.php lib/Service/WorkDefinitionService.php lib/Service/WorkSchedulePolicy.php lib/Db/WorkScheduleRuleMapper.php
 	lib/Db/Activity.php lib/Service/ActivityService.php lib/Db/ActivityItemMapper.php lib/Db/ActivityMeterMapper.php
 	lib/Service/DueStatePolicy.php lib/Service/MaintenanceStatusService.php
+	lib/Service/ForecastPolicy.php lib/Service/MaintenanceForecastService.php lib/Service/ReminderPolicyService.php lib/Service/MaintenanceOccurrenceService.php
+	lib/Db/MaintenanceOccurrenceMapper.php
 	lib/Controller docs AGENTS.md README.md
 )
 
@@ -369,5 +372,22 @@ expect_rejected 'unknown schedule rule reported as upcoming' 'combination:any st
 copy_fixture
 sed -i 's#assets/{assetUuid}/maintenance-status#assets/{assetUuid}/maintenance-summary#' "$tmp/fixture/lib/Controller/MaintenanceStatusController.php"
 expect_rejected 'maintenance status endpoint removal' 'Maintenance status endpoint must remain read-only behind maintenance.definition.read.' "$tmp/maintenance-status-endpoint.out"
+
+
+copy_fixture
+sed -i "/'maintenance-occurrences',/d" "$tmp/fixture/lib/Capability.php"
+expect_rejected 'maintenance occurrence feature removal' 'Capability discovery must advertise implemented feature maintenance-occurrences.' "$tmp/maintenance-occurrence-feature.out"
+
+copy_fixture
+sed -i 's/final class MaintenanceOccurrenceMapper extends QBMapper {/final class MaintenanceOccurrenceMapper extends QBMapper { private string $due_state = "fixture";/' "$tmp/fixture/lib/Db/MaintenanceOccurrenceMapper.php"
+expect_rejected 'persisted occurrence due state' 'Occurrence mapper must not persist derived due dates, due state, or meter thresholds.' "$tmp/occurrence-due-state.out"
+
+copy_fixture
+sed -i 's#maintenance-occurrences/reconcile#maintenance-occurrences/refresh#' "$tmp/fixture/lib/Controller/MaintenanceOccurrenceController.php"
+expect_rejected 'occurrence reconcile endpoint removal' 'Occurrence reconciliation must be an explicit serialized write operation.' "$tmp/occurrence-reconcile-endpoint.out"
+
+copy_fixture
+sed -i "/'maint_occurrences',/d" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+expect_rejected 'occurrence cleanup omission' 'Account deletion purge registry must cover workspace-scoped table maint_occurrences.' "$tmp/occurrence-purge.out"
 
 echo 'Project validator self-tests passed.'

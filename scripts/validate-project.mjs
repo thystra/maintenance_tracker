@@ -53,6 +53,15 @@ const workScheduleRuleMapper = await read('lib/Db/WorkScheduleRuleMapper.php')
 const dueStatePolicy = await read('lib/Service/DueStatePolicy.php')
 const maintenanceStatusService = await read('lib/Service/MaintenanceStatusService.php')
 const maintenanceStatusController = await read('lib/Controller/MaintenanceStatusController.php')
+const migration1070 = await read('lib/Migration/Version1070Date20260907080000.php')
+const forecastPolicy = await read('lib/Service/ForecastPolicy.php')
+const maintenanceForecastService = await read('lib/Service/MaintenanceForecastService.php')
+const maintenanceForecastController = await read('lib/Controller/MaintenanceForecastController.php')
+const reminderPolicyService = await read('lib/Service/ReminderPolicyService.php')
+const reminderPolicyController = await read('lib/Controller/ReminderPolicyController.php')
+const occurrenceMapper = await read('lib/Db/MaintenanceOccurrenceMapper.php')
+const occurrenceService = await read('lib/Service/MaintenanceOccurrenceService.php')
+const occurrenceController = await read('lib/Controller/MaintenanceOccurrenceController.php')
 const capabilities = await read('lib/Capability.php')
 const architecture = await read('docs/architecture.md')
 const domainModel = await read('docs/domain-model.md')
@@ -146,6 +155,9 @@ expect(viewerMatch !== null && viewerMatch[1].includes('MAINTENANCE_DEFINITION_R
 expect(managerMatch !== null && managerMatch[1].includes('ACTIVITY_READ') && managerMatch[1].includes('ACTIVITY_CREATE') && managerMatch[1].includes('ACTIVITY_MANAGE'), 'Manager must explicitly receive activity read/create/manage capabilities.')
 expect(contributorMatch !== null && contributorMatch[1].includes('ACTIVITY_READ') && contributorMatch[1].includes('ACTIVITY_CREATE') && !contributorMatch[1].includes('ACTIVITY_MANAGE'), 'Contributor must read/create but not manage activities.')
 expect(viewerMatch !== null && viewerMatch[1].includes('ACTIVITY_READ') && !viewerMatch[1].includes('ACTIVITY_CREATE') && !viewerMatch[1].includes('ACTIVITY_MANAGE'), 'Viewer must be read-only for activities.')
+expect(managerMatch !== null && managerMatch[1].includes('MAINTENANCE_OCCURRENCE_RECONCILE') && managerMatch[1].includes('REMINDER_POLICY_MANAGE'), 'Manager must be able to reconcile occurrences and manage reminder policy.')
+expect(contributorMatch !== null && contributorMatch[1].includes('MAINTENANCE_FORECAST_READ') && contributorMatch[1].includes('MAINTENANCE_OCCURRENCE_READ') && !contributorMatch[1].includes('MAINTENANCE_OCCURRENCE_RECONCILE') && !contributorMatch[1].includes('REMINDER_POLICY_MANAGE'), 'Contributor must read forecast/occurrences without managing the projection policy.')
+expect(viewerMatch !== null && viewerMatch[1].includes('MAINTENANCE_FORECAST_READ') && viewerMatch[1].includes('MAINTENANCE_OCCURRENCE_READ') && viewerMatch[1].includes('REMINDER_POLICY_READ') && !viewerMatch[1].includes('MAINTENANCE_OCCURRENCE_RECONCILE'), 'Viewer must be read-only for forecast, occurrences, and reminder policy.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -162,7 +174,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -252,13 +264,25 @@ expect(maintenanceStatusService.includes('findEffectivePredecessor') && maintena
 expect(dueStatePolicy.includes("format('t')") && !dueStatePolicy.includes('cal_days_in_month'), 'Calendar due-state arithmetic must clamp month/year boundaries without depending on the optional PHP calendar extension.')
 expect(dueStatePolicy.includes('$fullWeeks = intdiv($interval, $daysPerWeek);'), 'Business-day due-state calculation must skip complete weeks instead of iterating unbounded configured intervals day-by-day.')
 
+// v0.1.8 forecast policy and materialized work queue sit on top of derived due truth.
+expect(migration1070.includes("table: 'maint_reminder_policy'") && migration1070.includes("table: 'maint_occurrences'"), 'v0.1.8 migration must create reminder-policy and maintenance-occurrence tables.')
+expect(migration1070.includes("addUniqueIndex(['workspace_id','definition_id','open_marker']"), 'Occurrence storage must enforce at most one open row per work definition.')
+expect(forecastPolicy.includes("'due_soon'") && forecastPolicy.includes("'calendar_lead'") && forecastPolicy.includes("'meter_lead'"), 'Forecast policy must keep due-soon classification in the policy layer.')
+expect(maintenanceForecastService.includes('MaintenanceStatusService') && maintenanceForecastService.includes('ForecastPolicy'), 'Forecasting must consume the v0.1.7 derived status projection rather than reimplement due truth.')
+expect(maintenanceForecastController.includes('/maintenance-forecast') && maintenanceForecastController.includes('MAINTENANCE_FORECAST_READ'), 'Maintenance forecast endpoint must remain read-only behind maintenance_forecast.read.')
+expect(reminderPolicyService.includes('DEFAULT_CALENDAR_LEAD_DAYS = 14') && reminderPolicyService.includes('DEFAULT_METER_LEAD_PERCENT = 10'), 'Reminder policy must expose explicit reviewed defaults rather than hidden client heuristics.')
+expect(reminderPolicyController.includes('/reminder-policy') && reminderPolicyController.includes('REMINDER_POLICY_MANAGE'), 'Reminder policy must expose an explicit authorized management endpoint.')
+expect(occurrenceController.includes('/maintenance-occurrences/reconcile') && occurrenceController.includes('MAINTENANCE_OCCURRENCE_RECONCILE'), 'Occurrence reconciliation must be an explicit serialized write operation.')
+expect(occurrenceService.includes('No due date, threshold, or due-state value is copied into the occurrence row.'), 'Occurrence materialization must not persist maintenance truth.')
+expect(!occurrenceMapper.includes('due_on') && !occurrenceMapper.includes('due_state') && !occurrenceMapper.includes('canonical_value'), 'Occurrence mapper must not persist derived due dates, due state, or meter thresholds.')
+
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
 }
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -280,6 +304,8 @@ expect(api.includes('/activities') && domainModel.includes('maint_activities') &
 expect(docs.includes('immutable') && docs.includes('activity'), 'Documentation must preserve immutable activity execution-fact semantics.')
 expect(api.includes('/maintenance-status') && docs.includes('baseline_required') && docs.includes('unknown'), 'Documentation must cover the derived maintenance-status projection and incomplete-baseline states.')
 expect(docs.includes('not persisted') || docs.includes('never written') || docs.includes('not stored'), 'Documentation must state that maintenance due state is derived rather than persisted.')
+expect(api.includes('/maintenance-forecast') && api.includes('/maintenance-occurrences') && api.includes('/reminder-policy'), 'API documentation must cover v0.1.8 forecasting, occurrence reconciliation, and reminder policy.')
+expect(docs.includes('due_soon') && docs.includes('one open occurrence'), 'Documentation must describe policy-layer due-soon classification and one-open-occurrence materialization.')
 
 try {
 	await access('.github/workflows/ci.yml')

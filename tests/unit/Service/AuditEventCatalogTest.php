@@ -42,6 +42,8 @@ final class AuditEventCatalogTest extends TestCase {
 			'activity.created',
 			'activity.updated',
 			'activity.archived',
+			'reminder_policy.created',
+			'reminder_policy.updated',
 			'workspace.member.added',
 			'workspace.member.role_changed',
 			'workspace.member.removed',

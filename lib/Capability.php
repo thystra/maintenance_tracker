@@ -39,6 +39,8 @@ final class Capability implements ICapability {
 					'work-definitions-schedules',
 					'activity-ledger',
 					'maintenance-due-state',
+					'maintenance-forecast-policy',
+					'maintenance-occurrences',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

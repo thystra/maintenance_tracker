@@ -126,3 +126,10 @@ Evidence, parts, costs, public report shares, and external mechanic submissions 
 ### Maintenance status projection
 
 The task-oriented UI consumes a derived maintenance-status endpoint rather than maintaining a second mutable due-state model. `baseline_required` is actionable setup work, while `unknown` signals incomplete meter context. Exact remaining days/canonical meter values are returned; notification-specific "due soon" horizons remain a later policy layer.
+
+
+### Work queue and forecast policy
+
+The desktop and future mobile “what needs attention?” surface consumes the materialized occurrence queue, but each row is rendered with the current forecast projection. The queue can therefore be durable and synchronizable without becoming a duplicate due-state database. A policy-layer `due_soon` state uses workspace-configured lead horizons; `baseline_required`/`setup_required` and `unknown`/`blocked` remain setup/data-quality work rather than maintenance occurrences.
+
+The first policy supports calendar lead days and a meter lead percentage so it works across distance, runtime, and usage-count schedules without embedding display-unit-specific thresholds. Later notification channels may add delivery preferences while continuing to consume this same forecast contract.

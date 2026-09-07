@@ -275,3 +275,45 @@ export interface MaintenanceStatusList {
 	asOf: string
 	items: MaintenanceStatusItem[]
 }
+
+export interface ReminderPolicy {
+	calendarLeadDays: number
+	meterLeadPercent: number
+	revision: number
+	source: 'default' | 'workspace'
+}
+export type MaintenanceForecastState = 'inactive' | 'unscheduled' | 'setup_required' | 'not_due' | 'due_soon' | 'due' | 'overdue' | 'blocked'
+export interface MaintenanceForecast {
+	state: MaintenanceForecastState
+	materialize: boolean
+	triggerRulePosition: number | null
+	reason: string | null
+}
+export interface MaintenanceForecastItem extends MaintenanceStatusItem {
+	forecast: MaintenanceForecast
+}
+export interface MaintenanceForecastList {
+	workspace: string
+	assetUuid: string
+	asOf: string
+	policy: ReminderPolicy
+	items: MaintenanceForecastItem[]
+}
+export interface MaintenanceOccurrence {
+	uuid: string
+	definitionUuid: string
+	baselineActivityUuid: string | null
+	open: boolean
+	openedAt: string
+	closedAt: string | null
+	closedReason: string | null
+	revision: number
+	current: MaintenanceForecastItem | null
+}
+export interface MaintenanceOccurrenceList {
+	workspace: string
+	assetUuid: string
+	asOf: string
+	policy: ReminderPolicy
+	items: MaintenanceOccurrence[]
+}

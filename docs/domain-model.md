@@ -256,3 +256,12 @@ Definition states are `inactive`, `unscheduled`, `baseline_required`, `upcoming`
 For `combination: any`, an overdue rule makes the definition overdue; otherwise a due rule makes it due. If no rule is due but any rule is unknown, the aggregate is unknown rather than falsely reporting upcoming. Calendar and business-day rules are evaluated by UTC calendar date. Meter rules use the activity's immutable meter snapshot when present, otherwise the effective reading at or before the completion time, then compare against the effective current reading at the requested `asOf` time.
 
 No v0.1.7 migration stores due dates, thresholds, or state. Schedule edits, activity corrections/archives, and reading supersession therefore take effect immediately in the next projection.
+
+
+## Forecast/reminder policy and maintenance occurrences — v0.1.8
+
+`maint_reminder_policy` is workspace configuration, not maintenance truth. Its initial reviewed fields are `calendar_lead_days` and `meter_lead_percent`, with optimistic `revision`. When no row exists, the effective policy is the explicit application default (14 days / 10 percent) and is reported as revision zero.
+
+`maint_occurrences` materializes the actionable work queue. An occurrence references one asset and one work definition and snapshots only the `baseline_activity_uuid` that caused its current maintenance cycle. `open_marker = open` identifies an open queue item; closed rows set the marker to NULL and retain `closed_at` plus a bounded `closed_reason`. The schema enforces one open occurrence per `(workspace, definition)`.
+
+Occurrence rows deliberately contain no `due_on`, due-state field, remaining distance/runtime/count, or meter threshold. Those values are recomputed from schedules, activity history, effective readings, and the forecast policy whenever an occurrence is read. This lets schedule edits, reading supersession, and activity correction immediately change the current projection without rewriting historical queue rows.

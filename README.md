@@ -51,6 +51,7 @@ app directory must be named `maintenance_tracker` so it matches
 - Asset/component meters with immutable distance, runtime, and usage-count readings
 - Work groups and common work definitions with explicit calendar, business-day, and meter schedules
 - Maintenance activity ledger with immutable performed-work items and meter snapshots
+- Configurable maintenance forecasting plus a materialized one-open-occurrence work queue
 - Bounded cursor pagination and account-lifecycle cleanup
 - Change journal foundation for future mobile delta synchronization
 - Versioned, data-only JSON profile schema with a generic starter profile
@@ -60,7 +61,7 @@ app directory must be named `maintenance_tracker` so it matches
 The UI and API are explicitly pre-release. Do not treat the current API as a
 stable third-party contract yet.
 
-Maintenance due state is derived from schedules, completed activities, and effective meter readings; it is not persisted.
+Maintenance due state is derived from schedules, completed activities, and effective meter readings; it is not persisted. Forecast/reminder policy may classify an upcoming item as `due_soon`, while occurrence rows materialize workflow attention without copying due truth into storage.
 
 ## Development
 

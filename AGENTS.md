@@ -216,3 +216,8 @@ Do not begin packaged mobile implementation until the OCS synchronization contra
 ## v0.1.7 due-state invariant
 
 Maintenance due state is derived only. Do not add a mutable due-status table or accept client-supplied status. `baseline_required` means no linked completion exists; `unknown` means the completion exists but one or more required rule inputs cannot be evaluated. `combination: any` must never report `upcoming` while an unevaluable rule could already be due.
+
+
+## v0.1.8 forecast/occurrence invariant
+
+Forecasting is a policy layer over `MaintenanceStatusService`; it must never become a second due-calculation implementation. `due_soon` is configurable attention policy, not maintenance truth. Materialized occurrences are workflow rows only: they may store occurrence identity, the definition identity, the completion-baseline UUID, and lifecycle timestamps/reasons, but they must not store authoritative due dates, due states, remaining values, or meter thresholds. Reconciliation must preserve at most one open occurrence per work definition and must close an occurrence when a later linked completion establishes a new baseline.
