@@ -330,7 +330,99 @@ Business-day rules use `type: business_days`, interval unit `business_day`, and 
 
 Read, update, or archive a definition. Mutations use `expectedRevision`. Component target is immutable; schedule may be replaced explicitly on update.
 
-Future resources include profile installation/imports, due occurrences/projections, evidence, parts/costs, fuel entries, trips, calendar bindings, public report shares, external submissions, TCO reports, and mileage reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any non-`none` schedule policy is scheduled maintenance.
+## Profile installation — v0.1.9
+
+Profile installation accepts the current profile-v2 document shape only. Profile v1
+continues to validate as compatibility input but is never silently mapped into the
+runtime installer. All profile endpoints accept the normal optional `workspace` query
+parameter. Profile/source URLs are provenance metadata only; the server does not fetch
+arbitrary URLs while validating or installing a profile.
+
+`profile.read` is available to Owner, Manager, Contributor, and Viewer.
+`profile.install` is a serialized write capability available only to Owner and
+Manager.
+
+### `GET /profiles`
+
+Lists bundled profile-v2 documents after the same server-side validation used for
+local input. Each item includes profile ID/version/name/category, data license,
+provenance/applicability, canonical SHA-256 `contentHash`, materialization summary,
+`origin: bundled`, `trustState: first_party`, and the normalized `profile` document.
+A profile is first-party only when ID, version, and canonical content hash exactly
+match a bundled revision.
+
+### `POST /profiles/validate`
+
+Validates a client-supplied local profile without changing domain data.
+
+```json
+{
+  "profile": {
+    "schemaVersion": 2,
+    "id": "org.example.vehicle",
+    "version": "1.0.0",
+    "...": "remaining profile-v2 fields"
+  }
+}
+```
+
+A successful response returns `valid: true` and normalized profile metadata including
+its canonical SHA-256 content hash, materialization counts, origin, and trust state.
+Unknown fields, invalid references, component-parent cycles, ambiguous references to
+multi-instance component templates, incompatible meter units, and other bounded
+profile-contract violations are rejected.
+
+### `POST /assets/{assetUuid}/profiles/preview`
+
+Body: `{ "profile": { ... } }`. Preview revalidates the document and reports
+`applicable`, `installable`, `conflicts`, `warnings`, and `materializes` counts without
+writing anything. Existing profile installation/profile metadata, meter/work-group/
+work-definition key collisions, and applicability mismatches are surfaced here.
+Profile-v2 part definitions remain valid profile vocabulary, but a non-empty `parts`
+array makes the v0.1.9 preview non-installable because the v0.1.10 parts subsystem is
+not yet available to preserve those facts losslessly.
+
+### `POST /assets/{assetUuid}/profiles/install`
+
+Owner/Manager-only explicit materialization request:
+
+```json
+{
+  "installationUuid": "124a9d17-3f55-4550-92de-65392ad39d87",
+  "profile": {
+    "schemaVersion": 2,
+    "id": "org.example.vehicle",
+    "version": "1.0.0",
+    "...": "remaining profile-v2 fields"
+  }
+}
+```
+
+`installationUuid` is a client-generated RFC 4122 version-4 UUID. Retrying the same
+UUID for the same asset/profile ID/version/content hash is idempotent and returns the
+same installation. Reusing it for different data is a precondition conflict. v0.1.9
+permits one materialized profile per asset; profile upgrades are a later explicit
+diff/merge workflow rather than an implicit reinstall.
+
+Installation stores an immutable canonical profile-revision snapshot and source
+bindings, then creates ordinary components, meters, work groups, and work definitions
+through their existing domain services. Profile meter `meterKey` references are
+resolved to the actual materialized meter UUID before schedule creation. The asset's
+`profileKey`/`profileVersion` pair is updated only after successful materialization,
+and the serialized transaction records a bounded `profile.installed` audit event.
+Materialized domain records remain user-editable after installation.
+
+### `GET /assets/{assetUuid}/profile-installation`
+
+Returns `{ "installation": null }` when no profile has been materialized. Otherwise
+it returns the installation UUID/timestamp, profile ID/version/content hash,
+origin/trust state, license/provenance, and source bindings (`sourceType`, `sourceKey`,
+`ordinal`, `targetUuid`) to the resulting canonical records.
+
+Future resources include evidence, parts/costs, fuel entries, trips, calendar
+bindings, public report shares, external submissions, TCO reports, and mileage
+reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any
+non-`none` schedule policy is scheduled maintenance.
 
 User/owner IDs are never accepted when they can be derived from authentication.
 

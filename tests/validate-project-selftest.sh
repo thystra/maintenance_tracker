@@ -12,7 +12,7 @@ trap cleanup EXIT
 
 fixture_paths=(
 	.gitattributes .nextcloudignore appinfo/info.xml composer.json package.json package-lock.json
-	profiles/generic-car.json schemas/profile-v1.schema.json schemas/profile-v2.schema.json lib/AppInfo/Application.php
+	profiles/generic-car.json schemas/profile-v1.schema.json schemas/profile-v2.schema.json scripts/validate-profiles.mjs lib/AppInfo/Application.php
 	.forgejo/workflows/ci.yml ci/images/qualified-images.json lib/Capability.php
 	lib/Migration/Version1000Date20260723000000.php
 	lib/Migration/Version1010Date20260902000000.php
@@ -22,6 +22,7 @@ fixture_paths=(
 	lib/Migration/Version1050Date20260905020000.php
 	lib/Migration/Version1060Date20260906090000.php
 	lib/Migration/Version1070Date20260907080000.php
+	lib/Migration/Version1080Date20260907130000.php
 	lib/Service/UserLifecycleService.php lib/Service/WorkspaceService.php
 	lib/Service/AuthorizationCatalog.php lib/Service/AuditService.php
 	lib/Service/AuditEventCatalog.php lib/Db/AuditMapper.php
@@ -31,7 +32,8 @@ fixture_paths=(
 	lib/Service/DueStatePolicy.php lib/Service/MaintenanceStatusService.php
 	lib/Service/ForecastPolicy.php lib/Service/MaintenanceForecastService.php lib/Service/ReminderPolicyService.php lib/Service/MaintenanceOccurrenceService.php
 	lib/Db/MaintenanceOccurrenceMapper.php
-	lib/Controller docs AGENTS.md README.md
+	lib/Service/ProfileValidator.php lib/Service/ProfileCatalog.php lib/Service/ProfileRepository.php lib/Service/ProfileInstallationService.php
+	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 )
 
 copy_fixture() {
@@ -389,5 +391,57 @@ expect_rejected 'occurrence reconcile endpoint removal' 'Occurrence reconciliati
 copy_fixture
 sed -i "/'maint_occurrences',/d" "$tmp/fixture/lib/Service/UserLifecycleService.php"
 expect_rejected 'occurrence cleanup omission' 'Account deletion purge registry must cover workspace-scoped table maint_occurrences.' "$tmp/occurrence-purge.out"
+
+
+copy_fixture
+sed -i "/'profile-installation',/d" "$tmp/fixture/lib/Capability.php"
+expect_rejected 'profile-installation feature removal' 'Capability discovery must advertise implemented feature profile-installation.' "$tmp/profile-feature.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/ProfileValidator.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+old="if ($input['schemaVersion'] !== 2)"
+if old not in s: raise SystemExit('profile-v2 runtime guard marker missing')
+p.write_text(s.replace(old, "if ($input['schemaVersion'] !== 1)", 1))
+PY2
+expect_rejected 'profile-v1 runtime reinterpretation' 'Runtime profile installation must explicitly reject non-v2 documents instead of silently mapping profile v1.' "$tmp/profile-v2-runtime.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/AuthorizationCatalog.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); start=s.index("\t\t'contributor' => ["); end=s.index("\n\t\t],\n\t\t'viewer'", start); block=s[start:end]; needle="\t\t\tself::PROFILE_READ,"
+if needle not in block: raise SystemExit('contributor profile-read marker missing')
+block=block.replace(needle, needle+"\n\t\t\tself::PROFILE_INSTALL,", 1); p.write_text(s[:start]+block+s[end:])
+PY2
+expect_rejected 'Contributor profile installation' 'Contributor must read profiles without installing them.' "$tmp/profile-contributor-install.out"
+
+copy_fixture
+sed -i "/'maint_prof_bind',/d" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+expect_rejected 'profile binding cleanup omission' 'Account deletion purge registry must cover workspace-scoped table maint_prof_bind.' "$tmp/profile-purge.out"
+
+copy_fixture
+sed -i 's#assets/{assetUuid}/profiles/install#assets/{assetUuid}/profiles/apply#' "$tmp/fixture/lib/Controller/ProfileController.php"
+expect_rejected 'profile install endpoint removal' 'Profile controller must expose bundled catalog, validation, preview, and install endpoints.' "$tmp/profile-install-endpoint.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/ProfileValidator.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); marker='$this->positiveDecimal('
+if marker not in s: raise SystemExit('profile decimal canonicalization marker missing')
+p.write_text(s.replace(marker, '$this->rawProfileDecimal(', 1))
+PY2
+expect_rejected 'profile decimal canonicalization removal' 'Profile revision canonicalization must normalize meter-interval decimals and validate them through the canonical meter converter.' "$tmp/profile-decimal-canonicalization.out"
+
+copy_fixture
+sed -i 's/semantically equivalent encodings/representation variants/g' "$tmp/fixture/docs/profile-format.md"
+expect_rejected 'profile decimal canonicalization documentation removal' 'Profile documentation must define representation-stable decimal canonicalization for content hashes.' "$tmp/profile-decimal-doc.out"
+
+copy_fixture
+sed -i 's#POST /profiles/validate#POST /profiles/check#' "$tmp/fixture/docs/api.md"
+expect_rejected 'profile validation API documentation removal' 'API documentation must cover the complete v0.1.9 profile catalog/validation/preview/install/read surface.' "$tmp/profile-api-doc.out"
 
 echo 'Project validator self-tests passed.'

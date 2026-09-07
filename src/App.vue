@@ -9,6 +9,7 @@ import type {
 	Asset,
 	AssetClass,
 	Assignment,
+	BundledProfile,
 	BusinessWeekday,
 	Capabilities,
 	Category,
@@ -18,6 +19,9 @@ import type {
 	MaintenanceStatusItem,
 	Meter,
 	MeterDimension,
+	ProfileDocument,
+	ProfileInstallation,
+	ProfilePreview,
 	Reading,
 	Relationship,
 	RelationshipType,
@@ -52,6 +56,8 @@ import {
 	getMaintenanceOccurrences,
 	getMaintenanceStatus,
 	getMeters,
+	getProfileInstallation,
+	getProfiles,
 	getReadings,
 	getRelationships,
 	getRelationshipTypes,
@@ -59,8 +65,11 @@ import {
 	getSpecifications,
 	getWorkDefinitions,
 	getWorkGroups,
+	installProfile,
+	previewProfile,
 	reconcileMaintenanceOccurrences,
 	updateReminderPolicy,
+	validateProfile,
 } from './services/api.ts'
 
 const assets = ref<Asset[]>([])
@@ -77,6 +86,13 @@ const activities = ref<Record<string, Activity[]>>({})
 const maintenanceStatus = ref<Record<string, MaintenanceStatusItem[]>>({})
 const maintenanceOccurrences = ref<Record<string, MaintenanceOccurrence[]>>({})
 const reminderPolicy = ref<ReminderPolicy | null>(null)
+const profileCatalog = ref<BundledProfile[]>([])
+const profileInstallations = ref<Record<string, ProfileInstallation | null>>({})
+const profilePreviews = ref<Record<string, ProfilePreview | null>>({})
+const profileInstallAttempts = ref<Record<string, { hash: string, uuid: string }>>({})
+const profileDraftText = ref('')
+const selectedProfileHash = ref('')
+const profileValidationMessage = ref('')
 const relationshipTypes = ref<RelationshipType[]>([])
 const relationships = ref<Relationship[]>([])
 const assignments = ref<Assignment[]>([])
@@ -278,7 +294,7 @@ async function load(): Promise<void> {
 	loading.value = true
 	error.value = ''
 	try {
-		const [serverCapabilities, firstPage, categoryList, typeList, relationshipList, assignmentList, policy] = await Promise.all([
+		const [serverCapabilities, firstPage, categoryList, typeList, relationshipList, assignmentList, policy, profiles] = await Promise.all([
 			getCapabilities(),
 			getAssets(),
 			getCategories(),
@@ -286,6 +302,7 @@ async function load(): Promise<void> {
 			getRelationships(),
 			getAssignments(),
 			getReminderPolicy(),
+			getProfiles(),
 		])
 		const allAssets = [...firstPage.items]
 		let nextCursor = firstPage.nextCursor
@@ -300,6 +317,7 @@ async function load(): Promise<void> {
 		relationships.value = relationshipList.items
 		assignments.value = assignmentList.items
 		reminderPolicy.value = policy
+		profileCatalog.value = profiles.items
 		reminderPolicyDraft.calendarLeadDays = policy.calendarLeadDays
 		reminderPolicyDraft.meterLeadPercent = policy.meterLeadPercent
 		assets.value = allAssets.sort((left, right) => left.name.localeCompare(right.name))
@@ -355,7 +373,7 @@ async function toggleAsset(asset: Asset): Promise<void> {
 	}
 	expandedAsset.value = asset.uuid
 	try {
-		const [componentList, specificationList, meterList, workGroupList, workDefinitionList, activityList, statusList, occurrenceList] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid), getActivities(asset.uuid), getMaintenanceStatus(asset.uuid), getMaintenanceOccurrences(asset.uuid)])
+		const [componentList, specificationList, meterList, workGroupList, workDefinitionList, activityList, statusList, occurrenceList, profileInstallation] = await Promise.all([getComponents(asset.uuid), getSpecifications(asset.uuid), getMeters(asset.uuid), getWorkGroups(asset.uuid), getWorkDefinitions(asset.uuid), getActivities(asset.uuid), getMaintenanceStatus(asset.uuid), getMaintenanceOccurrences(asset.uuid), getProfileInstallation(asset.uuid)])
 		components.value[asset.uuid] = componentList.items
 		specifications.value[asset.uuid] = specificationList.items
 		meters.value[asset.uuid] = meterList.items
@@ -364,9 +382,13 @@ async function toggleAsset(asset: Asset): Promise<void> {
 		activities.value[asset.uuid] = activityList.items
 		maintenanceStatus.value[asset.uuid] = statusList.items
 		maintenanceOccurrences.value[asset.uuid] = occurrenceList.items
+		profileInstallations.value[asset.uuid] = profileInstallation.installation
 		await Promise.all(meterList.items.map(async (meter) => {
 			readings.value[meter.uuid] = (await getReadings(meter.uuid)).items
 		}))
+		if (profileDraftText.value === '' && profileCatalog.value[0]) {
+			selectBundledProfile(profileCatalog.value[0].contentHash)
+		}
 		readingDraft.meterUuid = meterList.items[0]?.uuid ?? ''
 		workDefinitionDraft.meterUuid = meterList.items[0]?.uuid ?? ''
 		activityDraft.meterUuid = meterList.items[0]?.uuid ?? ''
@@ -376,6 +398,99 @@ async function toggleAsset(asset: Asset): Promise<void> {
 		syncWorkMeterUnit(asset.uuid)
 	} catch (reason) {
 		error.value = readableError(reason)
+	}
+}
+
+function parseProfileDraft(): ProfileDocument {
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(profileDraftText.value)
+	} catch {
+		throw new Error('Profile JSON is not valid JSON.')
+	}
+	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+		throw new Error('Profile JSON must contain an object at the root.')
+	}
+	return parsed as ProfileDocument
+}
+
+function selectBundledProfile(contentHash: string): void {
+	selectedProfileHash.value = contentHash
+	const selected = profileCatalog.value.find((profile) => profile.contentHash === contentHash)
+	if (selected) {
+		profileDraftText.value = JSON.stringify(selected.profile, null, 2)
+		profileValidationMessage.value = ''
+	}
+}
+
+async function validateProfileDraft(): Promise<void> {
+	saving.value = true
+	error.value = ''
+	profileValidationMessage.value = ''
+	try {
+		const result = await validateProfile(parseProfileDraft())
+		profileValidationMessage.value = `Valid ${result.profile.origin} profile ${result.profile.id} ${result.profile.version} · SHA-256 ${result.profile.contentHash}`
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function previewProfileForAsset(asset: Asset): Promise<void> {
+	saving.value = true
+	error.value = ''
+	try {
+		const preview = await previewProfile(asset.uuid, parseProfileDraft())
+		profilePreviews.value[asset.uuid] = preview
+		const currentAttempt = profileInstallAttempts.value[asset.uuid]
+		if (!currentAttempt || currentAttempt.hash !== preview.profile.contentHash) {
+			profileInstallAttempts.value[asset.uuid] = { hash: preview.profile.contentHash, uuid: crypto.randomUUID() }
+		}
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
+	}
+}
+
+async function installProfileForAsset(asset: Asset): Promise<void> {
+	let preview = profilePreviews.value[asset.uuid]
+	if (!preview) {
+		await previewProfileForAsset(asset)
+		preview = profilePreviews.value[asset.uuid]
+	}
+	if (!preview?.installable) {
+		return
+	}
+	const attempt = profileInstallAttempts.value[asset.uuid]
+	if (!attempt || attempt.hash !== preview.profile.contentHash) {
+		throw new Error('Profile installation attempt identity is unavailable; preview the profile again.')
+	}
+	saving.value = true
+	error.value = ''
+	try {
+		const installed = await installProfile(asset.uuid, attempt.uuid, parseProfileDraft())
+		profileInstallations.value[asset.uuid] = installed
+		asset.profile = { key: installed.profile.id, version: installed.profile.version }
+		const [componentList, meterList, groupList, definitionList, statusList, occurrenceList] = await Promise.all([
+			getComponents(asset.uuid),
+			getMeters(asset.uuid),
+			getWorkGroups(asset.uuid),
+			getWorkDefinitions(asset.uuid),
+			getMaintenanceStatus(asset.uuid),
+			getMaintenanceOccurrences(asset.uuid),
+		])
+		components.value[asset.uuid] = componentList.items
+		meters.value[asset.uuid] = meterList.items
+		workGroups.value[asset.uuid] = groupList.items
+		workDefinitions.value[asset.uuid] = definitionList.items
+		maintenanceStatus.value[asset.uuid] = statusList.items
+		maintenanceOccurrences.value[asset.uuid] = occurrenceList.items
+	} catch (reason) {
+		error.value = readableError(reason)
+	} finally {
+		saving.value = false
 	}
 }
 
@@ -853,6 +968,60 @@ onMounted(load)
 								</button>
 							</div>
 							<div v-if="expandedAsset === asset.uuid" class="asset-details">
+								<section class="profile-section">
+									<h4>Maintenance profile</h4>
+									<div v-if="profileInstallations[asset.uuid]" class="profile-installed">
+										<strong>{{ profileInstallations[asset.uuid]?.profile.id }} {{ profileInstallations[asset.uuid]?.profile.version }}</strong>
+										<span>{{ profileInstallations[asset.uuid]?.profile.origin }} · {{ profileInstallations[asset.uuid]?.profile.trustState }} · {{ profileInstallations[asset.uuid]?.bindings.length }} source bindings</span>
+										<code>{{ profileInstallations[asset.uuid]?.profile.contentHash }}</code>
+									</div>
+									<template v-else>
+										<p class="panel-copy">
+											Profiles are validated server-side, previewed against this asset, then materialized as ordinary editable components, meters, groups, and work definitions.
+										</p>
+										<label><span>Bundled profile</span><select :value="selectedProfileHash" @change="selectBundledProfile(($event.target as HTMLSelectElement).value)">
+											<option value="">Local JSON</option>
+											<option v-for="profile in profileCatalog" :key="profile.contentHash" :value="profile.contentHash">{{ profile.name }} · {{ profile.version }}</option>
+										</select></label>
+										<label><span>Profile JSON</span><textarea v-model="profileDraftText" rows="8" @input="selectedProfileHash = ''; profileValidationMessage = ''" /></label>
+										<div class="button-row">
+											<button
+												class="button--secondary"
+												type="button"
+												:disabled="saving || profileDraftText.trim() === ''"
+												@click="validateProfileDraft">
+												Validate
+											</button>
+											<button
+												class="button--secondary"
+												type="button"
+												:disabled="saving || profileDraftText.trim() === ''"
+												@click="previewProfileForAsset(asset)">
+												Preview
+											</button>
+											<button type="button" :disabled="saving || !(profilePreviews[asset.uuid]?.installable)" @click="installProfileForAsset(asset)">
+												Install profile
+											</button>
+										</div>
+										<p v-if="profileValidationMessage" class="profile-validation">
+											{{ profileValidationMessage }}
+										</p>
+										<div v-if="profilePreviews[asset.uuid]" class="profile-preview">
+											<strong>{{ profilePreviews[asset.uuid]?.installable ? 'Ready to install' : 'Cannot install yet' }}</strong>
+											<span>{{ profilePreviews[asset.uuid]?.materializes.components }} components · {{ profilePreviews[asset.uuid]?.materializes.meters }} meters · {{ profilePreviews[asset.uuid]?.materializes.workDefinitions }} work definitions</span>
+											<ul v-if="profilePreviews[asset.uuid]?.conflicts.length">
+												<li v-for="conflict in profilePreviews[asset.uuid]?.conflicts" :key="conflict">
+													{{ conflict }}
+												</li>
+											</ul>
+											<ul v-if="profilePreviews[asset.uuid]?.warnings.length">
+												<li v-for="warning in profilePreviews[asset.uuid]?.warnings" :key="warning">
+													{{ warning }}
+												</li>
+											</ul>
+										</div>
+									</template>
+								</section>
 								<section>
 									<h4>Components</h4><ul class="compact-list">
 										<li v-for="component in components[asset.uuid] ?? []" :key="component.uuid">
@@ -1222,6 +1391,16 @@ button:disabled { opacity: .55; }
 
 .panel-copy { color: var(--color-text-maxcontrast); }
 
+.profile-section textarea { width: 100%; min-height: 150px; font-family: monospace; }
+
+.profile-installed, .profile-preview { display: grid; gap: 6px; margin: 10px 0; }
+
+.profile-installed code { overflow-wrap: anywhere; color: var(--color-text-maxcontrast); }
+
+.button-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+
+.profile-validation { overflow-wrap: anywhere; color: var(--color-text-maxcontrast); }
+
 .relationship-list li { align-items: baseline; }
 
 .check-field { display: flex; align-items: center; gap: 8px; min-height: 42px; }
@@ -1232,7 +1411,7 @@ button:disabled { opacity: .55; }
 
 .spec-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-.meter-section, .status-section, .occurrence-section, .work-section, .activity-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.profile-section, .meter-section, .status-section, .occurrence-section, .work-section, .activity-section { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--color-border); }
 
 .meter-form { grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, minmax(120px, .7fr)) auto auto; align-items: end; }
 

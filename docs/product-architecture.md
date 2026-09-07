@@ -20,6 +20,13 @@ API sync is one transport, not the data model. Pending work can also be exported
 
 Profiles must not impose fixed cardinality. Two batteries, two OEM fuel filters, and three aftermarket filters are ordinary component instances, not numbered schema fields.
 
+The v0.1.9 desktop profile workflow exposes bundled profiles and pasted local JSON,
+performs server validation, previews applicability/conflicts/materialization counts,
+and requires an explicit install action. Installed provenance/hash remains visible.
+Materialization is a starting configuration, not a locked template: the resulting
+components, meters, groups, and definitions remain ordinary editable records.
+Profile upgrade diff/merge and remote marketplace discovery remain later work.
+
 ## Components and specifications
 
 Components are individually identified maintainable instances and may be nested. Specifications are structured facts attached to an asset or component, with semantic key, typed JSON value, optional unit/regime, and provenance. Examples include fluid types/capacities, tire sizes/pressures, weights/ratings, filter requirements, and manufacturer cross-reference information.

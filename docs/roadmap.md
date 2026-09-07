@@ -58,8 +58,8 @@ Planned sequence:
 5. [x] v0.1.5 common work definitions and explicit scheduling foundation: required `schedule`, `schedule: none`, calendar/business-day/meter policies, profile-v2, authorization/audit/lifecycle integration; qualified in PR #7 with CI #14 and merge CI #15;
 6. [x] v0.1.6 maintenance activity/execution ledger: immutable performed-work and meter snapshots, atomic reading capture, offline idempotency, authorization/audit/lifecycle integration; qualified in PR #8 with CI #16 and merged at `40b663a492f5d06dec57cfac28296f7e34c35a09`;
 7. [x] v0.1.7 derived maintenance due-state projection: calendar/business-day/meter evaluation against completed activity and effective readings, including baseline-required and incomplete-data states; merged in PR #9 at `3f62c78096a6af2ecc35cac81436d8cb15d0dd69` with mainline checks green;
-8. [ ] v0.1.8 occurrence materialization and forecasting/reminder policy using the derived due-state projection; implementation candidate awaiting qualification;
-9. validated local profile installation into real domain records;
+8. [x] v0.1.8 occurrence materialization and forecasting/reminder policy using the derived due-state projection; qualified in PR #10, merged at `383fdbe69c30d38aa66ba6d575787c459aec80d6`, with mainline CI #22 green;
+9. [ ] v0.1.9 validated local profile installation into real domain records, including immutable revision provenance, source bindings, authorization/audit/lifecycle integration, and desktop preview/install workflow; implementation candidate awaiting qualification;
 10. parts, compatible part numbers, store links, and central cost entries;
 11. first-class evidence in Nextcloud Files (photo/video/receipt/invoice/document/other);
 12. Nextcloud Activity, notifications, and writable-calendar projection;

@@ -44,6 +44,7 @@ final class AuditEventCatalogTest extends TestCase {
 			'activity.archived',
 			'reminder_policy.created',
 			'reminder_policy.updated',
+			'profile.installed',
 			'workspace.member.added',
 			'workspace.member.role_changed',
 			'workspace.member.removed',
@@ -65,6 +66,14 @@ final class AuditEventCatalogTest extends TestCase {
 		self::assertSame(
 			['supersedesReadingUuid'],
 			$catalog->definition('reading.corrected')['detailKeys'],
+		);
+	}
+
+	public function testProfileInstallAuditOnlyCarriesBoundedProvenanceIdentity(): void {
+		$catalog = new AuditEventCatalog();
+		self::assertSame(
+			['profileKey', 'profileVersion', 'contentHash'],
+			$catalog->definition('profile.installed')['detailKeys'],
 		);
 	}
 

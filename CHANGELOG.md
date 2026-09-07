@@ -9,6 +9,12 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.9 validated runtime profile-v2 installation for bundled and pasted/local JSON, with server-side preview, applicability/conflict reporting, and desktop management workflow.
+- Immutable workspace profile revision snapshots with canonical SHA-256 identity, origin/trust classification, client installation UUID idempotency, and source-key/ordinal bindings to materialized records.
+- Transactional profile materialization through the existing component, meter, work-group, work-definition, and asset services, including profile `meterKey` resolution to real meter UUIDs.
+- `profile.read` for all workspace roles, Owner/Manager-only `profile.install`, bounded `profile.installed` audit events, and account-lifecycle cleanup of profile provenance tables.
+- Runtime safeguards for multi-instance component ambiguity and component-parent cycles. Profile-v2 part-bearing documents validate but intentionally fail installation until the v0.1.10 parts subsystem can preserve those facts losslessly.
+
 - v0.1.8 configurable maintenance forecast/reminder policy with explicit calendar lead days and meter lead percentage.
 - Read-only maintenance forecast projection adds policy-layer `due_soon`, `not_due`, `setup_required`, and `blocked` states without changing v0.1.7 due truth.
 - Materialized maintenance occurrence work queue with a portable one-open-occurrence-per-definition database invariant and explicit reconciliation.

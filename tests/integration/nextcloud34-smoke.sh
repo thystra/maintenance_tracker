@@ -82,7 +82,7 @@ stage_app() {
 	local target="$staging_root/maintenance_tracker"
 	mkdir -p "$target"
 
-	for path in appinfo lib templates img js css; do
+	for path in appinfo lib templates img js css profiles; do
 		if [ -e "$path" ]; then
 			cp -a "$path" "$target/"
 		fi
@@ -208,6 +208,7 @@ assert_contains "$capabilities" '"meters-readings"' 'capabilities'
 assert_contains "$capabilities" '"work-definitions-schedules"' 'capabilities'
 assert_contains "$capabilities" '"activity-ledger"' 'capabilities'
 assert_contains "$capabilities" '"maintenance-due-state"' 'capabilities'
+assert_contains "$capabilities" '"profile-installation"' 'capabilities'
 
 categories=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -1127,6 +1128,134 @@ collab_audit_denied=$(docker exec "$container" curl --silent --show-error \
 	--header 'Accept: application/json' \
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/audit?workspace=${admin_workspace_uuid}&format=json")
 assert_contains "$collab_audit_denied" '"statuscode":403' 'contributor audit rejection'
+
+# v0.1.9 validated local profile installation into canonical domain records.
+profile_catalog=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/profiles?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$profile_catalog" '"statuscode":200' 'bundled profile catalog'
+assert_contains "$profile_catalog" '"id":"org.argentwolf.maintenance.generic-car"' 'bundled generic-car profile'
+assert_contains "$profile_catalog" '"version":"0.3.0"' 'bundled generic-car profile version'
+assert_contains "$profile_catalog" '"trustState":"first_party"' 'bundled profile trust state'
+
+profile_target_uuid='913f3d34-9d2b-47af-ae37-7fa22e340191'
+profile_target=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"asset\":{\"uuid\":\"${profile_target_uuid}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Profile installation target\"}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$profile_target" '"statuscode":201' 'profile target asset create'
+
+profile_payload=$(docker exec "$container" php -r '$p=json_decode(file_get_contents("/var/www/html/custom_apps/maintenance_tracker/profiles/generic-car.json"),true);$p["id"]="org.argentwolf.maintenance.smoke-local";$p["provenance"]["sourceRevision"]="integration-local";echo json_encode(["profile"=>$p],JSON_UNESCAPED_SLASHES);')
+profile_validate=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$profile_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/profiles/validate?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$profile_validate" '"statuscode":200' 'local profile validate'
+assert_contains "$profile_validate" '"valid":true' 'local profile validation result'
+assert_contains "$profile_validate" '"origin":"local"' 'local profile origin classification'
+assert_contains "$profile_validate" '"components":7' 'local profile materialized component count'
+profile_hash=$(printf '%s' "$profile_validate" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);echo $d["ocs"]["data"]["profile"]["contentHash"]??"";')
+if [[ ! "$profile_hash" =~ ^[0-9a-f]{64}$ ]]; then
+	echo "local profile content hash is not SHA-256: ${profile_hash}" >&2
+	exit 1
+fi
+
+profile_preview=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$profile_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/profiles/preview?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$profile_preview" '"statuscode":200' 'local profile preview'
+assert_contains "$profile_preview" '"applicable":true' 'local profile applicability'
+assert_contains "$profile_preview" '"installable":true' 'local profile installable preview'
+assert_contains "$profile_preview" '"meters":1' 'profile preview meter count'
+assert_contains "$profile_preview" '"workGroups":4' 'profile preview work-group count'
+assert_contains "$profile_preview" '"workDefinitions":6' 'profile preview work-definition count'
+
+profile_installation_uuid='124a9d17-3f55-4550-92de-65392ad39d87'
+profile_install_payload=$(printf '%s' "$profile_payload" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);$d["installationUuid"]="124a9d17-3f55-4550-92de-65392ad39d87";echo json_encode($d,JSON_UNESCAPED_SLASHES);')
+profile_install=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$profile_install_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/profiles/install?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$profile_install" '"statuscode":201' 'local profile install'
+assert_contains "$profile_install" "\"installationUuid\":\"${profile_installation_uuid}\"" 'profile installation UUID'
+assert_contains "$profile_install" '"id":"org.argentwolf.maintenance.smoke-local"' 'installed local profile identity'
+assert_contains "$profile_install" "\"contentHash\":\"${profile_hash}\"" 'installed profile content hash'
+
+profile_install_retry=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$profile_install_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/profiles/install?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$profile_install_retry" '"statuscode":201' 'profile installation idempotent retry'
+assert_contains "$profile_install_retry" "\"installationUuid\":\"${profile_installation_uuid}\"" 'profile installation retry identity'
+
+profile_current=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/profile-installation?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$profile_current" '"statuscode":200' 'profile installation current read'
+assert_contains "$profile_current" '"sourceType":"component"' 'profile component source binding'
+assert_contains "$profile_current" '"sourceType":"meter"' 'profile meter source binding'
+assert_contains "$profile_current" '"sourceType":"work_group"' 'profile work-group source binding'
+assert_contains "$profile_current" '"sourceType":"work_definition"' 'profile work-definition source binding'
+
+profile_components=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/components?workspace=${admin_workspace_uuid}&format=json")
+profile_component_count=$(printf '%s' "$profile_components" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);echo count($d["ocs"]["data"]["items"]??[]);')
+[ "$profile_component_count" = '7' ] || { echo "profile component count expected 7, got ${profile_component_count}" >&2; exit 1; }
+
+profile_meters=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/meters?workspace=${admin_workspace_uuid}&format=json")
+profile_odometer_uuid=$(printf '%s' "$profile_meters" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["key"]??"")==="odometer"){echo $i["uuid"];}}')
+[[ "$profile_odometer_uuid" =~ ^[0-9a-f-]{36}$ ]] || { echo 'profile odometer UUID missing' >&2; exit 1; }
+
+profile_groups=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/work-groups?workspace=${admin_workspace_uuid}&format=json")
+profile_group_count=$(printf '%s' "$profile_groups" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);echo count($d["ocs"]["data"]["items"]??[]);')
+[ "$profile_group_count" = '4' ] || { echo "profile work-group count expected 4, got ${profile_group_count}" >&2; exit 1; }
+
+profile_definitions=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/work-definitions?workspace=${admin_workspace_uuid}&format=json")
+profile_definition_count=$(printf '%s' "$profile_definitions" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);echo count($d["ocs"]["data"]["items"]??[]);')
+[ "$profile_definition_count" = '6' ] || { echo "profile work-definition count expected 6, got ${profile_definition_count}" >&2; exit 1; }
+rotate_meter_uuid=$(printf '%s' "$profile_definitions" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["key"]??"")==="rotate_tires"){foreach(($i["schedule"]["rules"]??[]) as $r){if(($r["type"]??"")==="meter"){echo $r["meterUuid"]??"";}}}}')
+[ "$rotate_meter_uuid" = "$profile_odometer_uuid" ] || { echo 'profile meterKey did not resolve to materialized meter UUID' >&2; exit 1; }
+
+profile_asset=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$profile_asset" '"key":"org.argentwolf.maintenance.smoke-local"' 'asset profile key after materialization'
+assert_contains "$profile_asset" '"version":"0.3.0"' 'asset profile version after materialization'
+
+contributor_profile_read=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/profile-installation?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_profile_read" '"statuscode":200' 'contributor profile installation read'
+assert_contains "$contributor_profile_read" "\"installationUuid\":\"${profile_installation_uuid}\"" 'contributor profile provenance read'
+
+contributor_profile_install_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$profile_install_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${profile_target_uuid}/profiles/install?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_profile_install_denied" '"statuscode":403' 'contributor profile install rejection'
+
+profile_audit=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/audit?workspace=${admin_workspace_uuid}&limit=100&format=json")
+assert_contains "$profile_audit" '"eventType":"profile.installed"' 'profile installation audit event'
+assert_contains "$profile_audit" "\"subjectId\":\"${profile_installation_uuid}\"" 'profile installation audit subject'
+assert_contains "$profile_audit" "\"contentHash\":\"${profile_hash}\"" 'profile installation audit content hash'
 
 member_promoted=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \

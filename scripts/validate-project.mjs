@@ -62,6 +62,13 @@ const reminderPolicyController = await read('lib/Controller/ReminderPolicyContro
 const occurrenceMapper = await read('lib/Db/MaintenanceOccurrenceMapper.php')
 const occurrenceService = await read('lib/Service/MaintenanceOccurrenceService.php')
 const occurrenceController = await read('lib/Controller/MaintenanceOccurrenceController.php')
+const migration1080 = await read('lib/Migration/Version1080Date20260907130000.php')
+const profileValidator = await read('lib/Service/ProfileValidator.php')
+const profileCatalog = await read('lib/Service/ProfileCatalog.php')
+const profileRepository = await read('lib/Service/ProfileRepository.php')
+const profileInstallationService = await read('lib/Service/ProfileInstallationService.php')
+const profileController = await read('lib/Controller/ProfileController.php')
+const validateProfiles = await read('scripts/validate-profiles.mjs')
 const capabilities = await read('lib/Capability.php')
 const architecture = await read('docs/architecture.md')
 const domainModel = await read('docs/domain-model.md')
@@ -69,6 +76,8 @@ const productArchitecture = await read('docs/product-architecture.md')
 const roadmap = await read('docs/roadmap.md')
 const security = await read('docs/security.md')
 const api = await read('docs/api.md')
+const profileFormat = await read('docs/profile-format.md')
+const changelog = await read('CHANGELOG.md')
 const agents = await read('AGENTS.md')
 const readme = await read('README.md')
 
@@ -158,6 +167,9 @@ expect(viewerMatch !== null && viewerMatch[1].includes('ACTIVITY_READ') && !view
 expect(managerMatch !== null && managerMatch[1].includes('MAINTENANCE_OCCURRENCE_RECONCILE') && managerMatch[1].includes('REMINDER_POLICY_MANAGE'), 'Manager must be able to reconcile occurrences and manage reminder policy.')
 expect(contributorMatch !== null && contributorMatch[1].includes('MAINTENANCE_FORECAST_READ') && contributorMatch[1].includes('MAINTENANCE_OCCURRENCE_READ') && !contributorMatch[1].includes('MAINTENANCE_OCCURRENCE_RECONCILE') && !contributorMatch[1].includes('REMINDER_POLICY_MANAGE'), 'Contributor must read forecast/occurrences without managing the projection policy.')
 expect(viewerMatch !== null && viewerMatch[1].includes('MAINTENANCE_FORECAST_READ') && viewerMatch[1].includes('MAINTENANCE_OCCURRENCE_READ') && viewerMatch[1].includes('REMINDER_POLICY_READ') && !viewerMatch[1].includes('MAINTENANCE_OCCURRENCE_RECONCILE'), 'Viewer must be read-only for forecast, occurrences, and reminder policy.')
+expect(managerMatch !== null && managerMatch[1].includes('PROFILE_READ') && managerMatch[1].includes('PROFILE_INSTALL'), 'Manager must explicitly receive profile read/install capabilities.')
+expect(contributorMatch !== null && contributorMatch[1].includes('PROFILE_READ') && !contributorMatch[1].includes('PROFILE_INSTALL'), 'Contributor must read profiles without installing them.')
+expect(viewerMatch !== null && viewerMatch[1].includes('PROFILE_READ') && !viewerMatch[1].includes('PROFILE_INSTALL'), 'Viewer must remain read-only for profiles.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -174,7 +186,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -214,6 +226,7 @@ for (const eventType of [
 ]) {
 	expect(auditEvents.includes(`'${eventType}'`), `Audit event vocabulary must retain ${eventType}.`)
 }
+expect(auditEvents.includes("'profile.installed'") && auditEvents.includes("'profileKey', 'profileVersion', 'contentHash'"), 'Profile installation audit events must retain bounded provenance detail keys.')
 expect(migration1030.includes("table: 'maint_audit'"), 'v0.1.3 migration must create the audit table.')
 expect(migration1030.includes("createNamedParameter('manager'") && migration1030.includes("createNamedParameter('editor'"), 'v0.1.3 migration must persist editor-to-manager role normalization.')
 
@@ -276,13 +289,39 @@ expect(occurrenceController.includes('/maintenance-occurrences/reconcile') && oc
 expect(occurrenceService.includes('No due date, threshold, or due-state value is copied into the occurrence row.'), 'Occurrence materialization must not persist maintenance truth.')
 expect(!occurrenceMapper.includes('due_on') && !occurrenceMapper.includes('due_state') && !occurrenceMapper.includes('canonical_value'), 'Occurrence mapper must not persist derived due dates, due state, or meter thresholds.')
 
+// v0.1.9 validates profile-v2 input and materializes it only through canonical domain services.
+for (const table of ['maint_profiles', 'maint_prof_revs', 'maint_asset_prof', 'maint_prof_bind']) {
+	expect(migration1080.includes(`table: '${table}'`), `v0.1.9 migration must create ${table}.`)
+}
+expect(migration1080.includes("addUniqueIndex(['workspace_id','asset_id']"), 'v0.1.9 must permit at most one materialized profile installation per asset.')
+expect(migration1080.includes("addUniqueIndex(['workspace_id','installation_uuid']"), 'Profile installation UUIDs must be unique per workspace for idempotent retries.')
+expect(profileValidator.includes('MAX_PROFILE_BYTES = 1048576'), 'Runtime profile validation must retain the reviewed 1 MiB encoded-size bound.')
+expect(profileValidator.includes("if ($input['schemaVersion'] !== 2)") && profileValidator.includes('schemaVersion must be 2 for runtime installation'), 'Runtime profile installation must explicitly reject non-v2 documents instead of silently mapping profile v1.')
+expect(profileValidator.includes("hash('sha256', $canonicalJson)"), 'Profile revision identity must use canonical JSON with SHA-256 content hashing.')
+expect(profileValidator.includes('$this->positiveDecimal(') && profileValidator.includes('$this->meterValues->toCanonical('), 'Profile revision canonicalization must normalize meter-interval decimals and validate them through the canonical meter converter.')
+expect(validateProfiles.includes('const displayUnits =') && validateProfiles.includes('const meterIntervalUnits =') && validateProfiles.includes("usage_count: new Set(['use', 'count'])"), 'Repository profile validation must distinguish usage-count display units from accepted schedule interval units.')
+expect(profileCatalog.includes("hash_equals($v['contentHash'], $contentHash)") && profileCatalog.includes("'trustState' => 'first_party'"), 'First-party profile trust must require an exact bundled content-hash match.')
+expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'v0.1.9 profile installation must fail closed for part definitions until canonical parts persistence exists.')
+for (const serviceCall of ['$this->components->create(', '$this->meters->create(', '$this->groups->create(', '$this->definitions->create(', '$this->assets->update(']) {
+	expect(profileInstallationService.includes(serviceCall), `Profile installation must materialize through canonical domain service call ${serviceCall}.`)
+}
+expect(profileInstallationService.includes('runtimeSchedule(') && profileInstallationService.includes("'meterUuid'=>$meterUuids[$r['meterKey']]"), 'Profile meterKey schedule references must resolve to actual materialized meter UUIDs.')
+expect(profileRepository.includes("insert('maint_prof_revs')") && profileRepository.includes("insert('maint_prof_bind')"), 'Profile repository must persist immutable revision snapshots and source bindings.')
+expect(profileController.includes("url: '/api/v1/profiles'") && profileController.includes("url: '/api/v1/profiles/validate'") && profileController.includes("url: '/api/v1/assets/{assetUuid}/profiles/preview'") && profileController.includes("url: '/api/v1/assets/{assetUuid}/profiles/install'"), 'Profile controller must expose bundled catalog, validation, preview, and install endpoints.')
+expect(profileController.includes('AuthorizationCatalog::PROFILE_READ') && profileController.includes('AuthorizationCatalog::PROFILE_INSTALL'), 'Profile API must preserve the read/install capability split.')
+expect(genericProfile.version === '0.3.0', 'Bundled generic-car profile must use the reviewed v0.1.9 profile revision 0.3.0.')
+for (const key of ['inspect_tires', 'rotate_tires', 'inspect_wipers']) {
+	const definition = genericProfile.workDefinitions?.find((item) => item.key === key)
+	expect(definition !== undefined && !Object.hasOwn(definition, 'componentKey'), `Generic ${key} must remain asset-scoped because its source component template is multi-instance.`)
+}
+
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
 }
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -306,6 +345,14 @@ expect(api.includes('/maintenance-status') && docs.includes('baseline_required')
 expect(docs.includes('not persisted') || docs.includes('never written') || docs.includes('not stored'), 'Documentation must state that maintenance due state is derived rather than persisted.')
 expect(api.includes('/maintenance-forecast') && api.includes('/maintenance-occurrences') && api.includes('/reminder-policy'), 'API documentation must cover v0.1.8 forecasting, occurrence reconciliation, and reminder policy.')
 expect(docs.includes('due_soon') && docs.includes('one open occurrence'), 'Documentation must describe policy-layer due-soon classification and one-open-occurrence materialization.')
+expect(api.includes('GET /profiles') && api.includes('POST /profiles/validate') && api.includes('/profiles/preview') && api.includes('/profiles/install') && api.includes('/profile-installation'), 'API documentation must cover the complete v0.1.9 profile catalog/validation/preview/install/read surface.')
+expect(api.includes('profile.read') && api.includes('profile.install') && api.includes('installationUuid'), 'API documentation must describe profile authorization and idempotent installation UUID semantics.')
+expect(profileFormat.includes('canonicalizes the normalized profile') && profileFormat.includes('SHA-256') && architecture.includes('maint_prof_revs') && domainModel.includes('maint_prof_bind'), 'Profile documentation must preserve immutable revision hashing and source-binding provenance.')
+expect(profileFormat.includes('semantically equivalent encodings') && architecture.includes('representation-only numeric differences') && domainModel.includes('Representation-only decimal differences'), 'Profile documentation must define representation-stable decimal canonicalization for content hashes.')
+expect(security.includes('Profile installation boundary') && security.includes('does not fetch') && security.includes('profile.install'), 'Security documentation must describe profile trust, no-fetch, and write-capability boundaries.')
+expect(roadmap.includes('[x] v0.1.8') && roadmap.includes('PR #10') && roadmap.includes('CI #22') && roadmap.includes('v0.1.9 validated local profile installation'), 'Roadmap must close qualified v0.1.8 and identify the v0.1.9 profile-installation tranche.')
+expect(changelog.includes('v0.1.9') && readme.includes('profile-v2 installation'), 'User-facing documentation must advertise the v0.1.9 profile-installation capability.')
+expect(docs.includes('part') && docs.includes('v0.1.10') && docs.includes('fail'), 'Documentation must state that v0.1.9 does not silently discard profile part definitions.')
 
 try {
 	await access('.github/workflows/ci.yml')

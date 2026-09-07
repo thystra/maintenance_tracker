@@ -31,6 +31,12 @@ import type {
 	MaintenanceStatusList,
 	Meter,
 	MeterList,
+	ProfileCatalogList,
+	ProfileDocument,
+	ProfileInstallation,
+	ProfileInstallationEnvelope,
+	ProfilePreview,
+	ProfileValidationResult,
 	Reading,
 	ReadingList,
 	Relationship,
@@ -232,4 +238,24 @@ export async function getReminderPolicy(): Promise<ReminderPolicy> {
 
 export async function updateReminderPolicy(expectedRevision: number, policy: Partial<Pick<ReminderPolicy, 'calendarLeadDays' | 'meterLeadPercent'>>): Promise<ReminderPolicy> {
 	return data(await axios.patch<OcsEnvelope<ReminderPolicy>>(endpoint('/reminder-policy'), { expectedRevision, policy }, requestOptions))
+}
+
+export async function getProfiles(): Promise<ProfileCatalogList> {
+	return data(await axios.get<OcsEnvelope<ProfileCatalogList>>(endpoint('/profiles'), requestOptions))
+}
+
+export async function validateProfile(profile: ProfileDocument): Promise<ProfileValidationResult> {
+	return data(await axios.post<OcsEnvelope<ProfileValidationResult>>(endpoint('/profiles/validate'), { profile }, requestOptions))
+}
+
+export async function getProfileInstallation(assetUuid: string): Promise<ProfileInstallationEnvelope> {
+	return data(await axios.get<OcsEnvelope<ProfileInstallationEnvelope>>(endpoint(`/assets/${assetUuid}/profile-installation`), requestOptions))
+}
+
+export async function previewProfile(assetUuid: string, profile: ProfileDocument): Promise<ProfilePreview> {
+	return data(await axios.post<OcsEnvelope<ProfilePreview>>(endpoint(`/assets/${assetUuid}/profiles/preview`), { profile }, requestOptions))
+}
+
+export async function installProfile(assetUuid: string, installationUuid: string, profile: ProfileDocument): Promise<ProfileInstallation> {
+	return data(await axios.post<OcsEnvelope<ProfileInstallation>>(endpoint(`/assets/${assetUuid}/profiles/install`), { installationUuid, profile }, requestOptions))
 }

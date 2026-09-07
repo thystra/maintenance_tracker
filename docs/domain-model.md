@@ -40,23 +40,39 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
 
 ## Versioned profiles
 
+> Implementation status: v0.1.9 materializes the profile identity/revision/install/binding tables below.
+
 `maint_profiles`
-: Stable profile identity, origin, and trust state.
+: Workspace-scoped stable profile identity plus reviewed origin/trust state. An
+  exact bundled profile revision is `bundled`/`first_party`; otherwise validated
+  user-provided JSON is `local`/`local`.
 
 `maint_prof_revs`
-: Immutable version, schema version, SPDX data license, source, content hash,
-  applicability, and import time.
-
-`maint_prof_parts`
-: Part definitions supplied by a profile revision.
-
-`maint_prof_defs`
-: Future persisted profile work-definition templates. Profile v2 already defines the current `workDefinitions`/`schedule` import vocabulary; profile v1 `maintenancePlans`/`triggers` remains compatibility input requiring explicit mapping.
+: Immutable semantic version, canonical SHA-256 content hash, canonical JSON
+  snapshot, SPDX-style data license, author/source URL, optional source revision,
+  and import time. Reusing an existing profile ID/version with different canonical content is
+  a conflict rather than an in-place rewrite. Representation-only decimal differences
+  are normalized before hashing.
 
 `maint_asset_prof`
-: Which profile revision was materialized into an asset.
+: The profile revision materialized into an asset, with a client-generated
+  installation UUID and installation timestamp. v0.1.9 permits one row per asset;
+  upgrades/diff history are a later schema extension.
 
-Profile installation will create ordinary asset components and work definitions while retaining source keys. Profile upgrades are user-approved diffs. Suppressed or customized records are never overwritten without an explicit choice.
+`maint_prof_bind`
+: Source provenance for materialized records: `source_type`, source key, ordinal,
+  and target UUID. Ordinals distinguish repeated component instances without
+  turning `tire_1`, `tire_2`, etc. into profile schema fields.
+
+Installation creates ordinary asset components, meters, work groups, and work
+definitions while retaining source bindings. It does not maintain shadow copies of
+those mutable domain records. Profile upgrades are user-approved diffs; suppressed
+or customized materialized records are never overwritten silently.
+
+Profile v2 part definitions remain validated input vocabulary, but v0.1.9 rejects
+part-bearing installation because the v0.1.10 parts subsystem has not yet provided
+canonical part records. Future parts tables should retain the same revision/binding
+provenance rather than resurrecting a parallel profile-only maintenance model.
 
 ## Meters and readings
 

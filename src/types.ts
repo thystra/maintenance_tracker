@@ -245,6 +245,52 @@ export interface CreateActivityItem { uuid: string, definitionUuid?: string | nu
 export interface CreateActivityMeter { uuid: string, meterUuid: string, readingUuid?: string, reading?: { uuid: string, value: string | number, unit: string, notes?: string | null } }
 export interface CreateActivity { uuid: string, performedAt: string, summary?: string | null, notes?: string | null, items: CreateActivityItem[], meters?: CreateActivityMeter[] }
 
+export type ProfileDocument = Record<string, unknown>
+export interface ProfileSummary { meters: number, components: number, componentTemplates: number, parts: number, workGroups: number, workDefinitions: number }
+export interface ProfileMetadata {
+	id: string
+	version: string
+	name: string
+	category: string
+	description: string
+	dataLicense: string
+	provenance: { author: string, sourceUrl: string, sourceRevision?: string }
+	applicability: Record<string, unknown>
+	contentHash: string
+	summary: ProfileSummary
+	origin: 'bundled' | 'local'
+	trustState: 'first_party' | 'local'
+}
+export interface BundledProfile extends ProfileMetadata { profile: ProfileDocument }
+export interface ProfileCatalogList { workspace: string, items: BundledProfile[] }
+export interface ProfileValidationResult { valid: true, profile: ProfileMetadata }
+export interface ProfilePreview {
+	assetUuid: string
+	profile: ProfileMetadata
+	applicable: boolean
+	installable: boolean
+	conflicts: string[]
+	warnings: string[]
+	materializes: ProfileSummary
+}
+export interface ProfileBinding { sourceType: 'component' | 'meter' | 'work_group' | 'work_definition', sourceKey: string, ordinal: number, targetUuid: string }
+export interface ProfileInstallation {
+	installationUuid: string
+	assetUuid: string
+	profile: {
+		id: string
+		version: string
+		contentHash: string
+		origin: 'bundled' | 'local'
+		trustState: 'first_party' | 'local'
+		dataLicense: string
+		provenance: { author: string, sourceUrl: string, sourceRevision: string | null }
+	}
+	installedAt: string
+	bindings: ProfileBinding[]
+}
+export interface ProfileInstallationEnvelope { installation: ProfileInstallation | null }
+
 export type MaintenanceDueState = 'inactive' | 'unscheduled' | 'baseline_required' | 'upcoming' | 'due' | 'overdue' | 'unknown'
 export interface MaintenanceStatusRule {
 	position: number

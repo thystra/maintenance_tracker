@@ -35,21 +35,52 @@ Profile v1 predates this model and still represents scheduling as
 format. Importing v1 into the common model requires an explicit versioned mapping;
 v1 data is never silently reinterpreted as profile v2.
 
-## Installation behavior
+## Installation behavior — v0.1.9
 
-Applying a profile:
+Runtime installation accepts **profile v2 only**. Profile v1 remains a separately
+validated compatibility format; converting v1 to v2 requires an explicit future
+mapping and is never implicit. Bundled files and pasted/local JSON pass through
+the same server-side `ProfileValidator`. Source URLs are provenance metadata; the
+server does not fetch a profile from an arbitrary URL.
 
-1. validates schema, size, depth, counts, URLs, and cross-references;
-2. records profile provenance and content hash;
-3. creates one component row per declared quantity;
-4. creates meter definitions and common work definitions from the selected profile revision;
-5. links compatible part alternatives;
-6. marks every created row with the source profile/key;
-7. lets the user review and suppress unwanted components or work definitions.
+Before a write, the desktop/API workflow validates and previews the profile against
+the selected asset. Preview reports applicability, key conflicts, the exact
+materialization counts, and whether the current implementation can install every
+profile fact losslessly. Installation then:
 
-The installer must not assume all assets have the same components. A generic
-vehicle profile therefore avoids a fuel filter by default; a diesel-specific
-profile can add two filter instances, while an EV profile can omit them.
+1. validates the bounded data-only document again;
+2. canonicalizes the normalized profile and records its SHA-256 content identity; meter-interval decimal values are normalized to a minimal decimal string, so semantically equivalent encodings such as `7500`, `7500.0`, and `"7500.000"` have the same profile identity;
+3. snapshots the immutable profile revision and provenance in the workspace;
+4. creates one ordinary component row per declared quantity;
+5. creates ordinary meter, work-group, and common work-definition rows through
+   the same canonical services used by manual entry;
+6. resolves profile `meterKey` references to the UUIDs of the meters actually
+   materialized on that asset;
+7. records source type/key/ordinal -> materialized UUID bindings;
+8. sets the asset's profile key/version only after materialization succeeds; and
+9. records one bounded `profile.installed` audit event.
+
+The whole write is covered by the existing account/workspace transaction and write
+serialization boundary. A client-generated installation UUID makes a retry of the
+same profile/asset operation idempotent. A reused installation UUID with different
+data is a conflict. v0.1.9 allows at most one materialized profile on an asset;
+profile upgrades remain the explicit-diff workflow described below.
+
+Multi-instance component templates are materialized as independent component
+instances. A profile may target a component from a work definition, or use it as
+a component parent, only when that source component has quantity 1; otherwise the
+reference would silently choose one of several instances and is rejected. Parent
+cycles are also invalid. Asset-scoped work such as tire inspection/rotation is the
+appropriate representation when a task applies to a multi-instance set.
+
+Profile v2 already has a parts vocabulary, but the v0.1.9 installer intentionally
+fails closed when `parts` is non-empty. Part facts are not discarded or flattened
+into notes; they become installable when the v0.1.10 parts/cost subsystem provides
+a canonical persistence model.
+
+Materialized components, meters, groups, and work definitions are ordinary domain
+records and remain editable/suppressible by the user. The immutable source snapshot
+and bindings preserve what the profile originally supplied.
 
 Profile upgrades show:
 
@@ -58,7 +89,8 @@ Profile upgrades show:
 - source items removed or deprecated;
 - user-modified and suppressed items that will be preserved.
 
-No upgrade silently overwrites user choices.
+No upgrade silently overwrites user choices. Upgrade diff/merge is not implemented
+in v0.1.9.
 
 ## Profile-v1 compatibility trigger representation
 
