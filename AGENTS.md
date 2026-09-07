@@ -205,3 +205,10 @@ Architecture belongs in architecture/domain documentation, current API behavior
 in `docs/api.md`, and user-visible release history in `CHANGELOG.md`.
 
 Do not begin packaged mobile implementation until the OCS synchronization contract is versioned and tested as required by the roadmap. The mobile direction is Vue offline-first PWA with Capacitor Android/iOS packaging; do not reintroduce a separate Kotlin/Compose/Room architecture without an explicit design decision.
+
+## Activity ledger invariants
+
+- Work definitions are configuration; activities are execution history.
+- Activity `performedAt`, work items, linked identity snapshots, and meter snapshots are immutable once created. Only header summary/notes may be revised; archive/recreate to correct execution facts.
+- Every activity and immutable child uses a client UUID and must remain idempotent for offline retries.
+- Activity-created readings require an explicit unit and `source.type = activity` provenance, and must remain in the same serialized workspace transaction as the activity.

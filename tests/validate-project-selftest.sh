@@ -20,11 +20,13 @@ fixture_paths=(
 	lib/Migration/Version1030Date20260904000000.php
 	lib/Migration/Version1040Date20260905000000.php
 	lib/Migration/Version1050Date20260905020000.php
+	lib/Migration/Version1060Date20260906090000.php
 	lib/Service/UserLifecycleService.php lib/Service/WorkspaceService.php
 	lib/Service/AuthorizationCatalog.php lib/Service/AuditService.php
 	lib/Service/AuditEventCatalog.php lib/Db/AuditMapper.php
-	lib/Db/ReadingMapper.php lib/Service/MeterValueConverter.php lib/Service/MeterService.php
+	lib/Db/ReadingMapper.php lib/Service/ReadingService.php lib/Service/MeterValueConverter.php lib/Service/MeterService.php
 	lib/Db/WorkDefinition.php lib/Db/WorkScheduleRule.php lib/Service/WorkDefinitionService.php lib/Service/WorkSchedulePolicy.php lib/Db/WorkScheduleRuleMapper.php
+	lib/Db/Activity.php lib/Service/ActivityService.php lib/Db/ActivityItemMapper.php lib/Db/ActivityMeterMapper.php
 	lib/Controller docs AGENTS.md README.md
 )
 
@@ -281,5 +283,64 @@ expect_rejected 'work-definition cleanup omission' 'Account deletion purge regis
 copy_fixture
 sed -i "/'work-definitions-schedules',/d" "$tmp/fixture/lib/Capability.php"
 expect_rejected 'work-definition feature removal' 'Capability discovery must advertise implemented feature work-definitions-schedules.' "$tmp/work-definition-feature.out"
+
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/AuthorizationCatalog.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); start=s.index("\t\t'contributor' => ["); end=s.index("\n\t\t],\n\t\t'viewer'", start); block=s[start:end]; needle="\t\t\tself::ACTIVITY_CREATE,"
+if needle not in block: raise SystemExit('contributor activity marker missing')
+block=block.replace(needle, needle+"\n\t\t\tself::ACTIVITY_MANAGE,", 1); p.write_text(s[:start]+block+s[end:])
+PY2
+expect_rejected 'Contributor activity management' 'Contributor must read/create but not manage activities.' "$tmp/contributor-activity-manage.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Db/ActivityItemMapper.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); marker='final class ActivityItemMapper {'; p.write_text(s.replace(marker, marker+" public function mutateForFixture(): void { $this->db->getQueryBuilder()->delete('maint_activity_items'); }",1))
+PY2
+expect_rejected 'mutable activity work items' 'Activity item mapper must remain append/read-only.' "$tmp/activity-item-mutable.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/ActivityService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); s=s.replace("['summary','notes']", "['performedAt','summary','notes']", 1); p.write_text(s)
+PY2
+expect_rejected 'mutable activity execution time' 'Activity updates must not allow performedAt or immutable child facts to be rewritten.' "$tmp/activity-performed-at-mutable.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/ActivityService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); s=s.replace("elseif($rawComponent===null&&$du===null&&$stored->getComponentUuid()!==null)return false;", "", 1); p.write_text(s)
+PY2
+expect_rejected 'activity retry component omission' 'Ad-hoc activity retries must not silently drop component context.' "$tmp/activity-component-retry.out"
+
+copy_fixture
+sed -i "/'maint_activity_items',/d" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+expect_rejected 'activity child cleanup omission' 'Account deletion purge registry must cover workspace-scoped table maint_activity_items.' "$tmp/activity-purge.out"
+
+copy_fixture
+sed -i "/'activity-ledger',/d" "$tmp/fixture/lib/Capability.php"
+expect_rejected 'activity feature removal' 'Capability discovery must advertise implemented feature activity-ledger.' "$tmp/activity-feature.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Db/Activity.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); s=s.replace('protected ?int $performedAt=null;', 'protected int $performedAt=0;', 1).replace('protected ?int $performedAt = null;', 'protected int $performedAt = 0;', 1); p.write_text(s)
+PY2
+expect_rejected 'activity epoch-zero dirty-field regression' 'Activity performedAt must use a null pre-persistence sentinel so Unix epoch zero is written by Nextcloud QBMapper inserts.' "$tmp/activity-performed-at-sentinel.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/ReadingService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); s=s.replace(', bool $allowArchivedMeter = false', '', 1).replace('$this->meters->find($context, $meterUuid, $allowArchivedMeter)', '$this->meters->find($context, $meterUuid)', 1); p.write_text(s)
+PY2
+expect_rejected 'offline activity ingestion without archived-meter reading support' 'Offline activity ingestion must be able to create a reading against a meter retired after field capture without relaxing the standalone reading endpoint.' "$tmp/activity-archived-meter.out"
 
 echo 'Project validator self-tests passed.'

@@ -37,6 +37,7 @@ final class Capability implements ICapability {
 					'append-only-audit',
 					'meters-readings',
 					'work-definitions-schedules',
+					'activity-ledger',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

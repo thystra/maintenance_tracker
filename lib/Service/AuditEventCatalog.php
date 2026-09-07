@@ -43,6 +43,9 @@ final class AuditEventCatalog {
 		'work_definition.created' => ['subjectType' => 'work_definition', 'level' => 'info', 'detailKeys' => []],
 		'work_definition.updated' => ['subjectType' => 'work_definition', 'level' => 'info', 'detailKeys' => []],
 		'work_definition.archived' => ['subjectType' => 'work_definition', 'level' => 'info', 'detailKeys' => []],
+		'activity.created' => ['subjectType' => 'activity', 'level' => 'info', 'detailKeys' => []],
+		'activity.updated' => ['subjectType' => 'activity', 'level' => 'info', 'detailKeys' => []],
+		'activity.archived' => ['subjectType' => 'activity', 'level' => 'info', 'detailKeys' => []],
 		'workspace.member.added' => [
 			'subjectType' => 'workspace_member',
 			'level' => 'security',

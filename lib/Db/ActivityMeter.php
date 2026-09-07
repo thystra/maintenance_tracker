@@ -1,0 +1,7 @@
+<?php
+
+declare(strict_types=1);
+namespace OCA\MaintenanceTracker\Db;
+use OCP\AppFramework\Db\Entity; use OCP\DB\Types;
+/** @method int getWorkspaceId() @method void setWorkspaceId(int $v) @method int getActivityId() @method void setActivityId(int $v) @method string getUuid() @method void setUuid(string $v) @method int getPosition() @method void setPosition(int $v) @method int getMeterId() @method void setMeterId(int $v) @method string getMeterUuid() @method void setMeterUuid(string $v) @method string getMeterName() @method void setMeterName(string $v) @method int getReadingId() @method void setReadingId(int $v) @method string getReadingUuid() @method void setReadingUuid(string $v) @method int getObservedAt() @method void setObservedAt(int $v) @method int getCanonicalValue() @method void setCanonicalValue(int $v) @method string getOriginalValue() @method void setOriginalValue(string $v) @method string getOriginalUnit() @method void setOriginalUnit(string $v) */
+final class ActivityMeter extends Entity { protected int $workspaceId=0,$activityId=0,$position=0,$meterId=0,$readingId=0,$observedAt=0,$canonicalValue=0; protected string $uuid='',$meterUuid='',$meterName='',$readingUuid='',$originalValue='',$originalUnit=''; public function __construct(){foreach(['workspaceId','activityId','position','meterId','readingId','observedAt','canonicalValue'] as $f)$this->addType($f,Types::BIGINT);foreach(['uuid','meterUuid','meterName','readingUuid','originalValue','originalUnit'] as $f)$this->addType($f,Types::STRING);} }

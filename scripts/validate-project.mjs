@@ -36,7 +36,13 @@ const auditEvents = await read('lib/Service/AuditEventCatalog.php')
 const migration1030 = await read('lib/Migration/Version1030Date20260904000000.php')
 const migration1040 = await read('lib/Migration/Version1040Date20260905000000.php')
 const migration1050 = await read('lib/Migration/Version1050Date20260905020000.php')
+const migration1060 = await read('lib/Migration/Version1060Date20260906090000.php')
+const activityEntity = await read('lib/Db/Activity.php')
+const activityService = await read('lib/Service/ActivityService.php')
+const activityItemMapper = await read('lib/Db/ActivityItemMapper.php')
+const activityMeterMapper = await read('lib/Db/ActivityMeterMapper.php')
 const readingMapper = await read('lib/Db/ReadingMapper.php')
+const readingService = await read('lib/Service/ReadingService.php')
 const meterValueConverter = await read('lib/Service/MeterValueConverter.php')
 const meterService = await read('lib/Service/MeterService.php')
 const workDefinitionEntity = await read('lib/Db/WorkDefinition.php')
@@ -134,6 +140,9 @@ expect(viewerMatch !== null && viewerMatch[1].includes('METER_READ') && !viewerM
 expect(managerMatch !== null && managerMatch[1].includes('MAINTENANCE_DEFINITION_READ') && managerMatch[1].includes('MAINTENANCE_DEFINITION_MANAGE'), 'Manager must explicitly receive work-definition read/manage capabilities.')
 expect(contributorMatch !== null && contributorMatch[1].includes('MAINTENANCE_DEFINITION_READ') && !contributorMatch[1].includes('MAINTENANCE_DEFINITION_MANAGE'), 'Contributor must read but not manage work definitions.')
 expect(viewerMatch !== null && viewerMatch[1].includes('MAINTENANCE_DEFINITION_READ') && !viewerMatch[1].includes('MAINTENANCE_DEFINITION_MANAGE'), 'Viewer must read but not manage work definitions.')
+expect(managerMatch !== null && managerMatch[1].includes('ACTIVITY_READ') && managerMatch[1].includes('ACTIVITY_CREATE') && managerMatch[1].includes('ACTIVITY_MANAGE'), 'Manager must explicitly receive activity read/create/manage capabilities.')
+expect(contributorMatch !== null && contributorMatch[1].includes('ACTIVITY_READ') && contributorMatch[1].includes('ACTIVITY_CREATE') && !contributorMatch[1].includes('ACTIVITY_MANAGE'), 'Contributor must read/create but not manage activities.')
+expect(viewerMatch !== null && viewerMatch[1].includes('ACTIVITY_READ') && !viewerMatch[1].includes('ACTIVITY_CREATE') && !viewerMatch[1].includes('ACTIVITY_MANAGE'), 'Viewer must be read-only for activities.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -150,7 +159,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -181,6 +190,9 @@ for (const eventType of [
 	'work_definition.created',
 	'work_definition.updated',
 	'work_definition.archived',
+	'activity.created',
+	'activity.updated',
+	'activity.archived',
 	'workspace.member.added',
 	'workspace.member.role_changed',
 	'workspace.member.removed',
@@ -215,13 +227,26 @@ const profileV2WorkDefinition = profileSchemaV2.$defs?.workDefinition
 expect(profileV2WorkDefinition?.required?.includes('schedule') === true, 'Profile-v2 work definitions must require schedule.')
 expect(profileSchemaV2.$defs?.schedulePolicy?.oneOf?.some((entry) => entry.const === 'none') === true, 'Profile-v2 schedule policy must explicitly support schedule: none.')
 
+expect(migration1060.includes("table: 'maint_activities'") && migration1060.includes("table: 'maint_activity_items'") && migration1060.includes("table: 'maint_activity_meters'"), 'v0.1.6 migration must create activity header, work-item, and meter-snapshot tables.')
+expect(activityEntity.includes('protected ?int $performedAt=null;') || activityEntity.includes('protected ?int $performedAt = null;'), 'Activity performedAt must use a null pre-persistence sentinel so Unix epoch zero is written by Nextcloud QBMapper inserts.')
+expect(migration1060.includes("addColumn('component_name', Types::STRING"), 'Activity work items must persist a component-name snapshot for historical display.')
+expect(activityService.includes('setComponentName($component?->getName())') && activityService.includes("'componentName'=>$r->getComponentName()"), 'Activity work items must capture and expose the component display-name snapshot.')
+expect(readingService.includes('bool $allowArchivedMeter = false') && activityService.includes('$this->readings->create($c,$meter->getUuid(),$payload,true)'), 'Offline activity ingestion must be able to create a reading against a meter retired after field capture without relaxing the standalone reading endpoint.')
+expect(activityService.includes("['uuid','value','unit','notes'],'activity-created reading'"), 'Activity-created reading payloads must reject caller-supplied observation/source overrides and unknown fields.')
+expect(activityService.includes("['summary','notes']") && !activityService.includes("['performedAt','summary','notes']"), 'Activity updates must not allow performedAt or immutable child facts to be rewritten.')
+expect(activityService.includes('elseif($rawComponent===null&&$du===null&&$stored->getComponentUuid()!==null)return false;'), 'Ad-hoc activity retries must not silently drop component context.')
+expect(activityService.includes('activity-created readings require an explicit unit'), 'Activity-created meter readings must require an explicit unit.')
+expect(activityService.includes("source']=['type'=>'activity','reference'=>$a->getUuid()]") || activityService.includes("['type'=>'activity','reference'=>$a->getUuid()]"), 'Activity-created readings must carry activity source provenance.')
+expect(!activityItemMapper.includes('->update(') && !activityItemMapper.includes('->delete('), 'Activity item mapper must remain append/read-only.')
+expect(!activityMeterMapper.includes('->update(') && !activityMeterMapper.includes('->delete('), 'Activity meter snapshot mapper must remain append/read-only.')
+
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
 }
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -239,6 +264,8 @@ expect(api.includes('/meters/{meterUuid}/readings') && api.includes('/readings/{
 expect(roadmap.includes('[x] v0.1.4') && roadmap.includes('CI #13') && roadmap.includes('v0.1.5'), 'Roadmap must record qualified v0.1.4 and the v0.1.5 work-definition tranche.')
 expect(docs.includes('missing') && docs.includes('never') && docs.includes('schedule'), 'Documentation must state that missing schedule is invalid and never implicitly defaulted.')
 expect(api.includes('/work-definitions') && api.includes('/work-groups'), 'API documentation must cover work groups and work definitions.')
+expect(api.includes('/activities') && domainModel.includes('maint_activities') && domainModel.includes('maint_activity_items') && domainModel.includes('maint_activity_meters'), 'Documentation must cover the activity execution ledger.')
+expect(docs.includes('immutable') && docs.includes('activity'), 'Documentation must preserve immutable activity execution-fact semantics.')
 
 try {
 	await access('.github/workflows/ci.yml')

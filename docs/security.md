@@ -127,3 +127,9 @@ for the platform baseline.
 - `schedule: none` is the sole unscheduled marker. Non-`none` policies currently use `combination: any` with bounded calendar, business-day, or meter rules.
 - Meter rules must reference a meter on the same asset and pass that meter dimension's canonical unit conversion. An active referenced meter cannot be archived.
 - Owner/Manager hold `maintenance_definition.manage`; Contributor/Viewer have `maintenance_definition.read` only. Work-group/definition mutations are audited and workspace-serialized.
+
+## Activity-history integrity
+
+Activity execution facts are immutable. Contributors may create and read activities but may not rewrite or archive them; Viewer is read-only; Owner and Manager may correct only descriptive header fields or archive an entry. Work-item and meter-snapshot mappers expose append/read paths only.
+
+The server retains definition/component/meter/reading UUID snapshots and meter values in the activity ledger so later configuration changes cannot rewrite historical claims. Activity-created readings require an explicit unit and activity source provenance. Personal-workspace account deletion purges activity meter snapshots and work items before activity headers; shared-workspace activities remain after an author account is deleted, with audit actor attribution retained.

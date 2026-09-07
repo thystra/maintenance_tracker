@@ -22,6 +22,9 @@ final class AuthorizationCatalog {
 	public const READING_CORRECT = 'reading.correct';
 	public const MAINTENANCE_DEFINITION_READ = 'maintenance_definition.read';
 	public const MAINTENANCE_DEFINITION_MANAGE = 'maintenance_definition.manage';
+	public const ACTIVITY_READ = 'activity.read';
+	public const ACTIVITY_CREATE = 'activity.create';
+	public const ACTIVITY_MANAGE = 'activity.manage';
 
 	/**
 	 * Reserved vocabulary is deliberately present before its subsystem exists.
@@ -42,6 +45,9 @@ final class AuthorizationCatalog {
 		self::READING_CORRECT => ['implemented' => true, 'write' => true],
 		self::MAINTENANCE_DEFINITION_READ => ['implemented' => true, 'write' => false],
 		self::MAINTENANCE_DEFINITION_MANAGE => ['implemented' => true, 'write' => true],
+		self::ACTIVITY_READ => ['implemented' => true, 'write' => false],
+		self::ACTIVITY_CREATE => ['implemented' => true, 'write' => true],
+		self::ACTIVITY_MANAGE => ['implemented' => true, 'write' => true],
 
 		'maintenance_definition.*' => ['implemented' => false, 'write' => false],
 		'activity.*' => ['implemented' => false, 'write' => false],
@@ -76,6 +82,9 @@ final class AuthorizationCatalog {
 			self::READING_CORRECT,
 			self::MAINTENANCE_DEFINITION_READ,
 			self::MAINTENANCE_DEFINITION_MANAGE,
+			self::ACTIVITY_READ,
+			self::ACTIVITY_CREATE,
+			self::ACTIVITY_MANAGE,
 		],
 		'manager' => [
 			self::WORKSPACE_READ,
@@ -89,6 +98,9 @@ final class AuthorizationCatalog {
 			self::READING_CORRECT,
 			self::MAINTENANCE_DEFINITION_READ,
 			self::MAINTENANCE_DEFINITION_MANAGE,
+			self::ACTIVITY_READ,
+			self::ACTIVITY_CREATE,
+			self::ACTIVITY_MANAGE,
 		],
 		'contributor' => [
 			self::WORKSPACE_READ,
@@ -96,12 +108,15 @@ final class AuthorizationCatalog {
 			self::METER_READ,
 			self::READING_CREATE,
 			self::MAINTENANCE_DEFINITION_READ,
+			self::ACTIVITY_READ,
+			self::ACTIVITY_CREATE,
 		],
 		'viewer' => [
 			self::WORKSPACE_READ,
 			self::INVENTORY_READ,
 			self::METER_READ,
 			self::MAINTENANCE_DEFINITION_READ,
+			self::ACTIVITY_READ,
 		],
 	];
 
