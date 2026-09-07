@@ -207,6 +207,7 @@ assert_contains "$capabilities" '"append-only-audit"' 'capabilities'
 assert_contains "$capabilities" '"meters-readings"' 'capabilities'
 assert_contains "$capabilities" '"work-definitions-schedules"' 'capabilities'
 assert_contains "$capabilities" '"activity-ledger"' 'capabilities'
+assert_contains "$capabilities" '"maintenance-due-state"' 'capabilities'
 
 categories=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -576,6 +577,49 @@ business_definition=$(docker exec "$container" curl --silent --show-error \
 assert_contains "$business_definition" '"statuscode":201' 'business-day work definition create'
 assert_contains "$business_definition" '"weekdays":["mon","tue","wed","thu","fri"]' 'business-day work definition weekdays'
 
+
+maintenance_upcoming=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-status?asOf=2026-09-10T12%3A00%3A00Z&format=json')
+assert_contains "$maintenance_upcoming" '"statuscode":200' 'maintenance status upcoming projection'
+oil_status=$(printf '%s' "$maintenance_upcoming" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definition"]["uuid"]??"")==="'"${oil_change_uuid}"'"){echo $i["state"]??"";}}')
+business_status=$(printf '%s' "$maintenance_upcoming" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definition"]["uuid"]??"")==="'"${business_definition_uuid}"'"){echo $i["state"]??"";}}')
+[ "$oil_status" = 'upcoming' ] || { echo "maintenance status expected oil upcoming, got: $oil_status" >&2; exit 1; }
+[ "$business_status" = 'baseline_required' ] || { echo "maintenance status expected business baseline_required, got: $business_status" >&2; exit 1; }
+assert_contains "$maintenance_upcoming" '"lastActivityUuid":"'"${activity_uuid}"'"' 'maintenance status completion baseline'
+
+maintenance_invalid_asof=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-status?asOf=not-a-time&format=json')
+assert_contains "$maintenance_invalid_asof" '"statuscode":400' 'maintenance status invalid asOf'
+
+maintenance_due_reading_uuid='e4444444-4444-4444-8444-444444444444'
+maintenance_due_reading=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"reading":{"uuid":"'"${maintenance_due_reading_uuid}"'","observedAt":"2026-10-01T12:00:00Z","value":"107800","unit":"mi","source":{"type":"manual","reference":"due-state smoke"}}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$maintenance_due_reading" '"statuscode":201' 'maintenance due meter reading create'
+maintenance_due=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-status?asOf=2026-10-01T12%3A00%3A00Z&format=json')
+oil_due_status=$(printf '%s' "$maintenance_due" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definition"]["uuid"]??"")==="'"${oil_change_uuid}"'"){echo $i["state"]??"";}}')
+[ "$oil_due_status" = 'due' ] || { echo "maintenance status expected oil due, got: $oil_due_status" >&2; echo "$maintenance_due" >&2; exit 1; }
+assert_contains "$maintenance_due" '"remainingCanonicalValue":0' 'maintenance meter exact due threshold'
+
+maintenance_overdue_reading_uuid='f4444444-4444-4444-8444-444444444444'
+maintenance_overdue_reading=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data '{"reading":{"uuid":"'"${maintenance_overdue_reading_uuid}"'","observedAt":"2026-10-02T12:00:00Z","value":"107801","unit":"mi","source":{"type":"manual","reference":"due-state smoke"}}}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/meters/${odometer_meter_uuid}/readings?format=json")
+assert_contains "$maintenance_overdue_reading" '"statuscode":201' 'maintenance overdue meter reading create'
+maintenance_overdue=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/b913571d-5405-4a88-bb59-2d670a5f93dc/maintenance-status?asOf=2026-10-02T12%3A00%3A00Z&format=json')
+oil_overdue_status=$(printf '%s' "$maintenance_overdue" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definition"]["uuid"]??"")==="'"${oil_change_uuid}"'"){echo $i["state"]??"";}}')
+[ "$oil_overdue_status" = 'overdue' ] || { echo "maintenance status expected oil overdue, got: $oil_overdue_status" >&2; echo "$maintenance_overdue" >&2; exit 1; }
+
 invalid_meter_schedule=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" --request POST \
 	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
@@ -602,6 +646,13 @@ unscheduled_definitions=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/work-definitions?scheduled=false&format=json')
 assert_contains "$unscheduled_definitions" "\"uuid\":\"${trailer_repair_uuid}\"" 'unscheduled definition filter'
+
+
+trailer_status=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/maintenance-status?asOf=2026-10-02T12%3A00%3A00Z&format=json')
+trailer_repair_status=$(printf '%s' "$trailer_status" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true); foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["definition"]["uuid"]??"")==="'"${trailer_repair_uuid}"'"){echo $i["state"]??"";}}')
+[ "$trailer_repair_status" = 'unscheduled' ] || { echo "maintenance status expected trailer repair unscheduled, got: $trailer_repair_status" >&2; exit 1; }
 
 work_group_archive_rejected=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" --request DELETE \
@@ -892,6 +943,13 @@ contributor_work_definitions=$(docker exec "$container" curl --silent --show-err
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/work-definitions?workspace=${admin_workspace_uuid}&format=json")
 assert_contains "$contributor_work_definitions" '"statuscode":200' 'contributor work-definition read'
 assert_contains "$contributor_work_definitions" "\"uuid\":\"${trailer_repair_uuid}\"" 'contributor work-definition read'
+
+
+contributor_maintenance_status=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/c024682e-6516-4b99-8c6a-3e781b6fa4ed/maintenance-status?workspace=${admin_workspace_uuid}&asOf=2026-10-02T12%3A00%3A00Z&format=json")
+assert_contains "$contributor_maintenance_status" '"statuscode":200' 'contributor maintenance-status read'
 
 
 contributor_activity_uuid='e1111111-1111-4111-8111-111111111111'

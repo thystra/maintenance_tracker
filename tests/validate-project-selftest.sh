@@ -27,6 +27,7 @@ fixture_paths=(
 	lib/Db/ReadingMapper.php lib/Service/ReadingService.php lib/Service/MeterValueConverter.php lib/Service/MeterService.php
 	lib/Db/WorkDefinition.php lib/Db/WorkScheduleRule.php lib/Service/WorkDefinitionService.php lib/Service/WorkSchedulePolicy.php lib/Db/WorkScheduleRuleMapper.php
 	lib/Db/Activity.php lib/Service/ActivityService.php lib/Db/ActivityItemMapper.php lib/Db/ActivityMeterMapper.php
+	lib/Service/DueStatePolicy.php lib/Service/MaintenanceStatusService.php
 	lib/Controller docs AGENTS.md README.md
 )
 
@@ -342,5 +343,31 @@ import sys
 p=Path(sys.argv[1]); s=p.read_text(); s=s.replace(', bool $allowArchivedMeter = false', '', 1).replace('$this->meters->find($context, $meterUuid, $allowArchivedMeter)', '$this->meters->find($context, $meterUuid)', 1); p.write_text(s)
 PY2
 expect_rejected 'offline activity ingestion without archived-meter reading support' 'Offline activity ingestion must be able to create a reading against a meter retired after field capture without relaxing the standalone reading endpoint.' "$tmp/activity-archived-meter.out"
+
+
+copy_fixture
+sed -i "/'maintenance-due-state',/d" "$tmp/fixture/lib/Capability.php"
+expect_rejected 'maintenance due-state feature removal' 'Capability discovery must advertise implemented feature maintenance-due-state.' "$tmp/maintenance-status-feature.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/MaintenanceStatusService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); marker='final class MaintenanceStatusService {'
+p.write_text(s.replace(marker, marker+"\n\tpublic function persistFixture(): void { $this->definitions->update('maint_due_state'); }",1))
+PY2
+expect_rejected 'persisted maintenance due state' 'Maintenance due state must remain derived and must not persist mutable status rows.' "$tmp/maintenance-status-persisted.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/MaintenanceStatusService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); s=s.replace("if (in_array('unknown', $states, true)) {\n\t\t\treturn 'unknown';", "if (in_array('unknown', $states, true)) {\n\t\t\treturn 'upcoming';",1); p.write_text(s)
+PY2
+expect_rejected 'unknown schedule rule reported as upcoming' 'combination:any status aggregation must prioritize overdue/due before unknown and must not falsely report upcoming with incomplete rule data.' "$tmp/maintenance-status-unknown.out"
+
+copy_fixture
+sed -i 's#assets/{assetUuid}/maintenance-status#assets/{assetUuid}/maintenance-summary#' "$tmp/fixture/lib/Controller/MaintenanceStatusController.php"
+expect_rejected 'maintenance status endpoint removal' 'Maintenance status endpoint must remain read-only behind maintenance.definition.read.' "$tmp/maintenance-status-endpoint.out"
 
 echo 'Project validator self-tests passed.'

@@ -122,3 +122,7 @@ Configure the thing and its maintenance model on desktop; record actual work and
 The task-first mobile workflow ultimately submits an activity transaction, not a mutation of a work definition. One activity can contain multiple performed work items and multiple meter snapshots. The initial desktop UI may expose a simpler one-item ticket, but the OCS/domain contract is multi-item from the start so offline mobile bundles do not require a later incompatible schema change.
 
 Evidence, parts, costs, public report shares, and external mechanic submissions attach to this stable activity ledger in later tranches; they are not part of v0.1.6.
+
+### Maintenance status projection
+
+The task-oriented UI consumes a derived maintenance-status endpoint rather than maintaining a second mutable due-state model. `baseline_required` is actionable setup work, while `unknown` signals incomplete meter context. Exact remaining days/canonical meter values are returned; notification-specific "due soon" horizons remain a later policy layer.

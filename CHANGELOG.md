@@ -9,6 +9,11 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.7 derived maintenance due-state projection with `inactive`, `unscheduled`, `baseline_required`, `upcoming`, `due`, `overdue`, and `unknown` states.
+- Calendar intervals use UTC calendar dates with end-of-month/leap-day clamping; configurable business-day schedules count only selected weekdays.
+- Meter schedules derive thresholds from the latest completed linked activity plus effective meter history and preserve `combination: any` semantics without persisting stale status rows.
+- Asset maintenance-status OCS endpoint and desktop status surface expose exact remaining days or canonical meter distance/runtime/count rather than inventing an unconfigured due-soon threshold.
+
 - v0.1.6 maintenance activity/execution ledger with revisioned activity headers, immutable performed-work items, and immutable meter snapshots.
 - Contributor activity creation/read access with Owner/Manager descriptive correction/archive capabilities, plus activity audit and lifecycle cleanup coverage.
 - Atomic activity-created meter readings with explicit units and activity source provenance; offline retries remain idempotent across later work-definition renames.

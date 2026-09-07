@@ -244,3 +244,34 @@ export interface ActivityList { workspace: string, items: Activity[] }
 export interface CreateActivityItem { uuid: string, definitionUuid?: string | null, componentUuid?: string | null, title?: string, kind?: string, notes?: string | null }
 export interface CreateActivityMeter { uuid: string, meterUuid: string, readingUuid?: string, reading?: { uuid: string, value: string | number, unit: string, notes?: string | null } }
 export interface CreateActivity { uuid: string, performedAt: string, summary?: string | null, notes?: string | null, items: CreateActivityItem[], meters?: CreateActivityMeter[] }
+
+export type MaintenanceDueState = 'inactive' | 'unscheduled' | 'baseline_required' | 'upcoming' | 'due' | 'overdue' | 'unknown'
+export interface MaintenanceStatusRule {
+	position: number
+	type: 'calendar' | 'business_days' | 'meter'
+	state: 'upcoming' | 'due' | 'overdue' | 'unknown'
+	reason: string | null
+	interval?: { value: number | string, unit: string, canonicalValue?: number }
+	dueOn?: string
+	remainingDays?: number
+	meter?: { uuid: string, name: string, canonicalUnit: string, displayUnit: string }
+	baselineCanonicalValue?: number
+	current?: { uuid: string, observedAt: string, canonicalValue: number, originalValue: string, originalUnit: string }
+	dueCanonicalValue?: number
+	remainingCanonicalValue?: number
+}
+export interface MaintenanceStatusItem {
+	definition: WorkDefinition
+	state: MaintenanceDueState
+	reason: string | null
+	lastPerformedAt: string | null
+	lastActivityUuid: string | null
+	rules: MaintenanceStatusRule[]
+	triggerRulePosition: number | null
+}
+export interface MaintenanceStatusList {
+	workspace: string
+	assetUuid: string
+	asOf: string
+	items: MaintenanceStatusItem[]
+}

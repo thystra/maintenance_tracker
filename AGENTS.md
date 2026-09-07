@@ -212,3 +212,7 @@ Do not begin packaged mobile implementation until the OCS synchronization contra
 - Activity `performedAt`, work items, linked identity snapshots, and meter snapshots are immutable once created. Only header summary/notes may be revised; archive/recreate to correct execution facts.
 - Every activity and immutable child uses a client UUID and must remain idempotent for offline retries.
 - Activity-created readings require an explicit unit and `source.type = activity` provenance, and must remain in the same serialized workspace transaction as the activity.
+
+## v0.1.7 due-state invariant
+
+Maintenance due state is derived only. Do not add a mutable due-status table or accept client-supplied status. `baseline_required` means no linked completion exists; `unknown` means the completion exists but one or more required rule inputs cannot be evaluated. `combination: any` must never report `upcoming` while an unevaluable rule could already be due.

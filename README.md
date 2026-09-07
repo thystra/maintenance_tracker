@@ -60,6 +60,8 @@ app directory must be named `maintenance_tracker` so it matches
 The UI and API are explicitly pre-release. Do not treat the current API as a
 stable third-party contract yet.
 
+Maintenance due state is derived from schedules, completed activities, and effective meter readings; it is not persisted.
+
 ## Development
 
 Install PHP dependencies:
