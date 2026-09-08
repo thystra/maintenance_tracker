@@ -23,6 +23,7 @@ fixture_paths=(
 	lib/Migration/Version1060Date20260906090000.php
 	lib/Migration/Version1070Date20260907080000.php
 	lib/Migration/Version1080Date20260907130000.php
+	lib/Migration/Version1090Date20260907193000.php
 	lib/Service/UserLifecycleService.php lib/Service/WorkspaceService.php
 	lib/Service/AuthorizationCatalog.php lib/Service/AuditService.php
 	lib/Service/AuditEventCatalog.php lib/Db/AuditMapper.php
@@ -33,6 +34,7 @@ fixture_paths=(
 	lib/Service/ForecastPolicy.php lib/Service/MaintenanceForecastService.php lib/Service/ReminderPolicyService.php lib/Service/MaintenanceOccurrenceService.php
 	lib/Db/MaintenanceOccurrenceMapper.php
 	lib/Service/ProfileValidator.php lib/Service/ProfileCatalog.php lib/Service/ProfileRepository.php lib/Service/ProfileInstallationService.php
+	lib/Service/FitmentPackValidator.php lib/Service/FitmentRepository.php lib/Service/AssetFitmentDescriptorService.php lib/Service/FitmentService.php
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 )
 
@@ -459,5 +461,72 @@ expect_rejected 'fitment semantic duplicate guard removal' 'Fitment validator mu
 copy_fixture
 sed -i 's/PR #11/PR #99/' "$tmp/fixture/docs/roadmap.md"
 expect_rejected 'v0.1.9 closeout evidence removal' 'Roadmap must close v0.1.9 with PR/feature-CI/merge/main-CI evidence.' "$tmp/v019-closeout.out"
+
+
+copy_fixture
+sed -i "/'fitment-packs',/d" "$tmp/fixture/lib/Capability.php"
+expect_rejected 'fitment feature removal' 'Capability discovery must advertise implemented feature fitment-packs.' "$tmp/fitment-feature.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/FitmentPackValidator.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); old="if ($input['schemaVersion'] !== 1)"
+if old not in s: raise SystemExit('fitment v1 runtime marker missing')
+p.write_text(s.replace(old, "if ($input['schemaVersion'] !== 2)", 1))
+PY2
+expect_rejected 'fitment schema reinterpretation' 'Runtime fitment validation must enforce exact schema v1 and the reviewed 8 MiB bound.' "$tmp/fitment-v1-runtime.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/AuthorizationCatalog.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); start=s.index("\t\t'contributor' => ["); end=s.index("\n\t\t],\n\t\t'viewer'", start); block=s[start:end]; needle="\t\t\tself::FITMENT_READ,"
+if needle not in block: raise SystemExit('contributor fitment-read marker missing')
+block=block.replace(needle, needle+"\n\t\t\tself::FITMENT_IMPORT,", 1); p.write_text(s[:start]+block+s[end:])
+PY2
+expect_rejected 'Contributor fitment import' 'Contributor must read fitment data without importing or mapping it.' "$tmp/fitment-contributor-import.out"
+
+copy_fixture
+sed -i "/'maint_fit_bind',/d" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+expect_rejected 'fitment binding cleanup omission' 'Account deletion purge registry must cover workspace-scoped table maint_fit_bind.' "$tmp/fitment-purge.out"
+
+copy_fixture
+sed -i 's#fitment-targets/{targetUuid}/map#fitment-targets/{targetUuid}/attach#' "$tmp/fixture/lib/Controller/FitmentController.php"
+expect_rejected 'fitment map endpoint removal' 'Fitment controller must expose /fitment-targets/{targetUuid}/map.' "$tmp/fitment-map-endpoint.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/FitmentService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); old="in_array($match['state'], ['conflict','insufficient'], true) && !$acceptConflict"
+if old not in s: raise SystemExit('fitment conflict confirmation marker missing')
+p.write_text(s.replace(old, 'false', 1))
+PY2
+expect_rejected 'fitment conflict confirmation removal' 'Conflict/insufficient target matching must require explicit Owner/Manager confirmation.' "$tmp/fitment-conflict-confirm.out"
+
+copy_fixture
+python3 - "$tmp/fixture/scripts/validate-fitment-packs.mjs" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); old="return [...values].sort(byteCompare)"
+if old not in s: raise SystemExit('byte comparator marker missing')
+p.write_text(s.replace(old, "return [...values].sort((a, b) => a.localeCompare(b, 'en'))", 1))
+PY2
+expect_rejected 'locale-sensitive fitment canonical ordering' 'JavaScript fitment canonical ordering must use explicit UTF-8 byte comparison rather than locale-sensitive sorting.' "$tmp/fitment-locale-order.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/FitmentService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); old="throw new RevisionConflictException('This fitment pack revision is already imported under a different import UUID');"
+if old not in s: raise SystemExit('import UUID alias guard missing')
+p.write_text(s.replace(old, "return $this->importToApi($byUuid ?? [], $v['summary']);", 1))
+PY2
+expect_rejected 'fitment revision import UUID aliasing' 'The same fitment revision must not be aliased under a second import UUID.' "$tmp/fitment-import-alias.out"
+
+copy_fixture
+sed -i "s/'length' => 8388608/'length' => 65535/" "$tmp/fixture/lib/Migration/Version1090Date20260907193000.php"
+expect_rejected 'undersized fitment revision JSON storage' 'Fitment revision JSON storage must retain the reviewed 8 MiB bound.' "$tmp/fitment-json-bound.out"
 
 echo 'Project validator self-tests passed.'

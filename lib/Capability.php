@@ -42,6 +42,7 @@ final class Capability implements ICapability {
 					'maintenance-forecast-policy',
 					'maintenance-occurrences',
 					'profile-installation',
+					'fitment-packs',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

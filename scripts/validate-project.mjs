@@ -72,6 +72,12 @@ const profileCatalog = await read('lib/Service/ProfileCatalog.php')
 const profileRepository = await read('lib/Service/ProfileRepository.php')
 const profileInstallationService = await read('lib/Service/ProfileInstallationService.php')
 const profileController = await read('lib/Controller/ProfileController.php')
+const migration1090 = await read('lib/Migration/Version1090Date20260907193000.php')
+const fitmentPackValidator = await read('lib/Service/FitmentPackValidator.php')
+const fitmentRepository = await read('lib/Service/FitmentRepository.php')
+const assetFitmentDescriptorService = await read('lib/Service/AssetFitmentDescriptorService.php')
+const fitmentService = await read('lib/Service/FitmentService.php')
+const fitmentController = await read('lib/Controller/FitmentController.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
 const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
@@ -183,6 +189,9 @@ expect(viewerMatch !== null && viewerMatch[1].includes('MAINTENANCE_FORECAST_REA
 expect(managerMatch !== null && managerMatch[1].includes('PROFILE_READ') && managerMatch[1].includes('PROFILE_INSTALL'), 'Manager must explicitly receive profile read/install capabilities.')
 expect(contributorMatch !== null && contributorMatch[1].includes('PROFILE_READ') && !contributorMatch[1].includes('PROFILE_INSTALL'), 'Contributor must read profiles without installing them.')
 expect(viewerMatch !== null && viewerMatch[1].includes('PROFILE_READ') && !viewerMatch[1].includes('PROFILE_INSTALL'), 'Viewer must remain read-only for profiles.')
+expect(managerMatch !== null && managerMatch[1].includes('FITMENT_READ') && managerMatch[1].includes('FITMENT_IMPORT') && managerMatch[1].includes('FITMENT_MAP'), 'Manager must explicitly receive fitment read/import/map capabilities.')
+expect(contributorMatch !== null && contributorMatch[1].includes('FITMENT_READ') && !contributorMatch[1].includes('FITMENT_IMPORT') && !contributorMatch[1].includes('FITMENT_MAP'), 'Contributor must read fitment data without importing or mapping it.')
+expect(viewerMatch !== null && viewerMatch[1].includes('FITMENT_READ') && !viewerMatch[1].includes('FITMENT_IMPORT') && !viewerMatch[1].includes('FITMENT_MAP'), 'Viewer must remain read-only for fitment data.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -199,7 +208,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -240,6 +249,8 @@ for (const eventType of [
 	expect(auditEvents.includes(`'${eventType}'`), `Audit event vocabulary must retain ${eventType}.`)
 }
 expect(auditEvents.includes("'profile.installed'") && auditEvents.includes("'profileKey', 'profileVersion', 'contentHash'"), 'Profile installation audit events must retain bounded provenance detail keys.')
+expect(auditEvents.includes("'fitment_pack.imported'") && auditEvents.includes("'packKey', 'packVersion', 'contentHash'"), 'Fitment import audit events must retain bounded pack provenance detail keys.')
+expect(auditEvents.includes("'fitment_mapping.created'") && auditEvents.includes("'targetKey', 'matchState'"), 'Fitment mapping audit events must retain bounded target/match detail keys.')
 expect(migration1030.includes("table: 'maint_audit'"), 'v0.1.3 migration must create the audit table.')
 expect(migration1030.includes("createNamedParameter('manager'") && migration1030.includes("createNamedParameter('editor'"), 'v0.1.3 migration must persist editor-to-manager role normalization.')
 
@@ -328,13 +339,38 @@ for (const key of ['inspect_tires', 'rotate_tires', 'inspect_wipers']) {
 	expect(definition !== undefined && !Object.hasOwn(definition, 'componentKey'), `Generic ${key} must remain asset-scoped because its source component template is multi-instance.`)
 }
 
+// v0.1.10 JSON fitment runtime materializes portable compatibility knowledge without silently mapping it to local assets.
+for (const table of ['maint_fit_packs', 'maint_fit_revs', 'maint_fit_imports', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_slots', 'maint_parts', 'maint_offers', 'maint_fitments', 'maint_asset_fit']) {
+	expect(migration1090.includes(`table: '${table}'`), `v0.1.10 fitment migration must create ${table}.`)
+}
+expect(migration1090.includes("addColumn('content_json', Types::TEXT, ['notnull' => true, 'length' => 8388608])"), 'Fitment revision JSON storage must retain the reviewed 8 MiB bound.')
+expect(migration1090.includes("addUniqueIndex(['workspace_id','revision_id']") && migration1090.includes("addUniqueIndex(['workspace_id','import_uuid']"), 'Fitment imports must enforce one imported operation per immutable revision and unique client operation UUIDs.')
+expect(migration1090.includes("addColumn('active_marker', Types::STRING, ['notnull' => false") && migration1090.includes("addUniqueIndex(['workspace_id','target_id','active_marker']"), 'Fitment target mappings must use the nullable-active-marker uniqueness contract for one active mapping per target.')
+expect(fitmentPackValidator.includes('MAX_PACK_BYTES = 8 * 1024 * 1024') && fitmentPackValidator.includes("if ($input['schemaVersion'] !== 1)"), 'Runtime fitment validation must enforce exact schema v1 and the reviewed 8 MiB bound.')
+expect(fitmentPackValidator.includes('partIdentityHash(') && fitmentPackValidator.includes('normalizeIdentity($manufacturer)') && fitmentPackValidator.includes('normalizeIdentity($partNumber)'), 'Canonical part identity must conservatively retain part-number punctuation.')
+expect(fitmentPackValidator.includes("$verification === 'verified' && $evidence === []") && fitmentPackValidator.includes('requires evidence'), 'Verified fitment assertions must require evidence.')
+expect(validateFitmentPacks.includes('function byteCompare(') && validateFitmentPacks.includes('Buffer.compare') && !validateFitmentPacks.includes('localeCompare'), 'JavaScript fitment canonical ordering must use explicit UTF-8 byte comparison rather than locale-sensitive sorting.')
+expect(fitmentService.includes('already imported under a different import UUID') && fitmentService.includes('findImportByRevision('), 'The same fitment revision must not be aliased under a second import UUID.')
+expect(fitmentService.includes('already has an active local-asset mapping under a different mapping UUID') && fitmentService.includes('findActiveMappingForTarget('), 'An active target/asset mapping must not be aliased under a second mapping UUID.')
+expect(fitmentService.includes("in_array($match['state'], ['conflict','insufficient'], true) && !$acceptConflict") && fitmentService.includes('acceptConflict=true'), 'Conflict/insufficient target matching must require explicit Owner/Manager confirmation.')
+expect(assetFitmentDescriptorService.includes("'state' => $state") && assetFitmentDescriptorService.includes("'candidate'") && assetFitmentDescriptorService.includes("'insufficient'"), 'Asset fitment matching must expose reasoned exact/candidate/conflict/insufficient states.')
+expect(assetFitmentDescriptorService.includes("'qualifiers' => []") && !assetFitmentDescriptorService.includes('getSerialNumber()') && !assetFitmentDescriptorService.includes('getNotes()'), 'Local fitment descriptors must exclude private unit identity and notes.')
+for (const route of ['/fitment-packs/validate', '/fitment-packs/preview', '/fitment-packs/import', '/fitment-packs/{importUuid}/export', '/fitment-packs/{importUuid}/targets', '/fitment-targets/{targetUuid}/matches', '/fitment-targets/{targetUuid}/map', '/assets/{assetUuid}/fitments', '/assets/{assetUuid}/fitment-export/community']) {
+	expect(fitmentController.includes(route), `Fitment controller must expose ${route}.`)
+}
+expect(fitmentController.includes('AuthorizationCatalog::FITMENT_READ') && fitmentController.includes('AuthorizationCatalog::FITMENT_IMPORT') && fitmentController.includes('AuthorizationCatalog::FITMENT_MAP'), 'Fitment API must preserve the read/import/map capability split.')
+expect(fitmentRepository.includes("insert('maint_fit_revs')") && fitmentRepository.includes("insert('maint_fit_bind')") && fitmentRepository.includes("insert('maint_fitments')"), 'Fitment repository must persist immutable revision provenance, source bindings, and source-specific fitment assertions.')
+expect(fitmentService.includes("'offers' => []") && fitmentService.includes("'omitted_pending_explicit_selection'"), 'Community fitment export must omit offers until an explicit reviewed offer-selection policy exists.')
+expect(fitmentService.includes('$v = $this->validator->validate($pack)') && fitmentService.includes('communityExport('), 'Community fitment export must be rebuilt through the same runtime validator/canonicalizer.')
+expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'This JSON fitment checkpoint must keep profile-v2 part materialization fail-closed until the canonical profile-parts bridge is implemented.')
+
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
 }
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -379,6 +415,10 @@ expect(security.includes('Fitment-pack boundary') && security.includes('formula-
 expect(architecture.includes('Fitment interoperability') && domainModel.includes('standardized **fitment slot**') && productArchitecture.includes('compatibility matrices'), 'Architecture/domain/product docs must carry the fitment interoperability model.')
 expect(agents.includes('v0.1.10 fitment interoperability invariant') && agents.includes('Core slot/qualifier keys') && agents.includes('are append-only'), 'AGENTS must preserve fitment interoperability invariants.')
 expect(validateFitmentPacks.includes('duplicate fitment tuple') && validateFitmentPacks.includes('verified fitment') && validateFitmentPacks.includes('reverse-DNS-style extension'), 'Fitment validator must enforce referential uniqueness, evidence, and extension-key rules.')
+expect(api.includes('/fitment-packs/validate') && api.includes('/fitment-packs/import') && api.includes('/fitment-targets/{targetUuid}/map') && api.includes('/fitment-export/community'), 'API documentation must cover the implemented v0.1.10 JSON fitment validation/import/mapping/export surface.')
+expect(docs.includes('JSON') && docs.includes('fitment') && docs.includes('CSV/ZIP') && (docs.includes('pending') || docs.includes('not yet implemented')), 'Documentation must distinguish implemented JSON fitment runtime from pending CSV/ZIP runtime support.')
+expect(roadmap.includes('[ ] v0.1.10') || roadmap.includes('10. [ ]'), 'Roadmap must keep v0.1.10 open while CSV/ZIP, profile-part materialization, activity parts, vendors, and costs remain pending.')
+expect(changelog.includes('0.1.10') && readme.includes('fitment'), 'User-facing documentation must describe the v0.1.10 JSON fitment foundation without claiming the whole tranche complete.')
 
 try {
 	await access('.github/workflows/ci.yml')

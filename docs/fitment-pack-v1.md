@@ -20,6 +20,13 @@ real-world fitment claim is
 This document defines the v0.1.10 contract before database materialization is
 implemented. Schema-valid data is not automatically trusted or installed.
 
+## Runtime implementation status
+
+The current v0.1.10 checkpoint implements the bounded JSON validator/canonicalizer, immutable pack revision/import persistence, canonical standardized slots and parts, source offers/fitment assertions, explicit equipment-target-to-local-asset mapping, source JSON export, and privacy-minimized community JSON export. Import and mapping remain separate operations.
+
+The CSV/ZIP interchange defined below remains **pending runtime implementation**. It is retained as the reviewed spreadsheet/community interchange contract, including archive path-traversal and formula-injection protections. Profile-v2 parts also remain fail-closed until a later v0.1.10 checkpoint explicitly materializes them through the canonical part/fitment services.
+
+
 ## Stable slot identity
 
 Human labels are presentation; the interoperable identity is a stable `slotKey`.

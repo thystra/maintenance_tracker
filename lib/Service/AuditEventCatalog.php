@@ -49,6 +49,8 @@ final class AuditEventCatalog {
 		'reminder_policy.created' => ['subjectType' => 'reminder_policy', 'level' => 'info', 'detailKeys' => []],
 		'reminder_policy.updated' => ['subjectType' => 'reminder_policy', 'level' => 'info', 'detailKeys' => []],
 		'profile.installed' => ['subjectType' => 'profile_installation', 'level' => 'info', 'detailKeys' => ['profileKey', 'profileVersion', 'contentHash']],
+		'fitment_pack.imported' => ['subjectType' => 'fitment_pack', 'level' => 'info', 'detailKeys' => ['packKey', 'packVersion', 'contentHash']],
+		'fitment_mapping.created' => ['subjectType' => 'fitment_mapping', 'level' => 'info', 'detailKeys' => ['targetKey', 'matchState']],
 		'workspace.member.added' => [
 			'subjectType' => 'workspace_member',
 			'level' => 'security',

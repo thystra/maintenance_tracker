@@ -140,3 +140,7 @@ The task-oriented UI consumes a derived maintenance-status endpoint rather than 
 The desktop and future mobile “what needs attention?” surface consumes the materialized occurrence queue, but each row is rendered with the current forecast projection. The queue can therefore be durable and synchronizable without becoming a duplicate due-state database. A policy-layer `due_soon` state uses workspace-configured lead horizons; `baseline_required`/`setup_required` and `unknown`/`blocked` remain setup/data-quality work rather than maintenance occurrences.
 
 The first policy supports calendar lead days and a meter lead percentage so it works across distance, runtime, and usage-count schedules without embedding display-unit-specific thresholds. Later notification channels may add delivery preferences while continuing to consume this same forecast contract.
+
+### Fitment compatibility workflow
+
+Desktop management can validate/import a portable JSON compatibility matrix, inspect reasoned target-to-asset match candidates, explicitly confirm a mapping, query standardized service-position parts, and produce a privacy-minimized community JSON export. Local naming does not have to equal a community dataset's naming. CSV/ZIP runtime interchange, profile-to-part materialization, parts-used activity entry, vendor management, and costs remain subsequent v0.1.10 slices.

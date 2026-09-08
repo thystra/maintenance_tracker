@@ -5,6 +5,7 @@
 
 import addFormats from 'ajv-formats'
 import Ajv2020 from 'ajv/dist/2020.js'
+import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { readdir, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -49,8 +50,12 @@ function isNamespacedExtension(key) {
 	return /^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9_-]*){2,}$/u.test(key)
 }
 
+function byteCompare(a, b) {
+	return Buffer.compare(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'))
+}
+
 function sortStrings(values) {
-	return [...values].sort((a, b) => a.localeCompare(b, 'en'))
+	return [...values].sort(byteCompare)
 }
 
 function sortedObject(value) {
@@ -60,7 +65,7 @@ function sortedObject(value) {
 	if (value === null || typeof value !== 'object') {
 		return value
 	}
-	return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedObject(value[key])]))
+	return Object.fromEntries(Object.keys(value).sort(byteCompare).map((key) => [key, sortedObject(value[key])]))
 }
 
 function canonicalPack(pack) {
@@ -68,23 +73,23 @@ function canonicalPack(pack) {
 	for (const equipment of normalized.equipment) {
 		equipment.aliases.manufacturer = sortStrings(equipment.aliases.manufacturer)
 		equipment.aliases.model = sortStrings(equipment.aliases.model)
-		equipment.identifiers.sort((a, b) => `${a.namespace}\u0000${a.value}`.localeCompare(`${b.namespace}\u0000${b.value}`, 'en'))
+		equipment.identifiers.sort((a, b) => byteCompare(`${a.namespace}\u0000${a.value}`, `${b.namespace}\u0000${b.value}`))
 		for (const qualifier of equipment.qualifiers) {
 			qualifier.aliases = sortStrings(qualifier.aliases)
 		}
-		equipment.qualifiers.sort((a, b) => a.key.localeCompare(b.key, 'en'))
+		equipment.qualifiers.sort((a, b) => byteCompare(a.key, b.key))
 	}
-	normalized.equipment.sort((a, b) => a.key.localeCompare(b.key, 'en'))
+	normalized.equipment.sort((a, b) => byteCompare(a.key, b.key))
 	for (const slot of normalized.slots) {
 		slot.aliases = sortStrings(slot.aliases)
 	}
-	normalized.slots.sort((a, b) => a.key.localeCompare(b.key, 'en'))
-	normalized.parts.sort((a, b) => a.key.localeCompare(b.key, 'en'))
-	normalized.offers.sort((a, b) => a.key.localeCompare(b.key, 'en'))
+	normalized.slots.sort((a, b) => byteCompare(a.key, b.key))
+	normalized.parts.sort((a, b) => byteCompare(a.key, b.key))
+	normalized.offers.sort((a, b) => byteCompare(a.key, b.key))
 	for (const fitment of normalized.fitments) {
-		fitment.evidence.sort((a, b) => `${a.kind}\u0000${a.referenceUrl ?? ''}\u0000${a.note ?? ''}`.localeCompare(`${b.kind}\u0000${b.referenceUrl ?? ''}\u0000${b.note ?? ''}`, 'en'))
+		fitment.evidence.sort((a, b) => byteCompare(`${a.kind}\u0000${a.referenceUrl ?? ''}\u0000${a.note ?? ''}`, `${b.kind}\u0000${b.referenceUrl ?? ''}\u0000${b.note ?? ''}`))
 	}
-	normalized.fitments.sort((a, b) => `${a.equipmentKey}\u0000${a.slotKey}\u0000${a.partKey}`.localeCompare(`${b.equipmentKey}\u0000${b.slotKey}\u0000${b.partKey}`, 'en'))
+	normalized.fitments.sort((a, b) => byteCompare(`${a.equipmentKey}\u0000${a.slotKey}\u0000${a.partKey}`, `${b.equipmentKey}\u0000${b.slotKey}\u0000${b.partKey}`))
 	return JSON.stringify(sortedObject(normalized))
 }
 
@@ -120,6 +125,7 @@ function reversedSetOrder(pack) {
 const coreSlots = new Map(vocabulary.slots.map((slot) => [slot.key, slot]))
 const coreQualifiers = new Set(vocabulary.qualifiers.map((qualifier) => qualifier.key))
 const reservedSlotRoots = new Set(vocabulary.slots.map((slot) => slot.key.split('.')[0]))
+const reservedUnitIdentifierSegments = new Set(['vin', 'serial', 'serial_number', 'registration', 'plate', 'license_plate', 'asset_uuid', 'uuid'])
 
 for (const label of ['slot', 'qualifier']) {
 	const items = label === 'slot' ? vocabulary.slots : vocabulary.qualifiers
@@ -163,6 +169,10 @@ function semanticErrors(pack) {
 		for (const identifier of equipment.identifiers) {
 			if (!isReverseDnsNamespace(identifier.namespace)) {
 				errors.push(`equipment ${equipment.key} identifier namespace ${identifier.namespace} must be reverse-DNS-style`)
+			}
+			const segments = identifier.namespace.split('.')
+			if (segments.some((segment) => reservedUnitIdentifierSegments.has(segment))) {
+				errors.push(`equipment ${equipment.key} identifier namespace ${identifier.namespace} looks like unit-specific identity rather than model/configuration identity`)
 			}
 		}
 		for (const identity of duplicateValues(equipment.identifiers.map((item) => `${item.namespace}\u0000${item.value}`))) {

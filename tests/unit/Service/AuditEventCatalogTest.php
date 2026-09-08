@@ -45,6 +45,8 @@ final class AuditEventCatalogTest extends TestCase {
 			'reminder_policy.created',
 			'reminder_policy.updated',
 			'profile.installed',
+			'fitment_pack.imported',
+			'fitment_mapping.created',
 			'workspace.member.added',
 			'workspace.member.role_changed',
 			'workspace.member.removed',
@@ -75,6 +77,13 @@ final class AuditEventCatalogTest extends TestCase {
 			['profileKey', 'profileVersion', 'contentHash'],
 			$catalog->definition('profile.installed')['detailKeys'],
 		);
+	}
+
+
+	public function testFitmentAuditDetailsAreBounded(): void {
+		$catalog = new AuditEventCatalog();
+		self::assertSame(['packKey', 'packVersion', 'contentHash'], $catalog->definition('fitment_pack.imported')['detailKeys']);
+		self::assertSame(['targetKey', 'matchState'], $catalog->definition('fitment_mapping.created')['detailKeys']);
 	}
 
 	public function testMembershipAuditDetailsAreBoundedToRoleMetadata(): void {

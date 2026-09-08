@@ -249,3 +249,7 @@ local UUIDs, private identity/history/cost/preference data. Product URLs remain
 inert metadata; do not introduce arbitrary server-side fetch. Profile-v2 parts
 must eventually materialize through the same canonical parts/fitment services,
 not a profile-only catalog.
+
+### v0.1.10 JSON fitment runtime invariant
+
+Fitment-pack import and local-asset mapping are separate operations. Immutable source revisions and source bindings preserve provenance; standardized slots and canonical parts are ordinary reusable workspace records. `fitment.read` is read-only for all workspace roles; only Owner/Manager may import or map. Never silently map by aliases, overwrite canonical user-editable part/slot data from a new pack, strip punctuation when deciding part identity, fetch imported offer/source URLs server-side, or leak local UUID/name/serial/private operational data into a community export. `conflict`/`insufficient` mapping requires explicit confirmation. The current runtime is JSON-only; do not claim CSV/ZIP, profile-v2 part materialization, activity parts, vendor management, or central costs are implemented until their checkpoints qualify.
