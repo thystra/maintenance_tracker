@@ -142,23 +142,46 @@ parts, costs, notes, evidence, provider, and operating context. The exact table
 split for definitions/activities remains intentionally deferred until its
 vertical slice is implemented.
 
-## Parts and vendors
+## Parts, fitment, and vendors
+
+> v0.1.10 design authority for portable compatibility data is
+> [fitment-pack-v1.md](fitment-pack-v1.md). Table names below remain a planned
+> materialization model until the tranche migration is implemented.
 
 `maint_parts`
-: Manufacturer, part number, description, and optional profile provenance.
+: Workspace-global product identities: manufacturer, part number, description,
+  revision, and provenance. A part is a product/SKU definition, not a physical
+  installed component instance. Manufacturer + part number matching is
+  conservative; punctuation is preserved rather than stripped to force a match.
+
+A standardized **fitment slot** identifies the service position a product fits,
+for example `engine.oil_filter` or `wiper.front.left`. Human labels and imported
+aliases are not interoperability identity. The built-in slot/qualifier vocabulary
+is append-only; equipment-specific extensions use reverse-DNS-style keys.
+
+Portable fitment packs describe generalized equipment targets, slots, parts,
+optional store links, and fitment facts. Imported target descriptors are mapped to
+local assets explicitly. Matching may suggest exact/candidate/conflict states but
+must never rename either side or silently attach a pack based only on similar
+strings. Imported immutable revisions retain canonical JSON/SHA-256 provenance
+and source bindings just as profile installation does.
 
 `maint_part_compat`
-: Compatibility with a profile, asset, or component. This allows equivalent
-  filters from several manufacturers.
+: Planned canonical fitment relationships between a product, standardized slot,
+  and approved local equipment/component/work context. `oem`/`compatible` are
+  source facts; local user preference is separate rather than exported as
+  community truth.
 
 `maint_vendors`
 : A user-defined supplier.
 
 `maint_offers`
-: Vendor SKU, HTTPS product URL, notes, and last user-entered price.
+: Vendor/store SKU and HTTPS product URL metadata. Current/reference shopping
+  price may be stored locally, but incurred money belongs in the central cost
+  ledger and community fitment export excludes local prices by default.
 
-The MVP never fetches arbitrary product URLs server-side. That avoids SSRF and
-prevents accidental tracking or remote-content leakage.
+The MVP never fetches arbitrary product/profile/fitment URLs server-side. That
+avoids SSRF and prevents accidental tracking or remote-content leakage.
 
 ## Files and costs
 
@@ -281,3 +304,7 @@ No v0.1.7 migration stores due dates, thresholds, or state. Schedule edits, acti
 `maint_occurrences` materializes the actionable work queue. An occurrence references one asset and one work definition and snapshots only the `baseline_activity_uuid` that caused its current maintenance cycle. `open_marker = open` identifies an open queue item; closed rows set the marker to NULL and retain `closed_at` plus a bounded `closed_reason`. The schema enforces one open occurrence per `(workspace, definition)`.
 
 Occurrence rows deliberately contain no `due_on`, due-state field, remaining distance/runtime/count, or meter threshold. Those values are recomputed from schedules, activity history, effective readings, and the forecast policy whenever an occurrence is read. This lets schedule edits, reading supersession, and activity correction immediately change the current projection without rewriting historical queue rows.
+
+### Fitment JSON runtime records — v0.1.10 in progress
+
+The first v0.1.10 runtime checkpoint materializes `maint_fit_packs`, `maint_fit_revs`, `maint_fit_imports`, `maint_fit_bind`, `maint_fit_targets`, `maint_fit_slots`, `maint_parts`, `maint_offers`, `maint_fitments`, and `maint_asset_fit`. Pack revisions are immutable canonical JSON snapshots. Targets remain generalized portable descriptors; `maint_asset_fit` is an explicit local mapping and does not modify target or asset identity. Parts are deduplicated conservatively by normalized manufacturer plus punctuation-preserving part number. Fitment assertions remain source-specific so several imported packs can independently support the same canonical part/slot fact. CSV/ZIP runtime, profile part materialization, activity parts-used records, vendor management, and `maint_costs` remain pending.

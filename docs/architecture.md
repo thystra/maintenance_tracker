@@ -237,6 +237,36 @@ retains that actor UID in audit history for shared work they already performed.
 Deleting the owner of a personal workspace purges that workspace and its audit
 rows with the rest of the personal data.
 
+## Fitment interoperability
+
+v0.1.10 introduces a design-level separation between maintenance profiles and
+portable part-fitment datasets. Profiles answer what an equipment class contains
+and how it is maintained. A fitment pack answers which product identities fit
+standardized service positions on generalized equipment configurations.
+
+The portable contract is documented in
+[`fitment-pack-v1.md`](fitment-pack-v1.md) and validated by
+[`fitment-pack-v1.schema.json`](../schemas/fitment-pack-v1.schema.json). Core slot
+keys such as `engine.oil_filter` are stable interoperability identifiers; labels
+and aliases are presentation/matching aids. Unknown equipment-specific slots and
+qualifiers use reverse-DNS-style extension namespaces.
+
+Import follows the same source-vs-domain principle established by profile
+installation: retain an immutable normalized source revision and content hash,
+then materialize through canonical parts/fitment services with source bindings.
+Target matching is advisory and reasoned; Owner/Manager explicitly confirms the
+imported equipment-target -> local-asset mapping. No importer rewrites a local
+asset or silently treats an alias as authoritative identity.
+
+Canonical JSON is the lossless export authority. A normalized CSV/ZIP projection
+supports spreadsheet/community authoring with fixed filenames/headers, bounded
+expanded size, path/symlink rejection, and versioned spreadsheet-formula escaping.
+Community export deliberately omits local UUIDs, VIN/serial identity, nicknames,
+private notes, costs, receipts, service history, and local preference state.
+
+Product/store URLs remain inert HTTPS metadata. No server-side arbitrary URL fetch
+is introduced by fitment import, validation, matching, or export.
+
 ## Reports
 
 Reports are deterministic projections over immutable or audited event records.
@@ -276,3 +306,7 @@ v0.1.7 computes maintenance status at read time from work-definition schedules, 
 v0.1.8 keeps three concerns separate. `MaintenanceStatusService` remains the only maintenance-truth calculation. `MaintenanceForecastService` decorates that projection with an explicit reminder policy; `due_soon` therefore means “inside the configured attention window,” never “due.” `MaintenanceOccurrenceService` materializes an actionable work queue from the forecast.
 
 `maint_reminder_policy` stores at most one policy row per workspace. `maint_occurrences` stores workflow lifecycle and a completion-baseline UUID but intentionally omits due dates, due state, meter values, and thresholds. The nullable `open_marker` plus a unique `(workspace_id, definition_id, open_marker)` key gives PostgreSQL, SQLite, and MariaDB/MySQL the same one open occurrence per definition behavior while allowing multiple historical closed rows. Reconciliation is a write-capability operation so it runs behind the existing workspace serialization boundary.
+
+### v0.1.10 JSON fitment runtime foundation
+
+The fitment interoperability contract now has a JSON runtime persistence layer. Immutable `maint_fit_packs` / `maint_fit_revs` / `maint_fit_imports` preserve source identity; `maint_fit_bind` preserves source-key provenance; generalized targets are stored separately from explicit local-asset mappings; standardized slots and canonical parts are reusable workspace records; source offers and fitment assertions retain imported provenance. One active target mapping is enforced with the same nullable-marker portability pattern used for maintenance occurrences. Community JSON export is reconstructed from canonical mapped facts and revalidated rather than replaying private local records. CSV/ZIP runtime support, profile-part materialization, activity part usage, vendor management, and costs remain pending v0.1.10 work.

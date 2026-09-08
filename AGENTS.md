@@ -233,3 +233,23 @@ profile v1, select one instance from a multi-instance source key, fetch arbitrar
 profile/source URLs, or ignore profile-v2 parts before the parts subsystem can
 materialize them. Upgrade handling must be an explicit user-approved diff/merge,
 not a reinstall that overwrites customized records.
+
+## v0.1.10 fitment interoperability invariant
+
+Fitment slots use stable machine keys as interoperability identity; labels and
+aliases are presentation/candidate-matching aids only. Core slot/qualifier keys
+are append-only and extension keys use reverse-DNS-style namespaces. Imported
+equipment targets describe reusable model/configuration classes, never owned-unit
+UUID/VIN/serial/private history. Alias similarity must never silently attach an
+import: Owner/Manager explicitly confirms target/slot mappings and those mappings
+do not rename either side. Canonical JSON is the lossless source/hash authority;
+CSV/ZIP is a bounded, versioned spreadsheet projection with archive traversal and
+formula-injection defenses. Community export is privacy-minimized and excludes
+local UUIDs, private identity/history/cost/preference data. Product URLs remain
+inert metadata; do not introduce arbitrary server-side fetch. Profile-v2 parts
+must eventually materialize through the same canonical parts/fitment services,
+not a profile-only catalog.
+
+### v0.1.10 JSON fitment runtime invariant
+
+Fitment-pack import and local-asset mapping are separate operations. Immutable source revisions and source bindings preserve provenance; standardized slots and canonical parts are ordinary reusable workspace records. `fitment.read` is read-only for all workspace roles; only Owner/Manager may import or map. Never silently map by aliases, overwrite canonical user-editable part/slot data from a new pack, strip punctuation when deciding part identity, fetch imported offer/source URLs server-side, or leak local UUID/name/serial/private operational data into a community export. `conflict`/`insufficient` mapping requires explicit confirmation. The current runtime is JSON-only; do not claim CSV/ZIP, profile-v2 part materialization, activity parts, vendor management, or central costs are implemented until their checkpoints qualify.

@@ -419,6 +419,23 @@ it returns the installation UUID/timestamp, profile ID/version/content hash,
 origin/trust state, license/provenance, and source bindings (`sourceType`, `sourceKey`,
 `ordinal`, `targetUuid`) to the resulting canonical records.
 
+
+## Fitment-pack JSON runtime — v0.1.10 foundation
+
+The current v0.1.10 runtime implements the canonical **JSON** fitment-pack path. `fitment.read` is available to Owner, Manager, Contributor, and Viewer. `fitment.import` and `fitment.map` are serialized write capabilities available only to Owner and Manager. Import never silently attaches an equipment target to a local asset.
+
+- `POST /fitment-packs/validate` validates and canonicalizes a fitment-pack-v1 JSON document and returns its SHA-256 content identity.
+- `POST /fitment-packs/preview` validates without writing and reports standardized-slot conflicts plus reasoned local-asset match suggestions.
+- `POST /fitment-packs/import` accepts a client-generated `importUuid` and a JSON `pack`. Retrying the same UUID/data is idempotent. An already-imported immutable revision cannot be aliased under a second import UUID.
+- `GET /fitment-packs/{importUuid}/export` returns the immutable canonical source revision, including source offers.
+- `GET /fitment-packs/{importUuid}/targets` lists imported generalized equipment targets and current match suggestions.
+- `GET /fitment-targets/{targetUuid}/matches` returns `exact`, `candidate`, `conflict`, or `insufficient` match states with reasons.
+- `POST /fitment-targets/{targetUuid}/map` accepts `mappingUuid`, `assetUuid`, and optional `acceptConflict`. A `conflict` or `insufficient` mapping requires `acceptConflict: true`. Mapping is explicit and does not rename either source or local records.
+- `GET /assets/{assetUuid}/fitments` returns standardized fitment-slot/part facts and their imported pack provenance.
+- `POST /assets/{assetUuid}/fitment-export/community` rebuilds a reviewed generalized community JSON pack from mapped canonical facts and runs it through the same validator/canonicalizer. Local asset UUID/name, serial/VIN-like identity, notes, costs, receipts, and maintenance history are excluded. Offers are currently emitted as an empty array until an explicit local/source offer-selection policy is reviewed.
+
+CSV/ZIP import/export remains part of the fitment-pack-v1 interoperability contract but is **not yet implemented in the runtime**. Profile-v2 part materialization also remains fail-closed until the profile installer is explicitly bridged to these canonical part/fitment records. Activity parts-used rows, vendor management, and central costs remain later v0.1.10 checkpoints.
+
 Future resources include evidence, parts/costs, fuel entries, trips, calendar
 bindings, public report shares, external submissions, TCO reports, and mileage
 reports. Work definitions use `schedule: none` for unscheduled/ad-hoc work; any

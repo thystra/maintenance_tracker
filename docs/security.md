@@ -57,6 +57,23 @@ data even though the app is not a medical product.
   rather than resolving ambiguously.
 - Part-bearing profiles fail closed until parts have canonical storage; no validated
   profile facts are silently discarded.
+
+### Fitment-pack boundary
+
+- Fitment packs are local, bounded, data-only input. Source/provenance/store URLs
+  are inert HTTPS metadata and are never fetched server-side.
+- Equipment targets are generalized model/configuration descriptors. Community
+  export excludes local UUIDs, VINs/serial numbers, nicknames/private notes,
+  costs, receipts, service history, and local preference state by default.
+- Alias/string similarity only produces a preview candidate. Owner/Manager must
+  explicitly confirm imported equipment-target and nonstandard-slot mappings.
+- ZIP/CSV import uses an exact filename/header allowlist, rejects path traversal,
+  symlinks, duplicates, and excessive expanded content, and applies row limits.
+- Spreadsheet CSV export uses a versioned formula-injection escaping scheme;
+  canonical JSON remains the lossless content/hash authority.
+- Part-number comparison preserves punctuation and applies only conservative
+  Unicode/case/whitespace normalization; the importer must not invent equivalence
+  by stripping arbitrary characters.
 - Installation uses the canonical component/meter/work-definition services inside
   the workspace write transaction, and only bounded identity/hash metadata enters
   the append-only audit event.
@@ -167,3 +184,7 @@ Maintenance due state is read-only derived data and is not accepted from clients
 Forecast reads use dedicated read capabilities and never mutate due state. Reminder policy changes and occurrence reconciliation are separate write capabilities granted to Owner and Manager, not Contributor or Viewer. Reconciliation executes inside the serialized workspace write boundary.
 
 Occurrences are intentionally non-authoritative projections. They cannot be client-created with arbitrary due claims and their table has no fields for due dates, due state, remaining meter values, or thresholds. The unique open marker prevents duplicate active work items under concurrent reconciliation, while current status is always re-derived before presentation.
+
+### Fitment JSON runtime authorization and privacy
+
+The v0.1.10 JSON runtime keeps validation/read access separate from writes: all workspace roles may use `fitment.read`, while only Owner/Manager receive `fitment.import` and `fitment.map`. Import does not automatically attach a generalized target to a local asset. `conflict` and `insufficient` matches require explicit confirmation. Source/store URLs are metadata and are never fetched server-side. Community export is rebuilt from reviewed generalized descriptors and canonical fitment facts and excludes local unit UUIDs/nicknames, VIN/serial identity, notes, costs, receipts, and maintenance history. Offers are omitted from community export until a reviewed selection policy exists. CSV/ZIP runtime remains pending; when implemented it must retain the contract's path-traversal, symlink/duplicate-entry, decompression-bound, and spreadsheet formula-injection defenses.

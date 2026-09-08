@@ -87,12 +87,16 @@ stage_app() {
 			cp -a "$path" "$target/"
 		fi
 	done
+	mkdir -p "$target/fitment"
+	cp -a fitment/core-v1.json "$target/fitment/core-v1.json"
 	cp -a LICENSE "$target/"
 
 	test -f "$target/appinfo/info.xml"
 	test -f "$target/lib/AppInfo/Application.php"
 	test -f "$target/js/maintenance_tracker-main.mjs"
 	test -f "$target/css/maintenance_tracker-main.css"
+	test -f "$target/fitment/core-v1.json"
+	test ! -e "$target/fitment/examples"
 }
 
 stage_app
@@ -209,6 +213,7 @@ assert_contains "$capabilities" '"work-definitions-schedules"' 'capabilities'
 assert_contains "$capabilities" '"activity-ledger"' 'capabilities'
 assert_contains "$capabilities" '"maintenance-due-state"' 'capabilities'
 assert_contains "$capabilities" '"profile-installation"' 'capabilities'
+assert_contains "$capabilities" '"fitment-packs"' 'capabilities'
 
 categories=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -988,6 +993,133 @@ if [[ ! "$admin_workspace_uuid" =~ ^[0-9a-f-]{36}$ ]]; then
 	exit 1
 fi
 
+# v0.1.10 JSON fitment-pack vertical slice. Example data is intentionally not staged into the app;
+# feed it through the running Nextcloud container over stdin instead.
+fitment_asset_uuid='5a7f7611-d4b8-4d9f-8e10-218b6889d2a1'
+fitment_asset_name='Private Local Workhorse Nickname'
+fitment_asset=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"asset\":{\"uuid\":\"${fitment_asset_uuid}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"${fitment_asset_name}\",\"manufacturer\":\"Example Motors\",\"model\":\"Workhorse 2500\",\"modelYear\":2020}}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_asset" '"statuscode":201' 'fitment target local asset create'
+
+fitment_pack_json=$(cat fitment/examples/example-service-parts.json)
+fitment_validate_payload=$(printf '%s' "$fitment_pack_json" | docker exec --interactive "$container" php -r '$p=json_decode(stream_get_contents(STDIN),true);echo json_encode(["pack"=>$p],JSON_UNESCAPED_SLASHES);')
+fitment_validate=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$fitment_validate_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/validate?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_validate" '"statuscode":200' 'fitment pack validate'
+assert_contains "$fitment_validate" '"valid":true' 'fitment pack validation result'
+fitment_hash='1b29fad0964d9f58d25a91154340779234d2b529d7d3d7ea8b05362768d88150'
+assert_contains "$fitment_validate" "\"contentHash\":\"${fitment_hash}\"" 'fitment cross-language canonical hash'
+
+fitment_preview=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$fitment_validate_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/preview?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_preview" '"statuscode":200' 'fitment pack preview'
+assert_contains "$fitment_preview" '"importable":true' 'fitment pack preview importable'
+assert_contains "$fitment_preview" "\"uuid\":\"${fitment_asset_uuid}\"" 'fitment preview local asset suggestion'
+assert_contains "$fitment_preview" '"state":"candidate"' 'fitment missing required qualifier candidate state'
+
+fitment_import_uuid='6b8e8722-e5c9-4ea0-9f21-329c799ae3b2'
+fitment_import_payload=$(printf '%s' "$fitment_pack_json" | docker exec --interactive --env IMPORT_UUID="$fitment_import_uuid" "$container" php -r '$p=json_decode(stream_get_contents(STDIN),true);echo json_encode(["importUuid"=>getenv("IMPORT_UUID"),"pack"=>$p],JSON_UNESCAPED_SLASHES);')
+fitment_import=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$fitment_import_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/import?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_import" '"statuscode":201' 'fitment pack import'
+assert_contains "$fitment_import" "\"importUuid\":\"${fitment_import_uuid}\"" 'fitment pack import UUID'
+assert_contains "$fitment_import" "\"contentHash\":\"${fitment_hash}\"" 'fitment imported canonical hash'
+
+fitment_import_retry=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$fitment_import_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/import?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_import_retry" '"statuscode":201' 'fitment pack idempotent import retry'
+assert_contains "$fitment_import_retry" "\"importUuid\":\"${fitment_import_uuid}\"" 'fitment import retry identity'
+
+fitment_second_import_uuid='7c9f9833-f6da-4fb1-a032-43ad8aabf4c3'
+fitment_second_import_payload=$(printf '%s' "$fitment_pack_json" | docker exec --interactive --env IMPORT_UUID="$fitment_second_import_uuid" "$container" php -r '$p=json_decode(stream_get_contents(STDIN),true);echo json_encode(["importUuid"=>getenv("IMPORT_UUID"),"pack"=>$p],JSON_UNESCAPED_SLASHES);')
+fitment_second_import=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$fitment_second_import_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/import?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_second_import" '"statuscode":412' 'fitment revision second import UUID rejection'
+
+fitment_source_export=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/${fitment_import_uuid}/export?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_source_export" '"statuscode":200' 'fitment source export'
+assert_contains "$fitment_source_export" '"key":"example-oil-100-store"' 'fitment source export retains offers'
+assert_contains "$fitment_source_export" "\"contentHash\":\"${fitment_hash}\"" 'fitment source export hash'
+
+fitment_targets=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/${fitment_import_uuid}/targets?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_targets" '"statuscode":200' 'fitment import target discovery'
+fitment_target_uuid=$(printf '%s' "$fitment_targets" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);echo $d["ocs"]["data"]["items"][0]["target"]["uuid"]??"";')
+[[ "$fitment_target_uuid" =~ ^[0-9a-f-]{36}$ ]] || { echo "fitment target UUID missing: ${fitment_target_uuid}" >&2; exit 1; }
+
+fitment_matches=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-targets/${fitment_target_uuid}/matches?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_matches" "\"uuid\":\"${fitment_asset_uuid}\"" 'fitment explicit match local asset'
+fitment_match_state=$(printf '%s' "$fitment_matches" | docker exec --interactive --env ASSET_UUID="$fitment_asset_uuid" "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);foreach(($d["ocs"]["data"]["items"]??[]) as $i){if(($i["asset"]["uuid"]??"")===getenv("ASSET_UUID")){echo $i["state"]??"";}}')
+[ "$fitment_match_state" = 'candidate' ] || { echo "fitment match expected candidate, got: ${fitment_match_state}" >&2; exit 1; }
+
+fitment_mapping_uuid='8daf0944-a7eb-4ac2-b143-54be9bbcf5d4'
+fitment_mapping=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"mappingUuid\":\"${fitment_mapping_uuid}\",\"assetUuid\":\"${fitment_asset_uuid}\"}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-targets/${fitment_target_uuid}/map?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_mapping" '"statuscode":201' 'fitment explicit mapping'
+assert_contains "$fitment_mapping" '"matchState":"candidate"' 'fitment explicit mapping candidate state'
+
+fitment_mapping_retry=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"mappingUuid\":\"${fitment_mapping_uuid}\",\"assetUuid\":\"${fitment_asset_uuid}\"}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-targets/${fitment_target_uuid}/map?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_mapping_retry" '"statuscode":201' 'fitment mapping idempotent retry'
+
+fitment_second_mapping_uuid='9eb01a55-b8fc-4bd3-8254-65cfaccd06e5'
+fitment_second_mapping=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"mappingUuid\":\"${fitment_second_mapping_uuid}\",\"assetUuid\":\"${fitment_asset_uuid}\"}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-targets/${fitment_target_uuid}/map?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_second_mapping" '"statuscode":412' 'fitment active mapping UUID alias rejection'
+
+fitment_asset_facts=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${fitment_asset_uuid}/fitments?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_asset_facts" '"statuscode":200' 'asset fitment facts read'
+fitment_fact_count=$(printf '%s' "$fitment_asset_facts" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);echo count($d["ocs"]["data"]["items"]??[]);')
+[ "$fitment_fact_count" = '5' ] || { echo "fitment fact count expected 5, got ${fitment_fact_count}" >&2; exit 1; }
+assert_contains "$fitment_asset_facts" '"key":"engine.oil_filter"' 'standardized oil-filter slot fact'
+assert_contains "$fitment_asset_facts" '"partNumber":"OIL-100"' 'oil-filter compatible part fact'
+
+fitment_community_payload='{"export":{"pack":{"id":"org.example.community.workhorse2500","version":"1.0.0","name":"Community Workhorse 2500 fitments","description":"Generalized compatibility facts exported by the integration test.","dataLicense":"CC0-1.0","provenance":{"author":"Integration Test","sourceUrl":"https://example.invalid/community-fitments"}},"equipment":{"key":"workhorse2500-community","assetClass":"vehicle","manufacturer":"Example Motors","model":"Workhorse 2500","yearFrom":2020,"yearTo":2020,"aliases":{"manufacturer":[],"model":[]},"identifiers":[],"qualifiers":[{"key":"engine","value":"6.7L Example Diesel","aliases":[],"match":"required"}]}}}'
+fitment_community_export=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$fitment_community_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${fitment_asset_uuid}/fitment-export/community?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_community_export" '"statuscode":200' 'fitment community export'
+assert_contains "$fitment_community_export" '"offers":[]' 'fitment community export offer selection policy'
+assert_contains "$fitment_community_export" '"offersPolicy":"omitted_pending_explicit_selection"' 'fitment community export policy marker'
+assert_not_contains "$fitment_community_export" "$fitment_asset_uuid" 'fitment community export local UUID privacy'
+assert_not_contains "$fitment_community_export" "$fitment_asset_name" 'fitment community export local nickname privacy'
+
 member_added=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
 	--request POST \
@@ -1013,6 +1145,27 @@ collab_assets=$(docker exec "$container" curl --silent --show-error \
 	--header 'Accept: application/json' \
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets?workspace=${admin_workspace_uuid}&format=json")
 assert_contains "$collab_assets" '"statuscode":200' 'contributor inventory read'
+
+
+contributor_fitment_read=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${fitment_asset_uuid}/fitments?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_fitment_read" '"statuscode":200' 'contributor fitment read'
+assert_contains "$contributor_fitment_read" '"partNumber":"OIL-100"' 'contributor fitment data read'
+
+contributor_fitment_import_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "$fitment_second_import_payload" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/import?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_fitment_import_denied" '"statuscode":403' 'contributor fitment import rejection'
+
+contributor_fitment_map_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' \
+	--data "{\"mappingUuid\":\"${fitment_second_mapping_uuid}\",\"assetUuid\":\"${fitment_asset_uuid}\"}" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-targets/${fitment_target_uuid}/map?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_fitment_map_denied" '"statuscode":403' 'contributor fitment mapping rejection'
 
 
 contributor_meters=$(docker exec "$container" curl --silent --show-error \
@@ -1256,6 +1409,18 @@ profile_audit=$(docker exec "$container" curl --silent --show-error \
 assert_contains "$profile_audit" '"eventType":"profile.installed"' 'profile installation audit event'
 assert_contains "$profile_audit" "\"subjectId\":\"${profile_installation_uuid}\"" 'profile installation audit subject'
 assert_contains "$profile_audit" "\"contentHash\":\"${profile_hash}\"" 'profile installation audit content hash'
+
+
+fitment_audit=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/audit?workspace=${admin_workspace_uuid}&limit=100&format=json")
+assert_contains "$fitment_audit" '"eventType":"fitment_pack.imported"' 'fitment import audit event'
+assert_contains "$fitment_audit" "\"subjectId\":\"${fitment_import_uuid}\"" 'fitment import audit subject'
+assert_contains "$fitment_audit" "\"contentHash\":\"${fitment_hash}\"" 'fitment import audit hash'
+assert_contains "$fitment_audit" '"eventType":"fitment_mapping.created"' 'fitment mapping audit event'
+assert_contains "$fitment_audit" "\"subjectId\":\"${fitment_mapping_uuid}\"" 'fitment mapping audit subject'
+assert_contains "$fitment_audit" '"targetKey":"workhorse2500-2020-diesel"' 'fitment mapping bounded target detail'
+assert_contains "$fitment_audit" '"matchState":"candidate"' 'fitment mapping bounded state detail'
 
 member_promoted=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \

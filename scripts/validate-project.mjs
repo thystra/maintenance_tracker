@@ -23,6 +23,10 @@ const packageLock = JSON.parse(await read('package-lock.json'))
 const genericProfile = JSON.parse(await read('profiles/generic-car.json'))
 const profileSchema = JSON.parse(await read('schemas/profile-v1.schema.json'))
 const profileSchemaV2 = JSON.parse(await read('schemas/profile-v2.schema.json'))
+const fitmentVocabularySchema = JSON.parse(await read('schemas/fitment-vocabulary-v1.schema.json'))
+const fitmentPackSchema = JSON.parse(await read('schemas/fitment-pack-v1.schema.json'))
+const fitmentVocabulary = JSON.parse(await read('fitment/core-v1.json'))
+const fitmentExample = JSON.parse(await read('fitment/examples/example-service-parts.json'))
 const attributes = await read('.gitattributes')
 const nextcloudIgnore = await read('.nextcloudignore')
 const forgejoCi = await read('.forgejo/workflows/ci.yml')
@@ -68,7 +72,14 @@ const profileCatalog = await read('lib/Service/ProfileCatalog.php')
 const profileRepository = await read('lib/Service/ProfileRepository.php')
 const profileInstallationService = await read('lib/Service/ProfileInstallationService.php')
 const profileController = await read('lib/Controller/ProfileController.php')
+const migration1090 = await read('lib/Migration/Version1090Date20260907193000.php')
+const fitmentPackValidator = await read('lib/Service/FitmentPackValidator.php')
+const fitmentRepository = await read('lib/Service/FitmentRepository.php')
+const assetFitmentDescriptorService = await read('lib/Service/AssetFitmentDescriptorService.php')
+const fitmentService = await read('lib/Service/FitmentService.php')
+const fitmentController = await read('lib/Controller/FitmentController.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
+const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
 const architecture = await read('docs/architecture.md')
 const domainModel = await read('docs/domain-model.md')
@@ -77,6 +88,7 @@ const roadmap = await read('docs/roadmap.md')
 const security = await read('docs/security.md')
 const api = await read('docs/api.md')
 const profileFormat = await read('docs/profile-format.md')
+const fitmentFormat = await read('docs/fitment-pack-v1.md')
 const changelog = await read('CHANGELOG.md')
 const agents = await read('AGENTS.md')
 const readme = await read('README.md')
@@ -115,13 +127,20 @@ expect(info.includes(`<bugs>${projectUrl}/issues</bugs>`), 'Nextcloud app issue 
 expect(genericProfile.provenance?.sourceUrl === projectUrl, 'Bundled first-party profile provenance must use the authoritative repository URL.')
 expect(profileSchema.$id === `${projectUrl}/src/branch/main/schemas/profile-v1.schema.json`, 'Profile schema identity must use the authoritative Forgejo repository URL.')
 expect(profileSchemaV2.$id === `${projectUrl}/src/branch/main/schemas/profile-v2.schema.json`, 'Profile-v2 schema identity must use the authoritative Forgejo repository URL.')
+expect(fitmentVocabularySchema.$id === `${projectUrl}/src/branch/main/schemas/fitment-vocabulary-v1.schema.json`, 'Fitment-vocabulary schema identity must use the authoritative Forgejo repository URL.')
+expect(fitmentPackSchema.$id === `${projectUrl}/src/branch/main/schemas/fitment-pack-v1.schema.json`, 'Fitment-pack schema identity must use the authoritative Forgejo repository URL.')
+expect(fitmentVocabulary.schemaVersion === 1 && fitmentPackSchema.properties?.schemaVersion?.const === 1, 'Fitment vocabulary/pack contracts must use explicit schema version 1.')
+expect(fitmentExample.schemaVersion === 1 && fitmentExample.vocabularyVersion === 1, 'Bundled fitment example must use fitment-pack/vocabulary v1.')
+expect(packageJson.scripts?.['validate:fitment'] === 'node scripts/validate-fitment-packs.mjs', 'package.json must expose the fitment contract validator.')
 expect(genericProfile.schemaVersion === 2, 'Bundled generic-car profile must use profile schema v2.')
 expect(attributes.includes('/.forgejo export-ignore'), '.gitattributes must exclude Forgejo contributor workflows from release archives.')
 expect(attributes.includes('/AGENTS.md export-ignore'), '.gitattributes must exclude project agent guidance from release archives.')
 expect(attributes.includes('/ci export-ignore'), '.gitattributes must exclude CI image definitions from release archives.')
+expect(attributes.includes('/fitment/examples export-ignore'), '.gitattributes must exclude fitment example data from runtime release archives.')
 expect(nextcloudIgnore.split(/\r?\n/).includes('/.forgejo'), '.nextcloudignore must exclude Forgejo contributor workflows.')
 expect(nextcloudIgnore.split(/\r?\n/).includes('/AGENTS.md'), '.nextcloudignore must exclude project agent guidance.')
 expect(nextcloudIgnore.split(/\r?\n/).includes('/ci'), '.nextcloudignore must exclude CI image definitions.')
+expect(nextcloudIgnore.split(/\r?\n/).includes('/fitment/examples'), '.nextcloudignore must exclude fitment example data.')
 expect(forgejoCi.includes('runs-on: forgejo-workstation'), 'Authoritative CI must target forgejo-workstation runners.')
 expect(!forgejoCi.includes('runs-on: ubuntu-latest'), 'Authoritative Forgejo CI must not target GitHub-hosted ubuntu-latest runners.')
 expect(forgejoCi.includes('https://data.forgejo.org/actions/checkout@'), 'Authoritative CI checkout must use an explicitly Forgejo-hosted action URL.')
@@ -170,6 +189,9 @@ expect(viewerMatch !== null && viewerMatch[1].includes('MAINTENANCE_FORECAST_REA
 expect(managerMatch !== null && managerMatch[1].includes('PROFILE_READ') && managerMatch[1].includes('PROFILE_INSTALL'), 'Manager must explicitly receive profile read/install capabilities.')
 expect(contributorMatch !== null && contributorMatch[1].includes('PROFILE_READ') && !contributorMatch[1].includes('PROFILE_INSTALL'), 'Contributor must read profiles without installing them.')
 expect(viewerMatch !== null && viewerMatch[1].includes('PROFILE_READ') && !viewerMatch[1].includes('PROFILE_INSTALL'), 'Viewer must remain read-only for profiles.')
+expect(managerMatch !== null && managerMatch[1].includes('FITMENT_READ') && managerMatch[1].includes('FITMENT_IMPORT') && managerMatch[1].includes('FITMENT_MAP'), 'Manager must explicitly receive fitment read/import/map capabilities.')
+expect(contributorMatch !== null && contributorMatch[1].includes('FITMENT_READ') && !contributorMatch[1].includes('FITMENT_IMPORT') && !contributorMatch[1].includes('FITMENT_MAP'), 'Contributor must read fitment data without importing or mapping it.')
+expect(viewerMatch !== null && viewerMatch[1].includes('FITMENT_READ') && !viewerMatch[1].includes('FITMENT_IMPORT') && !viewerMatch[1].includes('FITMENT_MAP'), 'Viewer must remain read-only for fitment data.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -186,7 +208,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -227,6 +249,8 @@ for (const eventType of [
 	expect(auditEvents.includes(`'${eventType}'`), `Audit event vocabulary must retain ${eventType}.`)
 }
 expect(auditEvents.includes("'profile.installed'") && auditEvents.includes("'profileKey', 'profileVersion', 'contentHash'"), 'Profile installation audit events must retain bounded provenance detail keys.')
+expect(auditEvents.includes("'fitment_pack.imported'") && auditEvents.includes("'packKey', 'packVersion', 'contentHash'"), 'Fitment import audit events must retain bounded pack provenance detail keys.')
+expect(auditEvents.includes("'fitment_mapping.created'") && auditEvents.includes("'targetKey', 'matchState'"), 'Fitment mapping audit events must retain bounded target/match detail keys.')
 expect(migration1030.includes("table: 'maint_audit'"), 'v0.1.3 migration must create the audit table.')
 expect(migration1030.includes("createNamedParameter('manager'") && migration1030.includes("createNamedParameter('editor'"), 'v0.1.3 migration must persist editor-to-manager role normalization.')
 
@@ -315,13 +339,38 @@ for (const key of ['inspect_tires', 'rotate_tires', 'inspect_wipers']) {
 	expect(definition !== undefined && !Object.hasOwn(definition, 'componentKey'), `Generic ${key} must remain asset-scoped because its source component template is multi-instance.`)
 }
 
+// v0.1.10 JSON fitment runtime materializes portable compatibility knowledge without silently mapping it to local assets.
+for (const table of ['maint_fit_packs', 'maint_fit_revs', 'maint_fit_imports', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_slots', 'maint_parts', 'maint_offers', 'maint_fitments', 'maint_asset_fit']) {
+	expect(migration1090.includes(`table: '${table}'`), `v0.1.10 fitment migration must create ${table}.`)
+}
+expect(migration1090.includes("addColumn('content_json', Types::TEXT, ['notnull' => true, 'length' => 8388608])"), 'Fitment revision JSON storage must retain the reviewed 8 MiB bound.')
+expect(migration1090.includes("addUniqueIndex(['workspace_id','revision_id']") && migration1090.includes("addUniqueIndex(['workspace_id','import_uuid']"), 'Fitment imports must enforce one imported operation per immutable revision and unique client operation UUIDs.')
+expect(migration1090.includes("addColumn('active_marker', Types::STRING, ['notnull' => false") && migration1090.includes("addUniqueIndex(['workspace_id','target_id','active_marker']"), 'Fitment target mappings must use the nullable-active-marker uniqueness contract for one active mapping per target.')
+expect(fitmentPackValidator.includes('MAX_PACK_BYTES = 8 * 1024 * 1024') && fitmentPackValidator.includes("if ($input['schemaVersion'] !== 1)"), 'Runtime fitment validation must enforce exact schema v1 and the reviewed 8 MiB bound.')
+expect(fitmentPackValidator.includes('partIdentityHash(') && fitmentPackValidator.includes('normalizeIdentity($manufacturer)') && fitmentPackValidator.includes('normalizeIdentity($partNumber)'), 'Canonical part identity must conservatively retain part-number punctuation.')
+expect(fitmentPackValidator.includes("$verification === 'verified' && $evidence === []") && fitmentPackValidator.includes('requires evidence'), 'Verified fitment assertions must require evidence.')
+expect(validateFitmentPacks.includes('function byteCompare(') && validateFitmentPacks.includes('Buffer.compare') && !validateFitmentPacks.includes('localeCompare'), 'JavaScript fitment canonical ordering must use explicit UTF-8 byte comparison rather than locale-sensitive sorting.')
+expect(fitmentService.includes('already imported under a different import UUID') && fitmentService.includes('findImportByRevision('), 'The same fitment revision must not be aliased under a second import UUID.')
+expect(fitmentService.includes('already has an active local-asset mapping under a different mapping UUID') && fitmentService.includes('findActiveMappingForTarget('), 'An active target/asset mapping must not be aliased under a second mapping UUID.')
+expect(fitmentService.includes("in_array($match['state'], ['conflict','insufficient'], true) && !$acceptConflict") && fitmentService.includes('acceptConflict=true'), 'Conflict/insufficient target matching must require explicit Owner/Manager confirmation.')
+expect(assetFitmentDescriptorService.includes("'state' => $state") && assetFitmentDescriptorService.includes("'candidate'") && assetFitmentDescriptorService.includes("'insufficient'"), 'Asset fitment matching must expose reasoned exact/candidate/conflict/insufficient states.')
+expect(assetFitmentDescriptorService.includes("'qualifiers' => []") && !assetFitmentDescriptorService.includes('getSerialNumber()') && !assetFitmentDescriptorService.includes('getNotes()'), 'Local fitment descriptors must exclude private unit identity and notes.')
+for (const route of ['/fitment-packs/validate', '/fitment-packs/preview', '/fitment-packs/import', '/fitment-packs/{importUuid}/export', '/fitment-packs/{importUuid}/targets', '/fitment-targets/{targetUuid}/matches', '/fitment-targets/{targetUuid}/map', '/assets/{assetUuid}/fitments', '/assets/{assetUuid}/fitment-export/community']) {
+	expect(fitmentController.includes(route), `Fitment controller must expose ${route}.`)
+}
+expect(fitmentController.includes('AuthorizationCatalog::FITMENT_READ') && fitmentController.includes('AuthorizationCatalog::FITMENT_IMPORT') && fitmentController.includes('AuthorizationCatalog::FITMENT_MAP'), 'Fitment API must preserve the read/import/map capability split.')
+expect(fitmentRepository.includes("insert('maint_fit_revs')") && fitmentRepository.includes("insert('maint_fit_bind')") && fitmentRepository.includes("insert('maint_fitments')"), 'Fitment repository must persist immutable revision provenance, source bindings, and source-specific fitment assertions.')
+expect(fitmentService.includes("'offers' => []") && fitmentService.includes("'omitted_pending_explicit_selection'"), 'Community fitment export must omit offers until an explicit reviewed offer-selection policy exists.')
+expect(fitmentService.includes('$v = $this->validator->validate($pack)') && fitmentService.includes('communityExport('), 'Community fitment export must be rebuilt through the same runtime validator/canonicalizer.')
+expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'This JSON fitment checkpoint must keep profile-v2 part materialization fail-closed until the canonical profile-parts bridge is implemented.')
+
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
 }
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -353,6 +402,23 @@ expect(security.includes('Profile installation boundary') && security.includes('
 expect(roadmap.includes('[x] v0.1.8') && roadmap.includes('PR #10') && roadmap.includes('CI #22') && roadmap.includes('v0.1.9 validated local profile installation'), 'Roadmap must close qualified v0.1.8 and identify the v0.1.9 profile-installation tranche.')
 expect(changelog.includes('v0.1.9') && readme.includes('profile-v2 installation'), 'User-facing documentation must advertise the v0.1.9 profile-installation capability.')
 expect(docs.includes('part') && docs.includes('v0.1.10') && docs.includes('fail'), 'Documentation must state that v0.1.9 does not silently discard profile part definitions.')
+expect(roadmap.includes('[x] v0.1.9') && roadmap.includes('PR #11') && roadmap.includes('CI #23') && roadmap.includes('CI #24') && roadmap.includes('79fc23158c29240c63ad315bcfd0100881f98608'), 'Roadmap must close v0.1.9 with PR/feature-CI/merge/main-CI evidence.')
+expect(roadmap.includes('portable fitment packs') && roadmap.includes('compatibility matrix import/export'), 'Roadmap v0.1.10 must include portable fitment import/export rather than only local part rows.')
+expect(fitmentFormat.includes('Stable slot identity') && fitmentFormat.includes('engine.oil_filter') && fitmentFormat.includes('reverse-DNS-style'), 'Fitment contract must define standardized slot identity and namespaced extensions.')
+expect(fitmentFormat.includes('portable `assetClass`') && fitmentPackSchema.$defs?.equipment?.properties?.assetClass?.enum?.includes('vehicle'), 'Fitment equipment matching must use portable assetClass rather than workspace-local category identity.')
+expect(fitmentFormat.includes('8 MiB') && fitmentFormat.includes('representation-stable') && fitmentFormat.includes('Reordering rows'), 'Fitment contract must define bounded, row-order-stable canonical source identity.')
+expect(validateFitmentPacks.includes('MAX_PACK_BYTES = 8 * 1024 * 1024') && validateFitmentPacks.includes('identifier namespace'), 'Fitment validator must enforce the v1 source-size and external-identifier namespace boundaries.')
+expect(fitmentFormat.includes('Conservative matching and explicit mapping') && fitmentFormat.includes('Owner/Manager') && fitmentFormat.includes('do not rename either'), 'Fitment contract must require explicit mapping and preserve both source/local identity.')
+expect(fitmentFormat.includes('Community export') && fitmentFormat.includes('UUIDs') && fitmentFormat.includes('VINs or serial numbers'), 'Fitment community export must define privacy-minimized output.')
+expect(fitmentFormat.includes('CSV/ZIP') && fitmentFormat.includes('formula injection') && fitmentFormat.includes('path traversal'), 'Fitment CSV/ZIP contract must cover spreadsheet and archive safety.')
+expect(security.includes('Fitment-pack boundary') && security.includes('formula-injection') && security.includes('never fetched server-side'), 'Security documentation must enforce the fitment import/export trust boundary.')
+expect(architecture.includes('Fitment interoperability') && domainModel.includes('standardized **fitment slot**') && productArchitecture.includes('compatibility matrices'), 'Architecture/domain/product docs must carry the fitment interoperability model.')
+expect(agents.includes('v0.1.10 fitment interoperability invariant') && agents.includes('Core slot/qualifier keys') && agents.includes('are append-only'), 'AGENTS must preserve fitment interoperability invariants.')
+expect(validateFitmentPacks.includes('duplicate fitment tuple') && validateFitmentPacks.includes('verified fitment') && validateFitmentPacks.includes('reverse-DNS-style extension'), 'Fitment validator must enforce referential uniqueness, evidence, and extension-key rules.')
+expect(api.includes('/fitment-packs/validate') && api.includes('/fitment-packs/import') && api.includes('/fitment-targets/{targetUuid}/map') && api.includes('/fitment-export/community'), 'API documentation must cover the implemented v0.1.10 JSON fitment validation/import/mapping/export surface.')
+expect(docs.includes('JSON') && docs.includes('fitment') && docs.includes('CSV/ZIP') && (docs.includes('pending') || docs.includes('not yet implemented')), 'Documentation must distinguish implemented JSON fitment runtime from pending CSV/ZIP runtime support.')
+expect(roadmap.includes('[ ] v0.1.10') || roadmap.includes('10. [ ]'), 'Roadmap must keep v0.1.10 open while CSV/ZIP, profile-part materialization, activity parts, vendors, and costs remain pending.')
+expect(changelog.includes('0.1.10') && readme.includes('fitment'), 'User-facing documentation must describe the v0.1.10 JSON fitment foundation without claiming the whole tranche complete.')
 
 try {
 	await access('.github/workflows/ci.yml')

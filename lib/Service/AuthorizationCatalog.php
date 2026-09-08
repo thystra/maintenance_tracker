@@ -32,6 +32,9 @@ final class AuthorizationCatalog {
 	public const REMINDER_POLICY_MANAGE = 'reminder_policy.manage';
 	public const PROFILE_READ = 'profile.read';
 	public const PROFILE_INSTALL = 'profile.install';
+	public const FITMENT_READ = 'fitment.read';
+	public const FITMENT_IMPORT = 'fitment.import';
+	public const FITMENT_MAP = 'fitment.map';
 
 	/**
 	 * Reserved vocabulary is deliberately present before its subsystem exists.
@@ -62,6 +65,9 @@ final class AuthorizationCatalog {
 		self::REMINDER_POLICY_MANAGE => ['implemented' => true, 'write' => true],
 		self::PROFILE_READ => ['implemented' => true, 'write' => false],
 		self::PROFILE_INSTALL => ['implemented' => true, 'write' => true],
+		self::FITMENT_READ => ['implemented' => true, 'write' => false],
+		self::FITMENT_IMPORT => ['implemented' => true, 'write' => true],
+		self::FITMENT_MAP => ['implemented' => true, 'write' => true],
 
 		'maintenance_definition.*' => ['implemented' => false, 'write' => false],
 		'activity.*' => ['implemented' => false, 'write' => false],
@@ -106,6 +112,9 @@ final class AuthorizationCatalog {
 			self::REMINDER_POLICY_MANAGE,
 			self::PROFILE_READ,
 			self::PROFILE_INSTALL,
+			self::FITMENT_READ,
+			self::FITMENT_IMPORT,
+			self::FITMENT_MAP,
 		],
 		'manager' => [
 			self::WORKSPACE_READ,
@@ -129,6 +138,9 @@ final class AuthorizationCatalog {
 			self::REMINDER_POLICY_MANAGE,
 			self::PROFILE_READ,
 			self::PROFILE_INSTALL,
+			self::FITMENT_READ,
+			self::FITMENT_IMPORT,
+			self::FITMENT_MAP,
 		],
 		'contributor' => [
 			self::WORKSPACE_READ,
@@ -142,6 +154,7 @@ final class AuthorizationCatalog {
 			self::MAINTENANCE_OCCURRENCE_READ,
 			self::REMINDER_POLICY_READ,
 			self::PROFILE_READ,
+			self::FITMENT_READ,
 		],
 		'viewer' => [
 			self::WORKSPACE_READ,
@@ -153,6 +166,7 @@ final class AuthorizationCatalog {
 			self::MAINTENANCE_OCCURRENCE_READ,
 			self::REMINDER_POLICY_READ,
 			self::PROFILE_READ,
+			self::FITMENT_READ,
 		],
 	];
 

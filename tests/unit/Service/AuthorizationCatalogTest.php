@@ -34,6 +34,9 @@ final class AuthorizationCatalogTest extends TestCase {
 		self::assertTrue($this->catalog->allows('manager', 'reminder_policy.manage'));
 		self::assertTrue($this->catalog->allows('manager', 'profile.read'));
 		self::assertTrue($this->catalog->allows('manager', 'profile.install'));
+		self::assertTrue($this->catalog->allows('manager', 'fitment.read'));
+		self::assertTrue($this->catalog->allows('manager', 'fitment.import'));
+		self::assertTrue($this->catalog->allows('manager', 'fitment.map'));
 	}
 
 	public function testContributorCanReadButCannotConfigureInventory(): void {
@@ -55,6 +58,9 @@ final class AuthorizationCatalogTest extends TestCase {
 		self::assertFalse($this->catalog->allows('contributor', 'reminder_policy.manage'));
 		self::assertTrue($this->catalog->allows('contributor', 'profile.read'));
 		self::assertFalse($this->catalog->allows('contributor', 'profile.install'));
+		self::assertTrue($this->catalog->allows('contributor', 'fitment.read'));
+		self::assertFalse($this->catalog->allows('contributor', 'fitment.import'));
+		self::assertFalse($this->catalog->allows('contributor', 'fitment.map'));
 	}
 
 	public function testViewerIsReadOnlyForImplementedSurface(): void {
@@ -74,6 +80,9 @@ final class AuthorizationCatalogTest extends TestCase {
 		self::assertTrue($this->catalog->allows('viewer', 'reminder_policy.read'));
 		self::assertTrue($this->catalog->allows('viewer', 'profile.read'));
 		self::assertFalse($this->catalog->allows('viewer', 'profile.install'));
+		self::assertTrue($this->catalog->allows('viewer', 'fitment.read'));
+		self::assertFalse($this->catalog->allows('viewer', 'fitment.import'));
+		self::assertFalse($this->catalog->allows('viewer', 'fitment.map'));
 	}
 
 	public function testLegacyEditorNormalizesToManager(): void {

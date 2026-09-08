@@ -75,8 +75,11 @@ appropriate representation when a task applies to a multi-instance set.
 
 Profile v2 already has a parts vocabulary, but the v0.1.9 installer intentionally
 fails closed when `parts` is non-empty. Part facts are not discarded or flattened
-into notes; they become installable when the v0.1.10 parts/cost subsystem provides
-a canonical persistence model.
+into notes. v0.1.10 first defines a separate portable fitment-pack contract with
+standardized service-position keys and explicit equipment matching/mapping. Once
+canonical part/fitment persistence exists, profile-v2 `parts` and
+`compatiblePartKeys` must materialize through that same catalog rather than a
+profile-only parts table. See [fitment-pack-v1.md](fitment-pack-v1.md).
 
 Materialized components, meters, groups, and work definitions are ordinary domain
 records and remain editable/suppressible by the user. The immutable source snapshot

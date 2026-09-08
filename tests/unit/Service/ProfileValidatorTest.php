@@ -7,7 +7,7 @@ declare(strict_types=1);
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-namespace OCA\MaintenanceTracker\Tests\Unit\Service;
+namespace OCA\MaintenanceTracker\Tests\unit\Service;
 
 use OCA\MaintenanceTracker\Exception\ValidationException;
 use OCA\MaintenanceTracker\Service\MeterValueConverter;

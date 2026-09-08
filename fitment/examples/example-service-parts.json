@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "vocabularyVersion": 1,
+  "id": "org.example.maintenance_tracker.workhorse2500",
+  "version": "1.0.0",
+  "name": "Example Workhorse 2500 common service parts",
+  "description": "Fictional sample fitment pack used to demonstrate the portable compatibility format without asserting real-world fitment.",
+  "dataLicense": "CC0-1.0",
+  "provenance": {
+    "author": "Maintenance Tracker example data",
+    "sourceUrl": "https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud"
+  },
+  "equipment": [
+    {
+      "key": "workhorse2500-2020-diesel",
+      "assetClass": "vehicle",
+      "manufacturer": "Example Motors",
+      "model": "Workhorse 2500",
+      "yearFrom": 2020,
+      "yearTo": 2021,
+      "aliases": {
+        "manufacturer": [
+          "Example"
+        ],
+        "model": [
+          "W2500"
+        ]
+      },
+      "identifiers": [],
+      "qualifiers": [
+        {
+          "key": "engine",
+          "value": "6.7L Example Diesel",
+          "aliases": [
+            "6.7 diesel"
+          ],
+          "match": "required"
+        }
+      ]
+    }
+  ],
+  "slots": [
+    {
+      "key": "engine.oil_filter",
+      "label": "Engine oil filter",
+      "kind": "filter",
+      "aliases": [
+        "Lube filter"
+      ]
+    },
+    {
+      "key": "engine.air_filter",
+      "label": "Engine air filter",
+      "kind": "filter",
+      "aliases": [
+        "Air cleaner element"
+      ]
+    },
+    {
+      "key": "hvac.cabin_air_filter",
+      "label": "Cabin air filter",
+      "kind": "filter",
+      "aliases": [
+        "Cabin filter"
+      ]
+    },
+    {
+      "key": "wiper.front.left",
+      "label": "Front left wiper blade",
+      "kind": "wiper_blade",
+      "aliases": []
+    },
+    {
+      "key": "wiper.front.right",
+      "label": "Front right wiper blade",
+      "kind": "wiper_blade",
+      "aliases": []
+    }
+  ],
+  "parts": [
+    {
+      "key": "example-oil-100",
+      "manufacturer": "Example Filter Co",
+      "partNumber": "OIL-100",
+      "description": "Example engine oil filter"
+    },
+    {
+      "key": "example-air-200",
+      "manufacturer": "Example Filter Co",
+      "partNumber": "AIR-200",
+      "description": "Example engine air filter"
+    },
+    {
+      "key": "example-cabin-300",
+      "manufacturer": "Example Filter Co",
+      "partNumber": "CAB-300",
+      "description": "Example cabin air filter"
+    },
+    {
+      "key": "example-wiper-24",
+      "manufacturer": "Example Wiper Co",
+      "partNumber": "WB-24",
+      "description": "Example 24 inch wiper blade"
+    },
+    {
+      "key": "example-wiper-22",
+      "manufacturer": "Example Wiper Co",
+      "partNumber": "WB-22",
+      "description": "Example 22 inch wiper blade"
+    }
+  ],
+  "offers": [
+    {
+      "key": "example-oil-100-store",
+      "partKey": "example-oil-100",
+      "label": "Example store listing",
+      "sku": "OIL-100",
+      "url": "https://example.invalid/products/oil-100"
+    }
+  ],
+  "fitments": [
+    {
+      "equipmentKey": "workhorse2500-2020-diesel",
+      "slotKey": "engine.oil_filter",
+      "partKey": "example-oil-100",
+      "relation": "compatible",
+      "verification": "asserted",
+      "evidence": []
+    },
+    {
+      "equipmentKey": "workhorse2500-2020-diesel",
+      "slotKey": "engine.air_filter",
+      "partKey": "example-air-200",
+      "relation": "compatible",
+      "verification": "asserted",
+      "evidence": []
+    },
+    {
+      "equipmentKey": "workhorse2500-2020-diesel",
+      "slotKey": "hvac.cabin_air_filter",
+      "partKey": "example-cabin-300",
+      "relation": "compatible",
+      "verification": "asserted",
+      "evidence": []
+    },
+    {
+      "equipmentKey": "workhorse2500-2020-diesel",
+      "slotKey": "wiper.front.left",
+      "partKey": "example-wiper-24",
+      "relation": "compatible",
+      "verification": "asserted",
+      "evidence": []
+    },
+    {
+      "equipmentKey": "workhorse2500-2020-diesel",
+      "slotKey": "wiper.front.right",
+      "partKey": "example-wiper-22",
+      "relation": "compatible",
+      "verification": "asserted",
+      "evidence": []
+    }
+  ]
+}
