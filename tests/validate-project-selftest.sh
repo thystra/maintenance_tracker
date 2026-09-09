@@ -72,6 +72,27 @@ PY
 expect_rejected 'a mutable CI image tag' 'Routine CI must pin the qualified PHP 8.2 image digest.' "$tmp/image-digest.out"
 
 copy_fixture
+python3 - "$tmp/fixture/ci/images/qualified-images.json" <<'PY'
+import json, sys
+from pathlib import Path
+p=Path(sys.argv[1]); data=json.loads(p.read_text())
+data['images']['php82']['sourceRevision']='not-a-git-revision'
+p.write_text(json.dumps(data))
+PY
+expect_rejected 'invalid per-image CI source provenance' 'Qualified PHP 8.2 CI image must record the exact 40-character source revision used to build that image.' "$tmp/image-source-revision.out"
+
+copy_fixture
+python3 - "$tmp/fixture/.forgejo/workflows/ci.yml" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+old='["dom", "libxml", "mbstring", "xml", "xmlwriter", "zip"]'
+if old not in s: raise SystemExit('qualified extension invariant missing')
+p.write_text(s.replace(old, '["dom", "libxml", "mbstring", "xml", "xmlwriter"]', 1))
+PY
+expect_rejected 'PHP CI without ext-zip enforcement' 'Routine PHP CI must fail closed unless the qualified image provides ext-zip.' "$tmp/image-zip-extension.out"
+
+copy_fixture
 python3 - "$tmp/fixture/package.json" <<'PY'
 import json, sys
 from pathlib import Path
