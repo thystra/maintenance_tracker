@@ -74,6 +74,8 @@ const profileInstallationService = await read('lib/Service/ProfileInstallationSe
 const profileController = await read('lib/Controller/ProfileController.php')
 const migration1090 = await read('lib/Migration/Version1090Date20260907193000.php')
 const fitmentPackValidator = await read('lib/Service/FitmentPackValidator.php')
+const fitmentCsvBundleService = await read('lib/Service/FitmentCsvBundleService.php')
+const fitmentZipBundleService = await read('lib/Service/FitmentZipBundleService.php')
 const fitmentRepository = await read('lib/Service/FitmentRepository.php')
 const assetFitmentDescriptorService = await read('lib/Service/AssetFitmentDescriptorService.php')
 const fitmentService = await read('lib/Service/FitmentService.php')
@@ -209,7 +211,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -340,7 +342,7 @@ for (const key of ['inspect_tires', 'rotate_tires', 'inspect_wipers']) {
 	expect(definition !== undefined && !Object.hasOwn(definition, 'componentKey'), `Generic ${key} must remain asset-scoped because its source component template is multi-instance.`)
 }
 
-// v0.1.10 JSON fitment runtime materializes portable compatibility knowledge without silently mapping it to local assets.
+// v0.1.10 fitment runtime materializes portable compatibility knowledge without silently mapping it to local assets.
 for (const table of ['maint_fit_packs', 'maint_fit_revs', 'maint_fit_imports', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_slots', 'maint_parts', 'maint_offers', 'maint_fitments', 'maint_asset_fit']) {
 	expect(migration1090.includes(`table: '${table}'`), `v0.1.10 fitment migration must create ${table}.`)
 }
@@ -348,6 +350,11 @@ expect(migration1090.includes("addColumn('content_json', Types::TEXT, ['notnull'
 expect(migration1090.includes("addUniqueIndex(['workspace_id','revision_id']") && migration1090.includes("addUniqueIndex(['workspace_id','import_uuid']"), 'Fitment imports must enforce one imported operation per immutable revision and unique client operation UUIDs.')
 expect(migration1090.includes("addColumn('active_marker', Types::STRING, ['notnull' => false") && migration1090.includes("addUniqueIndex(['workspace_id','target_id','active_marker']"), 'Fitment target mappings must use the nullable-active-marker uniqueness contract for one active mapping per target.')
 expect(fitmentPackValidator.includes('MAX_PACK_BYTES = 8 * 1024 * 1024') && fitmentPackValidator.includes("if ($input['schemaVersion'] !== 1)"), 'Runtime fitment validation must enforce exact schema v1 and the reviewed 8 MiB bound.')
+expect(fitmentCsvBundleService.includes("'equipment_identifiers.csv'") && fitmentCsvBundleService.includes("'notesPresent'") && fitmentCsvBundleService.includes('MAX_TOTAL_DATA_ROWS = 250000'), 'Fitment CSV projection must preserve reusable identifiers, optional-note presence, and the reviewed aggregate row bound.')
+expect(fitmentCsvBundleService.includes("SPREADSHEET_ESCAPE = 'leading-apostrophe-v1'") && fitmentCsvBundleService.includes('spreadsheetEscape(') && fitmentCsvBundleService.includes('spreadsheetUnescape(') && fitmentCsvBundleService.includes('SPREADSHEET_DANGEROUS_PREFIXES') && fitmentCsvBundleService.includes('"\\t"') && fitmentCsvBundleService.includes('＝') && fitmentCsvBundleService.includes('＠'), 'Fitment CSV projection must retain the versioned reversible spreadsheet formula-escape scheme and reviewed trigger set.')
+expect(fitmentZipBundleService.includes('MAX_COMPRESSED_BYTES = 8 * 1024 * 1024') && fitmentZipBundleService.includes('FitmentCsvBundleService::MAX_EXPANDED_BYTES') && fitmentZipBundleService.includes('safeRootName(') && fitmentZipBundleService.includes("!str_contains($name, '/')") && fitmentZipBundleService.includes("!str_contains($name, '\\\\')") && fitmentZipBundleService.includes('rejectSymlink('), 'Fitment ZIP projection must retain compressed/expanded bounds and archive path/symlink defenses.')
+expect(fitmentZipBundleService.includes('ZipArchive::EM_NONE') && fitmentZipBundleService.includes('ZipArchive::CM_STORE') && fitmentZipBundleService.includes('ZipArchive::CM_DEFLATE') && fitmentZipBundleService.includes('archive comments are not allowed'), 'Fitment ZIP projection must reject encryption/comments and unsupported compression methods.')
+expect(info.includes('<lib>zip</lib>'), 'Nextcloud app metadata must declare the PHP zip extension required by fitment bundle interchange.')
 expect(fitmentPackValidator.includes('partIdentityHash(') && fitmentPackValidator.includes('normalizeIdentity($manufacturer)') && fitmentPackValidator.includes('normalizeIdentity($partNumber)'), 'Canonical part identity must conservatively retain part-number punctuation.')
 expect(fitmentPackValidator.includes("$verification === 'verified' && $evidence === []") && fitmentPackValidator.includes('requires evidence'), 'Verified fitment assertions must require evidence.')
 expect(validateFitmentPacks.includes('function byteCompare(') && validateFitmentPacks.includes('Buffer.compare') && !validateFitmentPacks.includes('localeCompare'), 'JavaScript fitment canonical ordering must use explicit UTF-8 byte comparison rather than locale-sensitive sorting.')
@@ -356,14 +363,15 @@ expect(fitmentService.includes('already has an active local-asset mapping under 
 expect(fitmentService.includes("in_array($match['state'], ['conflict','insufficient'], true) && !$acceptConflict") && fitmentService.includes('acceptConflict=true'), 'Conflict/insufficient target matching must require explicit Owner/Manager confirmation.')
 expect(assetFitmentDescriptorService.includes("'state' => $state") && assetFitmentDescriptorService.includes("'candidate'") && assetFitmentDescriptorService.includes("'insufficient'"), 'Asset fitment matching must expose reasoned exact/candidate/conflict/insufficient states.')
 expect(assetFitmentDescriptorService.includes("'qualifiers' => []") && !assetFitmentDescriptorService.includes('getSerialNumber()') && !assetFitmentDescriptorService.includes('getNotes()'), 'Local fitment descriptors must exclude private unit identity and notes.')
-for (const route of ['/fitment-packs/validate', '/fitment-packs/preview', '/fitment-packs/import', '/fitment-packs/{importUuid}/export', '/fitment-packs/{importUuid}/targets', '/fitment-targets/{targetUuid}/matches', '/fitment-targets/{targetUuid}/map', '/assets/{assetUuid}/fitments', '/assets/{assetUuid}/fitment-export/community']) {
+for (const route of ['/fitment-packs/validate', '/fitment-packs/preview', '/fitment-packs/import', '/fitment-packs/bundle/validate', '/fitment-packs/bundle/preview', '/fitment-packs/bundle/import', '/fitment-packs/{importUuid}/export', '/fitment-packs/{importUuid}/bundle', '/fitment-packs/{importUuid}/targets', '/fitment-targets/{targetUuid}/matches', '/fitment-targets/{targetUuid}/map', '/assets/{assetUuid}/fitments', '/assets/{assetUuid}/fitment-export/community', '/assets/{assetUuid}/fitment-export/community/bundle']) {
 	expect(fitmentController.includes(route), `Fitment controller must expose ${route}.`)
 }
 expect(fitmentController.includes('AuthorizationCatalog::FITMENT_READ') && fitmentController.includes('AuthorizationCatalog::FITMENT_IMPORT') && fitmentController.includes('AuthorizationCatalog::FITMENT_MAP'), 'Fitment API must preserve the read/import/map capability split.')
+expect(fitmentController.includes('DataDownloadResponse') && fitmentController.includes('cacheFor(0)'), 'Fitment ZIP downloads must use a binary download response and disable caching.')
 expect(fitmentRepository.includes("insert('maint_fit_revs')") && fitmentRepository.includes("insert('maint_fit_bind')") && fitmentRepository.includes("insert('maint_fitments')"), 'Fitment repository must persist immutable revision provenance, source bindings, and source-specific fitment assertions.')
 expect(fitmentService.includes("'offers' => []") && fitmentService.includes("'omitted_pending_explicit_selection'"), 'Community fitment export must omit offers until an explicit reviewed offer-selection policy exists.')
 expect(fitmentService.includes('$v = $this->validator->validate($pack)') && fitmentService.includes('communityExport('), 'Community fitment export must be rebuilt through the same runtime validator/canonicalizer.')
-expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'This JSON fitment checkpoint must keep profile-v2 part materialization fail-closed until the canonical profile-parts bridge is implemented.')
+expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'This fitment checkpoint must keep profile-v2 part materialization fail-closed until the canonical profile-parts bridge is implemented.')
 
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
@@ -416,10 +424,10 @@ expect(security.includes('Fitment-pack boundary') && security.includes('formula-
 expect(architecture.includes('Fitment interoperability') && domainModel.includes('standardized **fitment slot**') && productArchitecture.includes('compatibility matrices'), 'Architecture/domain/product docs must carry the fitment interoperability model.')
 expect(agents.includes('v0.1.10 fitment interoperability invariant') && agents.includes('Core slot/qualifier keys') && agents.includes('are append-only'), 'AGENTS must preserve fitment interoperability invariants.')
 expect(validateFitmentPacks.includes('duplicate fitment tuple') && validateFitmentPacks.includes('verified fitment') && validateFitmentPacks.includes('reverse-DNS-style extension'), 'Fitment validator must enforce referential uniqueness, evidence, and extension-key rules.')
-expect(api.includes('/fitment-packs/validate') && api.includes('/fitment-packs/import') && api.includes('/fitment-targets/{targetUuid}/map') && api.includes('/fitment-export/community'), 'API documentation must cover the implemented v0.1.10 JSON fitment validation/import/mapping/export surface.')
-expect(docs.includes('JSON') && docs.includes('fitment') && docs.includes('CSV/ZIP') && (docs.includes('pending') || docs.includes('not yet implemented')), 'Documentation must distinguish implemented JSON fitment runtime from pending CSV/ZIP runtime support.')
-expect(roadmap.includes('[ ] v0.1.10') || roadmap.includes('10. [ ]'), 'Roadmap must keep v0.1.10 open while CSV/ZIP, profile-part materialization, activity parts, vendors, and costs remain pending.')
-expect(changelog.includes('0.1.10') && readme.includes('fitment'), 'User-facing documentation must describe the v0.1.10 JSON fitment foundation without claiming the whole tranche complete.')
+expect(api.includes('/fitment-packs/validate') && api.includes('/fitment-packs/import') && api.includes('/fitment-packs/bundle/validate') && api.includes('/fitment-packs/bundle/import') && api.includes('/fitment-packs/{importUuid}/bundle') && api.includes('/fitment-targets/{targetUuid}/map') && api.includes('/fitment-export/community/bundle'), 'API documentation must cover the implemented v0.1.10 JSON and CSV/ZIP fitment validation/import/mapping/export surface.')
+expect(docs.includes('JSON') && docs.includes('fitment') && docs.includes('CSV/ZIP') && docs.includes('reversible'), 'Documentation must describe CSV/ZIP as a reversible projection into the canonical fitment runtime.')
+expect(roadmap.includes('[ ] v0.1.10') || roadmap.includes('10. [ ]'), 'Roadmap must keep v0.1.10 open while profile-part materialization, activity parts, vendors, and costs remain pending.')
+expect(changelog.includes('0.1.10') && changelog.includes('CSV/ZIP') && readme.includes('fitment') && readme.includes('CSV/ZIP'), 'User-facing documentation must describe the v0.1.10 JSON and CSV/ZIP fitment foundation without claiming the whole tranche complete.')
 
 try {
 	await access('.github/workflows/ci.yml')

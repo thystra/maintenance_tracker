@@ -155,4 +155,4 @@ license and must declare its provenance.
 
 ### v0.1.10 fitment foundation (in progress)
 
-The current branch adds the JSON runtime foundation for portable fitment compatibility packs: standardized service-position slots, canonical parts, immutable import provenance, reasoned equipment matching with explicit Owner/Manager mapping, source JSON export, and privacy-minimized community JSON export. This does **not** complete v0.1.10: CSV/ZIP runtime interchange, profile-v2 part materialization, activity parts-used records, vendor management/store-link editing, and the central cost ledger remain pending.
+The current v0.1.10 checkpoint implements portable fitment compatibility packs through canonical JSON and a bounded normalized CSV/ZIP spreadsheet projection: standardized service-position slots, canonical parts, immutable import provenance, reasoned equipment matching with explicit Owner/Manager mapping, source export, and privacy-minimized community export. This does **not** complete v0.1.10: profile-v2 part materialization, activity parts-used records, vendor management/store-link editing, and the central cost ledger remain pending.

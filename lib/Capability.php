@@ -43,6 +43,7 @@ final class Capability implements ICapability {
 					'maintenance-occurrences',
 					'profile-installation',
 					'fitment-packs',
+					'fitment-csv-zip',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

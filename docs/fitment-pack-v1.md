@@ -17,14 +17,14 @@ built-in standardized slot/qualifier vocabulary is
 real-world fitment claim is
 [`example-service-parts.json`](../fitment/examples/example-service-parts.json).
 
-This document defines the v0.1.10 contract before database materialization is
-implemented. Schema-valid data is not automatically trusted or installed.
+This document defines the v0.1.10 interchange and runtime contract. Schema-valid
+data is not automatically trusted, mapped, or installed.
 
 ## Runtime implementation status
 
-The current v0.1.10 checkpoint implements the bounded JSON validator/canonicalizer, immutable pack revision/import persistence, canonical standardized slots and parts, source offers/fitment assertions, explicit equipment-target-to-local-asset mapping, source JSON export, and privacy-minimized community JSON export. Import and mapping remain separate operations.
+The current v0.1.10 checkpoint implements the bounded JSON validator/canonicalizer, immutable pack revision/import persistence, canonical standardized slots and parts, source offers/fitment assertions, explicit equipment-target-to-local-asset mapping, source/community JSON export, and the normalized CSV/ZIP spreadsheet projection defined below. JSON and CSV/ZIP import feed the same validator and persistence path; import and local-asset mapping remain separate operations.
 
-The CSV/ZIP interchange defined below remains **pending runtime implementation**. It is retained as the reviewed spreadsheet/community interchange contract, including archive path-traversal and formula-injection protections. Profile-v2 parts also remain fail-closed until a later v0.1.10 checkpoint explicitly materializes them through the canonical part/fitment services.
+Profile-v2 parts remain fail-closed until a later v0.1.10 checkpoint explicitly materializes them through the canonical part/fitment services. Activity parts-used records, vendor/store-link management, and the central cost ledger likewise remain pending.
 
 
 ## Stable slot identity
@@ -222,32 +222,77 @@ explicit public provenance selected for the export.
 Canonical JSON is the authoritative lossless interchange representation and the
 basis for content hashing.
 
-For spreadsheet/community work, the application should also import/export a
-normalized UTF-8 ZIP bundle containing an allowlisted set of files:
+For spreadsheet/community work, the application also imports/exports a normalized
+UTF-8 ZIP bundle. Every v1 bundle contains **exactly** these root-level files;
+optional relational tables are still present and may contain only their header:
 
-- `manifest.json` — pack identity/version/license/provenance and CSV dialect;
-- `equipment.csv` — equipment key/asset class/manufacturer/model/year range;
-- `equipment_aliases.csv` — equipment key, field (`manufacturer` or `model`), alias;
-- `equipment_qualifiers.csv` — equipment key, qualifier key/value/match;
-- `qualifier_aliases.csv` — equipment key, qualifier key, alias;
-- `slots.csv` — slot key/label/kind;
-- `slot_aliases.csv` — slot key/alias;
-- `parts.csv` — part key/manufacturer/part number/description;
-- `offers.csv` — offer key/part key/label/SKU/HTTPS URL;
-- `fitments.csv` — equipment key/slot key/part key/relation/verification/notes;
-- `fitment_evidence.csv` — fitment tuple plus evidence kind/reference/note.
+- `manifest.json` — pack identity/version/license/provenance and exact CSV dialect;
+- `equipment.csv` — `key,assetClass,manufacturer,model,yearFrom,yearTo`;
+- `equipment_aliases.csv` — `equipmentKey,field,alias`;
+- `equipment_identifiers.csv` — `equipmentKey,namespace,value`;
+- `equipment_qualifiers.csv` — `equipmentKey,key,value,match`;
+- `qualifier_aliases.csv` — `equipmentKey,qualifierKey,alias`;
+- `slots.csv` — `key,label,kind`;
+- `slot_aliases.csv` — `slotKey,alias`;
+- `parts.csv` — `key,manufacturer,partNumber,description`;
+- `offers.csv` — `key,partKey,label,sku,url`;
+- `fitments.csv` — `equipmentKey,slotKey,partKey,relation,verification,notesPresent,notes`;
+- `fitment_evidence.csv` — `equipmentKey,slotKey,partKey,kind,referenceUrl,note`.
+
+`equipment_identifiers.csv` is required for a lossless projection of the canonical
+JSON equipment descriptor; identifiers may describe reusable model/configuration
+identity but remain subject to the same owned-unit/VIN/serial rejection rules.
+`fitments.csv` uses `notesPresent` (`0` or `1`) because canonical JSON distinguishes
+an absent optional `notes` member from a present empty string. Other optional CSV
+fields are represented by an empty cell only where the JSON validator already
+forbids an empty present value.
+
+`manifest.json` has format identifier
+`maintenance-tracker-fitment-csv-bundle`, `formatVersion: 1`, exact
+`schemaVersion: 1`/`vocabularyVersion: 1`, a `pack` object containing the JSON
+top-level metadata/provenance, and this exact CSV dialect:
+
+```json
+{
+  "encoding": "UTF-8",
+  "delimiter": ",",
+  "enclosure": "\"",
+  "quoting": "rfc4180-double-quote",
+  "recordSeparator": "LF-or-CRLF",
+  "spreadsheetEscape": "leading-apostrophe-v1"
+}
+```
 
 The normalized bundle is relational rather than a single giant matrix CSV so
-aliases, arbitrary qualifiers, multiple evidence rows, and repeated fitments are
-lossless. A spreadsheet user can usually work primarily in `equipment.csv`,
-`parts.csv`, and `fitments.csv` and leave optional tables empty.
+aliases, identifiers, arbitrary qualifiers, multiple evidence rows, and repeated
+relationships remain lossless. Spreadsheet users can usually work primarily in
+`equipment.csv`, `parts.csv`, and `fitments.csv` while leaving optional tables at
+header-only. Export emits LF records; import accepts ordinary RFC 4180 LF/CRLF
+records, including quoted embedded newlines. UTF-8 BOMs are rejected so the
+versioned projection remains unambiguous.
 
-ZIP import is limited to **8 MiB compressed** and **32 MiB expanded** in v1 and rejects path traversal, symlinks, duplicate filenames, unknown files, and entries/expanded content beyond those bounds. CSV parsing is RFC 4180-style UTF-8 with fixed headers and the same schema-derived row-count limits.
+ZIP import is limited to **8 MiB compressed** and **32 MiB expanded** in v1. It
+uses the central directory only as a bounded source of in-memory file content; it
+does not extract archive paths to the filesystem. The importer rejects path traversal/separators, symlinks, duplicate filenames, unknown/missing files, archive
+or entry comments, encryption, compression methods other than STORE/DEFLATE, and
+entries/expanded content beyond the reviewed bounds. CSV files have exact headers,
+per-table limits, and a **250,000 aggregate data-row** ceiling before canonical
+validation applies the schema's nested/top-level count limits.
 
-Spreadsheet-safe CSV export must defend against formula injection. Text cells
-whose first character is `=`, `+`, `-`, `@`, or `'` are escaped using a versioned
-scheme recorded in `manifest.json`; the corresponding importer reverses only
-that declared scheme. Canonical JSON never applies spreadsheet escaping.
+Spreadsheet-safe CSV export defends against formula injection with the versioned
+`leading-apostrophe-v1` scheme. Any text cell whose first character is `=`, `+`,
+`-`, `@`, `'`, TAB, CR, LF, or the full-width variants `＝`, `＋`, `－`, or `＠`
+receives one leading apostrophe before RFC 4180 encoding. The importer removes
+exactly one such prefix only when the manifest declares that scheme and the next
+character is one of that reviewed trigger set. This makes an original leading
+apostrophe reversible as two apostrophes. Canonical JSON never applies spreadsheet
+escaping.
+
+CSV/ZIP bytes are a projection rather than source identity: row order, ZIP
+compression bytes, timestamps, and spreadsheet escaping do not participate in the
+pack content hash. After import, the reconstructed object is run through the same
+JSON validator/canonicalizer and receives the canonical SHA-256 identity that is
+used for immutable revision/idempotency checks.
 
 ## Mapping nonstandard source data
 
