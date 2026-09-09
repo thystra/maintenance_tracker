@@ -20,9 +20,9 @@ jobs:
       matrix:
         include:
           - php: '8.2'
-            image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:fbbd1d9067f302fc769e342fe292836131cde3c8b809522f90d7165bbfb2fdc6
+            image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:d957cf0537413a4154e7c8fad4991b3489ed43cd4f4ab82cff0de355868be1a7
           - php: '8.5'
-            image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:a1c8b402f8cc6a61609cf4b0459b2a795b1b0671b95867995a1dd0b257c2a7dc
+            image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:5d77144ca454cd37b8df6cb2f3a084b6709928f6f3240cc280c140042c589333
     container:
       image: ${{ matrix.image }}
 
@@ -40,7 +40,7 @@ jobs:
           test "$(node --version | cut -d. -f1)" = 'v24'
           composer --version
           git --version
-          php -r 'foreach (["dom", "libxml", "mbstring", "xml", "xmlwriter"] as $ext) { if (!extension_loaded($ext)) { fwrite(STDERR, "Missing PHP extension: {$ext}\n"); exit(1); } }'
+          php -r 'foreach (["dom", "libxml", "mbstring", "xml", "xmlwriter", "zip"] as $ext) { if (!extension_loaded($ext)) { fwrite(STDERR, "Missing PHP extension: {$ext}\n"); exit(1); } }'
 
       - name: Validate metadata and dependencies
         run: |

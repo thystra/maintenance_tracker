@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REGISTRY="${CI_IMAGE_REGISTRY:-forgejo.argentwolf.org}"
 OWNER_PATH="${CI_IMAGE_OWNER_PATH:-alan/maintenance_tracker_for_nextcloud}"
 PUSH=0
+PHP_ONLY=0
 
 # Reviewed upstream multi-platform identities. Rebuild/review this script when
 # advancing any base/toolchain version.
@@ -15,10 +16,11 @@ COMPOSER_BASE='composer:2.10.3@sha256:4d045ea9f71d5d111a95e608400da61d187e487adf
 
 usage() {
     cat <<'USAGE'
-Usage: scripts/build-ci-images.sh [--push]
+Usage: scripts/build-ci-images.sh [--php-only] [--push]
 
-Builds and qualifies the Maintenance Tracker CI images. With --push, publishes
-qualified tags to the configured Forgejo registry and prints their RepoDigests.
+Builds and qualifies the Maintenance Tracker CI images. With --php-only, builds
+only the PHP 8.2/8.5 toolchains. With --push, publishes each image built by the
+selected mode to the configured Forgejo registry and prints its RepoDigest.
 After publication, record those exact identities in
 ci/images/qualified-images.json before making routine CI consume them.
 
@@ -28,22 +30,25 @@ Environment overrides:
 USAGE
 }
 
-case "${1:-}" in
-    '') ;;
-    --push) PUSH=1 ;;
-    -h|--help)
-        usage
-        exit 0
-        ;;
-    *)
-        usage >&2
-        exit 2
-        ;;
-esac
-[[ $# -le 1 ]] || {
-    usage >&2
-    exit 2
-}
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --php-only)
+            PHP_ONLY=1
+            ;;
+        --push)
+            PUSH=1
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+    shift
+done
 
 command -v docker >/dev/null 2>&1 || {
     echo 'ERROR: docker is required.' >&2
@@ -60,8 +65,8 @@ command -v docker >/dev/null 2>&1 || {
 }
 
 revision="$(git -C "$ROOT" rev-parse HEAD)"
-php82_image="${REGISTRY}/${OWNER_PATH}/ci-php:8.2-v1"
-php85_image="${REGISTRY}/${OWNER_PATH}/ci-php:8.5-v1"
+php82_image="${REGISTRY}/${OWNER_PATH}/ci-php:8.2-v2"
+php85_image="${REGISTRY}/${OWNER_PATH}/ci-php:8.5-v2"
 nextcloud_image="${REGISTRY}/${OWNER_PATH}/ci-nextcloud:v1"
 
 build_php() {
@@ -86,36 +91,41 @@ build_php() {
         test "$(node --version | cut -d. -f1)" = v24
         composer --version
         git --version
-        php -r '\''foreach (["dom", "libxml", "mbstring", "xml", "xmlwriter"] as $ext) { if (!extension_loaded($ext)) { fwrite(STDERR, "Missing PHP extension: {$ext}\\n"); exit(1); } }'\''
+        php -r '\''foreach (["dom", "libxml", "mbstring", "xml", "xmlwriter", "zip"] as $ext) { if (!extension_loaded($ext)) { fwrite(STDERR, "Missing PHP extension: {$ext}\\n"); exit(1); } }'\''
     ' -- "$series"
 }
 
 build_php '8.2' "$PHP82_BASE" "$php82_image"
 build_php '8.5' "$PHP85_BASE" "$php85_image"
 
-docker build \
-    --file "$ROOT/ci/images/nextcloud/Dockerfile" \
-    --build-arg "NODE_BASE=$NODE_BASE" \
-    --label "org.opencontainers.image.revision=$revision" \
-    --tag "$nextcloud_image" \
-    "$ROOT/ci/images"
+built_images=("$php82_image" "$php85_image")
 
-docker run --rm "$nextcloud_image" bash -ceu '
-    test "$(node --version | cut -d. -f1)" = v24
-    docker --version
-    git --version
-    test -r /etc/ssl/certs/ca-certificates.crt
-'
+if [[ "$PHP_ONLY" -eq 0 ]]; then
+    docker build \
+        --file "$ROOT/ci/images/nextcloud/Dockerfile" \
+        --build-arg "NODE_BASE=$NODE_BASE" \
+        --label "org.opencontainers.image.revision=$revision" \
+        --tag "$nextcloud_image" \
+        "$ROOT/ci/images"
+
+    docker run --rm "$nextcloud_image" bash -ceu '
+        test "$(node --version | cut -d. -f1)" = v24
+        docker --version
+        git --version
+        test -r /etc/ssl/certs/ca-certificates.crt
+    '
+    built_images+=("$nextcloud_image")
+fi
 
 echo 'CI image local qualification: PASS'
-printf '  %s\n  %s\n  %s\n' "$php82_image" "$php85_image" "$nextcloud_image"
+printf '  %s\n' "${built_images[@]}"
 
 if [[ "$PUSH" -eq 0 ]]; then
     echo 'No registry publication requested.'
     exit 0
 fi
 
-for image in "$php82_image" "$php85_image" "$nextcloud_image"; do
+for image in "${built_images[@]}"; do
     docker push "$image"
     docker pull "$image" >/dev/null
     digest="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" \

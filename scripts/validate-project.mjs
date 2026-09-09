@@ -144,19 +144,20 @@ expect(nextcloudIgnore.split(/\r?\n/).includes('/fitment/examples'), '.nextcloud
 expect(forgejoCi.includes('runs-on: forgejo-workstation'), 'Authoritative CI must target forgejo-workstation runners.')
 expect(!forgejoCi.includes('runs-on: ubuntu-latest'), 'Authoritative Forgejo CI must not target GitHub-hosted ubuntu-latest runners.')
 expect(forgejoCi.includes('https://data.forgejo.org/actions/checkout@'), 'Authoritative CI checkout must use an explicitly Forgejo-hosted action URL.')
-expect(qualifiedImages.schemaVersion === 1, 'Qualified CI image metadata must use the supported schema version.')
-expect(/^[0-9a-f]{40}$/.test(qualifiedImages.sourceRevision ?? ''), 'Qualified CI image metadata must record the exact 40-character source revision.')
+expect(qualifiedImages.schemaVersion === 2, 'Qualified CI image metadata must use the supported schema version.')
 for (const key of ['php82', 'php85', 'nextcloud']) {
 	expect(qualifiedImages.images?.[key] !== undefined, `Qualified CI image metadata must define ${key}.`)
 }
 for (const [key, image] of Object.entries(qualifiedImages.images ?? {})) {
 	const label = image.label ?? key
 	const repository = image.tag?.slice(0, image.tag.lastIndexOf(':'))
+	expect(/^[0-9a-f]{40}$/.test(image.sourceRevision ?? ''), `Qualified ${label} CI image must record the exact 40-character source revision used to build that image.`)
 	expect(/^sha256:[0-9a-f]{64}$/.test(image.digest ?? ''), `Qualified ${label} CI image must record a sha256 registry digest.`)
 	expect(image.reference === `${repository}@${image.digest}`, `Qualified ${label} CI image reference must bind its repository to its recorded digest.`)
 	expect(forgejoCi.includes(image.reference), `Routine CI must pin the qualified ${label} image digest.`)
 	expect(!forgejoCi.includes(image.tag), `Routine CI must not consume the mutable ${label} image tag.`)
 }
+expect(forgejoCi.includes('["dom", "libxml", "mbstring", "xml", "xmlwriter", "zip"]'), 'Routine PHP CI must fail closed unless the qualified image provides ext-zip.')
 expect(!forgejoCi.includes('shivammathur/setup-php'), 'Routine CI must use the qualified PHP images instead of rebuilding PHP with setup-php.')
 expect(!forgejoCi.includes('Install Docker client'), 'Routine Nextcloud CI must use the qualified Docker-client image instead of reinstalling Docker.')
 expect(!forgejoCi.includes('npm audit'), 'Network-dependent npm advisory checks must remain outside deterministic CI.')
