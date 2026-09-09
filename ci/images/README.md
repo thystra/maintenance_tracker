@@ -11,9 +11,10 @@ checked-out repository during CI.
 
 ## Images
 
-- `ci-php:8.2-v1` — PHP 8.2, required PHP extensions, Composer, Git, and the
-  minimal Node runtime required by Forgejo JavaScript actions.
-- `ci-php:8.5-v1` — the equivalent PHP 8.5 environment.
+- `ci-php:8.2-v2` — PHP 8.2, required PHP extensions including `ext-zip`,
+  Composer, Git, and the minimal Node runtime required by Forgejo JavaScript
+  actions.
+- `ci-php:8.5-v2` — the equivalent PHP 8.5 environment with `ext-zip`.
 - `ci-nextcloud:v1` — Node 24 plus the Docker client used by the disposable
   Nextcloud integration harness. It does not start a Docker daemon; jobs still
   use the isolated runner-provided `DOCKER_HOST` transport.
@@ -44,12 +45,19 @@ docker login forgejo.argentwolf.org
 bash scripts/build-ci-images.sh --push
 ```
 
+When qualifying only a new PHP image generation, use the narrower mode so an
+unchanged Nextcloud discovery tag is not rebuilt or republished:
+
+```bash
+bash scripts/build-ci-images.sh --php-only --push
+```
+
 The image names are nested under the repository name so Forgejo can associate
 them with this repository:
 
 ```text
-forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php:8.2-v1
-forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php:8.5-v1
+forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php:8.2-v2
+forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php:8.5-v2
 forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud:v1
 ```
 
@@ -57,6 +65,17 @@ After publication, capture the `RepoDigests` printed by the script. Routine CI
 must consume those `@sha256:...` identities, not merely the mutable tags. The
 machine-readable authority for the currently qualified set is
 `ci/images/qualified-images.json`; the normal workflow is validated against it.
+
+
+### PHP v2 qualification prerequisite
+
+The PHP v2 discovery tags add `ext-zip`/`ZipArchive` so ZIP-backed application
+unit tests run in both supported PHP lanes instead of being skipped by a
+toolchain that lacks the application-required extension. Building and
+publishing the v2 tags does **not** make them routine-CI authority. The v1
+immutable identities below remain authoritative until the v2 images have been
+locally qualified, published, their registry `RepoDigests` captured, and a
+separate reviewed change updates `qualified-images.json` and the workflow pins.
 
 ### Qualified v1 identities
 

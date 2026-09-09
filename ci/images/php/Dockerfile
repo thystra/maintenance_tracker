@@ -17,19 +17,22 @@ ARG SOURCE_URL=https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextc
 LABEL org.opencontainers.image.source="${SOURCE_URL}" \
       org.opencontainers.image.title="Maintenance Tracker PHP CI" \
       org.opencontainers.image.description="Qualified PHP/Composer toolchain for Maintenance Tracker Forgejo CI" \
-      org.opencontainers.image.version="${PHP_SERIES}-v1"
+      org.opencontainers.image.version="${PHP_SERIES}-v2"
 
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_HOME=/tmp/composer
 
-# The pinned official PHP images provide the required core extensions.
-# Do not rebuild them here; the qualification command below is the contract
-# check for each exact image identity.
+# The pinned official PHP images provide the required core extensions, but
+# ext-zip is intentionally compiled here because the fitment ZIP runtime and
+# its unit tests require ZipArchive. The qualification command below is the
+# contract check for each exact image identity.
 RUN set -eux; \
     apt-get update; \
     apt-get install --yes --no-install-recommends \
         git \
+        libzip-dev \
         unzip; \
+    docker-php-ext-install -j"$(nproc)" zip; \
     rm -rf /var/lib/apt/lists/*
 
 # Forgejo JavaScript actions (including checkout) require a Node runtime in a
@@ -42,4 +45,4 @@ RUN set -eux; \
     php --version; \
     node --version; \
     composer --version; \
-    php -r 'foreach (["dom", "libxml", "mbstring", "xml", "xmlwriter"] as $ext) { if (!extension_loaded($ext)) { fwrite(STDERR, "Missing PHP extension: {$ext}\\n"); exit(1); } }'
+    php -r 'foreach (["dom", "libxml", "mbstring", "xml", "xmlwriter", "zip"] as $ext) { if (!extension_loaded($ext)) { fwrite(STDERR, "Missing PHP extension: {$ext}\\n"); exit(1); } }'
