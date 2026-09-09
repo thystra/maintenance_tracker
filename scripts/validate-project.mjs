@@ -157,7 +157,7 @@ for (const [key, image] of Object.entries(qualifiedImages.images ?? {})) {
 	expect(forgejoCi.includes(image.reference), `Routine CI must pin the qualified ${label} image digest.`)
 	expect(!forgejoCi.includes(image.tag), `Routine CI must not consume the mutable ${label} image tag.`)
 }
-expect(forgejoCi.includes('[\"dom\", \"libxml\", \"mbstring\", \"xml\", \"xmlwriter\", \"zip\"]'), 'Routine PHP CI must fail closed unless the qualified image provides ext-zip.')
+expect(forgejoCi.includes('["dom", "libxml", "mbstring", "xml", "xmlwriter", "zip"]'), 'Routine PHP CI must fail closed unless the qualified image provides ext-zip.')
 expect(!forgejoCi.includes('shivammathur/setup-php'), 'Routine CI must use the qualified PHP images instead of rebuilding PHP with setup-php.')
 expect(!forgejoCi.includes('Install Docker client'), 'Routine Nextcloud CI must use the qualified Docker-client image instead of reinstalling Docker.')
 expect(!forgejoCi.includes('npm audit'), 'Network-dependent npm advisory checks must remain outside deterministic CI.')
