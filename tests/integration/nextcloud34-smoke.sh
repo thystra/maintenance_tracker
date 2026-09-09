@@ -214,6 +214,7 @@ assert_contains "$capabilities" '"activity-ledger"' 'capabilities'
 assert_contains "$capabilities" '"maintenance-due-state"' 'capabilities'
 assert_contains "$capabilities" '"profile-installation"' 'capabilities'
 assert_contains "$capabilities" '"fitment-packs"' 'capabilities'
+assert_contains "$capabilities" '"fitment-csv-zip"' 'capabilities'
 
 categories=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -993,7 +994,7 @@ if [[ ! "$admin_workspace_uuid" =~ ^[0-9a-f-]{36}$ ]]; then
 	exit 1
 fi
 
-# v0.1.10 JSON fitment-pack vertical slice. Example data is intentionally not staged into the app;
+# v0.1.10 fitment-pack JSON + CSV/ZIP vertical slice. Example data is intentionally not staged into the app;
 # feed it through the running Nextcloud container over stdin instead.
 fitment_asset_uuid='5a7f7611-d4b8-4d9f-8e10-218b6889d2a1'
 fitment_asset_name='Private Local Workhorse Nickname'
@@ -1060,6 +1061,53 @@ fitment_source_export=$(docker exec "$container" curl --silent --show-error \
 assert_contains "$fitment_source_export" '"statuscode":200' 'fitment source export'
 assert_contains "$fitment_source_export" '"key":"example-oil-100-store"' 'fitment source export retains offers'
 assert_contains "$fitment_source_export" "\"contentHash\":\"${fitment_hash}\"" 'fitment source export hash'
+docker exec "$container" php -r 'if (!extension_loaded("zip") || !class_exists("ZipArchive")) { fwrite(STDERR, "PHP zip extension unavailable\n"); exit(1); }'
+fitment_source_bundle='/tmp/maintenance-tracker-source.fitment.zip'
+fitment_source_bundle_status=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/zip' \
+	--output "$fitment_source_bundle" --write-out '%{http_code}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/${fitment_import_uuid}/bundle?workspace=${admin_workspace_uuid}")
+[ "$fitment_source_bundle_status" = '200' ] || { echo "fitment source bundle export expected HTTP 200, got ${fitment_source_bundle_status}" >&2; exit 1; }
+fitment_source_bundle_entries=$(docker exec --env BUNDLE="$fitment_source_bundle" "$container" php -r '
+$z=new ZipArchive(); if($z->open(getenv("BUNDLE"), ZipArchive::RDONLY)!==true){exit(2);} $n=[]; for($i=0;$i<$z->numFiles;$i++){$n[]=$z->getNameIndex($i);} $z->close(); sort($n,SORT_STRING); echo implode(",",$n);')
+assert_contains "$fitment_source_bundle_entries" 'equipment_identifiers.csv' 'fitment source bundle identifier table'
+assert_contains "$fitment_source_bundle_entries" 'manifest.json' 'fitment source bundle manifest'
+assert_contains "$fitment_source_bundle_entries" 'fitment_evidence.csv' 'fitment source bundle evidence table'
+
+fitment_bundle_validate=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	--form "bundle=@${fitment_source_bundle};type=application/zip" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/bundle/validate?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_bundle_validate" '"statuscode":200' 'fitment ZIP bundle validate'
+assert_contains "$fitment_bundle_validate" "\"contentHash\":\"${fitment_hash}\"" 'fitment ZIP bundle canonical hash'
+
+fitment_bundle_preview=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	--form "bundle=@${fitment_source_bundle};type=application/zip" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/bundle/preview?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_bundle_preview" '"statuscode":200' 'fitment ZIP bundle preview'
+assert_contains "$fitment_bundle_preview" "\"contentHash\":\"${fitment_hash}\"" 'fitment ZIP preview canonical hash'
+
+fitment_bundle_second_import=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	--form "importUuid=${fitment_second_import_uuid}" \
+	--form "bundle=@${fitment_source_bundle};type=application/zip" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/bundle/import?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_bundle_second_import" '"statuscode":412' 'fitment cross-representation second import UUID rejection'
+
+fitment_unsafe_bundle='/tmp/maintenance-tracker-unsafe.fitment.zip'
+docker exec --env SOURCE="$fitment_source_bundle" --env TARGET="$fitment_unsafe_bundle" "$container" php -r '
+if(!copy(getenv("SOURCE"),getenv("TARGET"))){exit(2);} $z=new ZipArchive(); if($z->open(getenv("TARGET"))!==true){exit(3);} if(!$z->addFromString("../unexpected.csv","bad\n")){exit(4);} if(!$z->close()){exit(5);}'
+fitment_unsafe_validate=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	--form "bundle=@${fitment_unsafe_bundle};type=application/zip" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/bundle/validate?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_unsafe_validate" '"statuscode":400' 'fitment ZIP traversal entry rejection'
+
 
 fitment_targets=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
@@ -1119,6 +1167,36 @@ assert_contains "$fitment_community_export" '"offers":[]' 'fitment community exp
 assert_contains "$fitment_community_export" '"offersPolicy":"omitted_pending_explicit_selection"' 'fitment community export policy marker'
 assert_not_contains "$fitment_community_export" "$fitment_asset_uuid" 'fitment community export local UUID privacy'
 assert_not_contains "$fitment_community_export" "$fitment_asset_name" 'fitment community export local nickname privacy'
+fitment_community_hash=$(printf '%s' "$fitment_community_export" | docker exec --interactive "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);echo $d["ocs"]["data"]["contentHash"]??"";')
+[[ "$fitment_community_hash" =~ ^[0-9a-f]{64}$ ]] || { echo "fitment community hash missing: ${fitment_community_hash}" >&2; exit 1; }
+fitment_community_bundle='/tmp/maintenance-tracker-community.fitment.zip'
+fitment_community_bundle_status=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/zip' --header 'Content-Type: application/json' \
+	--data "$fitment_community_payload" \
+	--output "$fitment_community_bundle" --write-out '%{http_code}' \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assets/${fitment_asset_uuid}/fitment-export/community/bundle?workspace=${admin_workspace_uuid}")
+[ "$fitment_community_bundle_status" = '200' ] || { echo "fitment community bundle export expected HTTP 200, got ${fitment_community_bundle_status}" >&2; exit 1; }
+
+fitment_community_bundle_validate=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	--form "bundle=@${fitment_community_bundle};type=application/zip" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/bundle/validate?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_community_bundle_validate" '"statuscode":200' 'fitment community ZIP validate'
+assert_contains "$fitment_community_bundle_validate" "\"contentHash\":\"${fitment_community_hash}\"" 'fitment community ZIP canonical hash'
+
+fitment_community_import_uuid='afc12b66-c9ad-4ce4-9365-76dfbdde17f6'
+fitment_community_bundle_import=$(docker exec "$container" curl --silent --show-error \
+	--user "${admin_user}:${admin_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	--form "importUuid=${fitment_community_import_uuid}" \
+	--form "bundle=@${fitment_community_bundle};type=application/zip" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/bundle/import?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$fitment_community_bundle_import" '"statuscode":201' 'fitment community ZIP import'
+assert_contains "$fitment_community_bundle_import" "\"importUuid\":\"${fitment_community_import_uuid}\"" 'fitment community ZIP import UUID'
+assert_contains "$fitment_community_bundle_import" "\"contentHash\":\"${fitment_community_hash}\"" 'fitment community ZIP imported canonical hash'
+
 
 member_added=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
@@ -1159,6 +1237,22 @@ contributor_fitment_import_denied=$(docker exec "$container" curl --silent --sho
 	--data "$fitment_second_import_payload" \
 	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/import?workspace=${admin_workspace_uuid}&format=json")
 assert_contains "$contributor_fitment_import_denied" '"statuscode":403' 'contributor fitment import rejection'
+contributor_fitment_bundle_validate=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	--form "bundle=@${fitment_source_bundle};type=application/zip" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/bundle/validate?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_fitment_bundle_validate" '"statuscode":200' 'contributor fitment bundle validation read'
+
+contributor_fitment_bundle_import_uuid='b0d23c77-dabe-4df5-a476-87efceef28a7'
+contributor_fitment_bundle_import_denied=$(docker exec "$container" curl --silent --show-error \
+	--user "${collab_user}:${collab_password}" --request POST \
+	--header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+	--form "importUuid=${contributor_fitment_bundle_import_uuid}" \
+	--form "bundle=@${fitment_source_bundle};type=application/zip" \
+	"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/fitment-packs/bundle/import?workspace=${admin_workspace_uuid}&format=json")
+assert_contains "$contributor_fitment_bundle_import_denied" '"statuscode":403' 'contributor fitment bundle import rejection'
+
 
 contributor_fitment_map_denied=$(docker exec "$container" curl --silent --show-error \
 	--user "${collab_user}:${collab_password}" --request POST \

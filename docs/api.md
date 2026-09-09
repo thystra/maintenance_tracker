@@ -420,21 +420,50 @@ origin/trust state, license/provenance, and source bindings (`sourceType`, `sour
 `ordinal`, `targetUuid`) to the resulting canonical records.
 
 
-## Fitment-pack JSON runtime — v0.1.10 foundation
+## Fitment-pack runtime — v0.1.10 foundation
 
-The current v0.1.10 runtime implements the canonical **JSON** fitment-pack path. `fitment.read` is available to Owner, Manager, Contributor, and Viewer. `fitment.import` and `fitment.map` are serialized write capabilities available only to Owner and Manager. Import never silently attaches an equipment target to a local asset.
+The current v0.1.10 runtime implements canonical **JSON** plus a bounded normalized
+**CSV/ZIP** projection. `fitment.read` is available to Owner, Manager, Contributor,
+and Viewer. `fitment.import` and `fitment.map` are serialized write capabilities
+available only to Owner and Manager. Import never silently attaches an equipment
+target to a local asset.
+
+Canonical JSON endpoints:
 
 - `POST /fitment-packs/validate` validates and canonicalizes a fitment-pack-v1 JSON document and returns its SHA-256 content identity.
 - `POST /fitment-packs/preview` validates without writing and reports standardized-slot conflicts plus reasoned local-asset match suggestions.
 - `POST /fitment-packs/import` accepts a client-generated `importUuid` and a JSON `pack`. Retrying the same UUID/data is idempotent. An already-imported immutable revision cannot be aliased under a second import UUID.
 - `GET /fitment-packs/{importUuid}/export` returns the immutable canonical source revision, including source offers.
+
+CSV/ZIP projection endpoints use a multipart upload field named `bundle` and feed
+the reconstructed pack through the same canonical validator/hash path:
+
+- `POST /fitment-packs/bundle/validate` validates a normalized fitment CSV/ZIP bundle without writing.
+- `POST /fitment-packs/bundle/preview` validates the bundle and returns the same importability/match preview as JSON.
+- `POST /fitment-packs/bundle/import` accepts multipart `bundle` plus client-generated `importUuid`; JSON/ZIP representations of the same canonical pack revision share the same immutable content identity/idempotency rules.
+- `GET /fitment-packs/{importUuid}/bundle` downloads the immutable source revision as `application/zip` using the normalized CSV projection; authenticated bundle downloads are returned with no-store/no-cache semantics.
+
+The v1 bundle is limited to 8 MiB compressed and 32 MiB expanded, requires the
+exact root-level file/header contract in `docs/fitment-pack-v1.md`, preserves
+model/configuration identifiers in `equipment_identifiers.csv`, rejects
+traversal/symlink/duplicate/comment/encrypted/non-STORE-or-DEFLATE archive entries,
+and limits aggregate CSV data rows to 250,000. Spreadsheet-sensitive text is
+reversibly escaped according to the manifest-declared
+`leading-apostrophe-v1` scheme before RFC 4180 encoding. Canonical JSON remains
+the lossless source/hash authority.
+
+Mapping/query/export endpoints:
+
 - `GET /fitment-packs/{importUuid}/targets` lists imported generalized equipment targets and current match suggestions.
 - `GET /fitment-targets/{targetUuid}/matches` returns `exact`, `candidate`, `conflict`, or `insufficient` match states with reasons.
 - `POST /fitment-targets/{targetUuid}/map` accepts `mappingUuid`, `assetUuid`, and optional `acceptConflict`. A `conflict` or `insufficient` mapping requires `acceptConflict: true`. Mapping is explicit and does not rename either source or local records.
 - `GET /assets/{assetUuid}/fitments` returns standardized fitment-slot/part facts and their imported pack provenance.
 - `POST /assets/{assetUuid}/fitment-export/community` rebuilds a reviewed generalized community JSON pack from mapped canonical facts and runs it through the same validator/canonicalizer. Local asset UUID/name, serial/VIN-like identity, notes, costs, receipts, and maintenance history are excluded. Offers are currently emitted as an empty array until an explicit local/source offer-selection policy is reviewed.
+- `POST /assets/{assetUuid}/fitment-export/community/bundle` performs the same privacy-minimized community rebuild and downloads the result as normalized CSV/ZIP with the same no-store/no-cache response semantics.
 
-CSV/ZIP import/export remains part of the fitment-pack-v1 interoperability contract but is **not yet implemented in the runtime**. Profile-v2 part materialization also remains fail-closed until the profile installer is explicitly bridged to these canonical part/fitment records. Activity parts-used rows, vendor management, and central costs remain later v0.1.10 checkpoints.
+Profile-v2 part materialization remains fail-closed until the profile installer is
+explicitly bridged to these canonical part/fitment records. Activity parts-used
+rows, vendor management, and central costs remain later v0.1.10 checkpoints.
 
 Future resources include evidence, parts/costs, fuel entries, trips, calendar
 bindings, public report shares, external submissions, TCO reports, and mileage

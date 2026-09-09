@@ -9,9 +9,9 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- v0.1.10 JSON fitment runtime foundation with bounded fitment-pack-v1 validation/canonical SHA-256 identity, immutable pack revision/import provenance, canonical standardized slots/parts, source offers, and source-specific fitment assertions.
+- v0.1.10 fitment runtime foundation with bounded fitment-pack-v1 validation/canonical SHA-256 identity, immutable pack revision/import provenance, canonical standardized slots/parts, source offers, and source-specific fitment assertions.
 - Explicit target-to-local-asset matching/mapping with `exact`, `candidate`, `conflict`, and `insufficient` states; only Owner/Manager may import/map, and conflict/insufficient mappings require explicit override confirmation.
-- Source JSON export and privacy-minimized community JSON export rebuilt through the same validator. CSV/ZIP runtime, profile-v2 part materialization, activity parts-used records, vendor management, and central costs remain pending v0.1.10 work.
+- Source/community JSON export plus bounded normalized CSV/ZIP spreadsheet import/export rebuilt through the same canonical validator, with exact file/header allowlists, model/configuration identifier preservation, 8 MiB compressed/32 MiB expanded bounds, archive traversal/symlink/encryption defenses, and reversible formula-injection escaping. Profile-v2 part materialization, activity parts-used records, vendor management, and central costs remain pending v0.1.10 work.
 
 - v0.1.9 validated runtime profile-v2 installation for bundled and pasted/local JSON, with server-side preview, applicability/conflict reporting, and desktop management workflow.
 - Immutable workspace profile revision snapshots with canonical SHA-256 identity, origin/trust classification, client installation UUID idempotency, and source-key/ordinal bindings to materialized records.

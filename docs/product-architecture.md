@@ -143,4 +143,4 @@ The first policy supports calendar lead days and a meter lead percentage so it w
 
 ### Fitment compatibility workflow
 
-Desktop management can validate/import a portable JSON compatibility matrix, inspect reasoned target-to-asset match candidates, explicitly confirm a mapping, query standardized service-position parts, and produce a privacy-minimized community JSON export. Local naming does not have to equal a community dataset's naming. CSV/ZIP runtime interchange, profile-to-part materialization, parts-used activity entry, vendor management, and costs remain subsequent v0.1.10 slices.
+Desktop management can validate/import a portable canonical JSON compatibility matrix or its bounded normalized CSV/ZIP spreadsheet projection, inspect reasoned target-to-asset match candidates, explicitly confirm a mapping, query standardized service-position parts, and produce privacy-minimized JSON or CSV/ZIP community exports. Local naming does not have to equal a community dataset's naming. Profile-to-part materialization, parts-used activity entry, vendor management, and costs remain subsequent v0.1.10 slices.

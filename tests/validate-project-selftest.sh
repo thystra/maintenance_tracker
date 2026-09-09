@@ -34,7 +34,7 @@ fixture_paths=(
 	lib/Service/ForecastPolicy.php lib/Service/MaintenanceForecastService.php lib/Service/ReminderPolicyService.php lib/Service/MaintenanceOccurrenceService.php
 	lib/Db/MaintenanceOccurrenceMapper.php
 	lib/Service/ProfileValidator.php lib/Service/ProfileCatalog.php lib/Service/ProfileRepository.php lib/Service/ProfileInstallationService.php
-	lib/Service/FitmentPackValidator.php lib/Service/FitmentRepository.php lib/Service/AssetFitmentDescriptorService.php lib/Service/FitmentService.php
+	lib/Service/FitmentPackValidator.php lib/Service/FitmentCsvBundleService.php lib/Service/FitmentZipBundleService.php lib/Service/FitmentRepository.php lib/Service/AssetFitmentDescriptorService.php lib/Service/FitmentService.php
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 )
 
@@ -489,6 +489,54 @@ sed -i "/'fitment-packs',/d" "$tmp/fixture/lib/Capability.php"
 expect_rejected 'fitment feature removal' 'Capability discovery must advertise implemented feature fitment-packs.' "$tmp/fitment-feature.out"
 
 copy_fixture
+sed -i "/'fitment-csv-zip',/d" "$tmp/fixture/lib/Capability.php"
+expect_rejected 'fitment CSV/ZIP feature removal' 'Capability discovery must advertise implemented feature fitment-csv-zip.' "$tmp/fitment-bundle-feature.out"
+
+copy_fixture
+sed -i "/<lib>zip<\/lib>/d" "$tmp/fixture/appinfo/info.xml"
+expect_rejected 'fitment ZIP PHP dependency removal' 'Nextcloud app metadata must declare the PHP zip extension required by fitment bundle interchange.' "$tmp/fitment-zip-dependency.out"
+
+copy_fixture
+sed -i "/'equipment_identifiers.csv'/d" "$tmp/fixture/lib/Service/FitmentCsvBundleService.php"
+expect_rejected 'fitment identifier table removal' 'Fitment CSV projection must preserve reusable identifiers, optional-note presence, and the reviewed aggregate row bound.' "$tmp/fitment-identifiers.out"
+
+copy_fixture
+sed -i 's/MAX_TOTAL_DATA_ROWS = 250000/MAX_TOTAL_DATA_ROWS = 500000/' "$tmp/fixture/lib/Service/FitmentCsvBundleService.php"
+expect_rejected 'expanded fitment CSV aggregate row limit' 'Fitment CSV projection must preserve reusable identifiers, optional-note presence, and the reviewed aggregate row bound.' "$tmp/fitment-row-bound.out"
+
+copy_fixture
+sed -i "s/SPREADSHEET_ESCAPE = 'leading-apostrophe-v1'/SPREADSHEET_ESCAPE = 'none'/" "$tmp/fixture/lib/Service/FitmentCsvBundleService.php"
+expect_rejected 'fitment CSV formula escaping removal' 'Fitment CSV projection must retain the versioned reversible spreadsheet formula-escape scheme and reviewed trigger set.' "$tmp/fitment-formula-escape.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/FitmentCsvBundleService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); old='\"\\t\", '
+if old not in s: raise SystemExit('fitment CSV tab trigger missing')
+p.write_text(s.replace(old, '', 1))
+PY2
+expect_rejected 'fitment CSV control-prefix escaping removal' 'Fitment CSV projection must retain the versioned reversible spreadsheet formula-escape scheme and reviewed trigger set.' "$tmp/fitment-formula-trigger.out"
+
+copy_fixture
+sed -i 's/MAX_COMPRESSED_BYTES = 8 \* 1024 \* 1024/MAX_COMPRESSED_BYTES = 64 * 1024 * 1024/' "$tmp/fixture/lib/Service/FitmentZipBundleService.php"
+expect_rejected 'expanded fitment ZIP compressed-size limit' 'Fitment ZIP projection must retain compressed/expanded bounds and archive path/symlink defenses.' "$tmp/fitment-zip-bound.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/FitmentZipBundleService.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); old="&& !str_contains($name, '/')"
+if old not in s: raise SystemExit('fitment ZIP root-path guard missing')
+p.write_text(s.replace(old, '', 1))
+PY2
+expect_rejected 'fitment ZIP path guard removal' 'Fitment ZIP projection must retain compressed/expanded bounds and archive path/symlink defenses.' "$tmp/fitment-zip-path.out"
+
+copy_fixture
+sed -i 's/ZipArchive::EM_NONE/ZipArchive::EM_AES_256/' "$tmp/fixture/lib/Service/FitmentZipBundleService.php"
+expect_rejected 'fitment ZIP encryption guard removal' 'Fitment ZIP projection must reject encryption/comments and unsupported compression methods.' "$tmp/fitment-zip-encryption.out"
+
+copy_fixture
 python3 - "$tmp/fixture/lib/Service/FitmentPackValidator.php" <<'PY2'
 from pathlib import Path
 import sys
@@ -515,6 +563,14 @@ expect_rejected 'fitment binding cleanup omission' 'Account deletion purge regis
 copy_fixture
 sed -i 's#fitment-targets/{targetUuid}/map#fitment-targets/{targetUuid}/attach#' "$tmp/fixture/lib/Controller/FitmentController.php"
 expect_rejected 'fitment map endpoint removal' 'Fitment controller must expose /fitment-targets/{targetUuid}/map.' "$tmp/fitment-map-endpoint.out"
+
+copy_fixture
+sed -i 's#fitment-packs/bundle/import#fitment-packs/bundle/load#' "$tmp/fixture/lib/Controller/FitmentController.php"
+expect_rejected 'fitment bundle import endpoint removal' 'Fitment controller must expose /fitment-packs/bundle/import.' "$tmp/fitment-bundle-import-endpoint.out"
+
+copy_fixture
+sed -i '/cacheFor(0)/d' "$tmp/fixture/lib/Controller/FitmentController.php"
+expect_rejected 'fitment bundle download caching guard removal' 'Fitment ZIP downloads must use a binary download response and disable caching.' "$tmp/fitment-bundle-cache.out"
 
 copy_fixture
 python3 - "$tmp/fixture/lib/Service/FitmentService.php" <<'PY2'
