@@ -142,8 +142,8 @@ git diff --exit-code -- js css
 Disposable Nextcloud 34 runtime qualification:
 
 ```bash
-NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud34-smoke.sh
-NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud34-smoke.sh
+NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh
+NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
 ```
 
 The integration harness must use disposable data and must never point at a real

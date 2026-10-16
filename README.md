@@ -97,8 +97,8 @@ git diff --exit-code -- js css
 Run the disposable Nextcloud 34 integration suite when Docker is available:
 
 ```bash
-NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud34-smoke.sh
-NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud34-smoke.sh
+NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh
+NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
 ```
 
 The integration harness stages the runtime app and transfers it with

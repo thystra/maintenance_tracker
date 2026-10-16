@@ -94,8 +94,8 @@ jobs:
           git diff --check
           git diff --exit-code -- js css
 
-  nextcloud34:
-    name: Nextcloud 34 / ${{ matrix.database }}
+  nextcloud:
+    name: Nextcloud ${{ matrix.nextcloud }} / ${{ matrix.database }}
     runs-on: forgejo-workstation
     timeout-minutes: 20
     container:
@@ -106,9 +106,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        nextcloud:
+          - 33.0.10
+          - 34.0.5
+          - 35.0.2
         database:
           - sqlite
           - pgsql
+        include:
+          # Qualification targets not yet declared in appinfo/info.xml.
+          - nextcloud: 33.0.10
+            qualify: '1'
+          - nextcloud: 35.0.2
+            qualify: '1'
 
     steps:
       - name: Check out repository
@@ -127,17 +137,19 @@ jobs:
           test ! -S /var/run/docker.sock
           docker version
 
-      - name: Run disposable Nextcloud 34 integration suite
+      - name: Run disposable Nextcloud ${{ matrix.nextcloud }} integration suite
         env:
           NC_SMOKE_DATABASE: ${{ matrix.database }}
-        run: bash tests/integration/nextcloud34-smoke.sh
+          NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+          NC_SMOKE_QUALIFY: ${{ matrix.qualify || '0' }}
+        run: bash tests/integration/nextcloud-smoke.sh
 
   package:
     name: Unsigned install candidate
     runs-on: forgejo-workstation
     timeout-minutes: 10
     needs:
-      - nextcloud34
+      - nextcloud
 
     steps:
       - name: Check out repository

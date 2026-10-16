@@ -15,8 +15,10 @@ case "$database" in
 		;;
 esac
 
-container="${NC_SMOKE_CONTAINER:-maintenance-tracker-nc34-${database}-smoke}"
-image="${NC_SMOKE_IMAGE:-nextcloud:34.0.3-apache}"
+image="${NC_SMOKE_IMAGE:-nextcloud:34.0.5-apache}"
+nc_label="${image##*:}"
+nc_label="${nc_label%%-*}"
+container="${NC_SMOKE_CONTAINER:-maintenance-tracker-nc${nc_label%%.*}-${database}-smoke}"
 network="${NC_SMOKE_NETWORK:-${container}-network}"
 db_container="${NC_SMOKE_DB_CONTAINER:-${container}-db}"
 postgres_image="${NC_SMOKE_POSTGRES_IMAGE:-postgres:17-alpine}"
@@ -181,8 +183,15 @@ docker cp "$staging_root/maintenance_tracker" \
 docker exec "$container" \
 	chown -R www-data:www-data /var/www/html/custom_apps/maintenance_tracker
 
+# NC_SMOKE_QUALIFY=1 force-enables the app on a Nextcloud release that
+# appinfo/info.xml does not declare yet, so a new target can be exercised
+# before the compatibility declaration is widened. Never use it otherwise.
+enable_args=(app:enable maintenance_tracker)
+if [ "${NC_SMOKE_QUALIFY:-0}" = '1' ]; then
+	enable_args+=(--force)
+fi
 docker exec --user www-data "$container" \
-	php occ app:enable maintenance_tracker >/dev/null
+	php occ "${enable_args[@]}" >/dev/null
 
 docker exec "$container" apachectl graceful >/dev/null 2>&1
 
@@ -2121,4 +2130,4 @@ if [ "$app_errors" != '0' ]; then
 	exit 1
 fi
 
-echo "Nextcloud 34 smoke test passed (${database})."
+echo "Nextcloud ${nc_label} smoke test passed (${database})."
