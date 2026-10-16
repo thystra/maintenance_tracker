@@ -9,6 +9,8 @@
 		"check:a11y": "node scripts/check-a11y.mjs",
 		"clean:build": "node scripts/clean-build.mjs",
 		"dev": "npm run clean:build && vite --mode development build",
+		"l10n:check": "node scripts/l10n.mjs check",
+		"l10n:extract": "node scripts/l10n.mjs extract",
 		"lint": "eslint src scripts eslint.config.mjs stylelint.config.mjs vite.config.ts package.json",
 		"stylelint": "stylelint \"src/**/*.{vue,scss,css}\"",
 		"typecheck": "vue-tsc --noEmit",
@@ -24,6 +26,7 @@
 		"@nextcloud/auth": "^2.6.0",
 		"@nextcloud/axios": "^2.5.0",
 		"@nextcloud/dialogs": "^7.5.0",
+		"@nextcloud/l10n": "^3.4.1",
 		"@nextcloud/router": "^3.0.1",
 		"@nextcloud/vue": "^9.9.0",
 		"vue": "^3.5.35"

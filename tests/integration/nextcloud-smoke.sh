@@ -97,7 +97,7 @@ stage_app() {
 	local target="$staging_root/maintenance_tracker"
 	mkdir -p "$target"
 
-	for path in appinfo lib templates img js css profiles; do
+	for path in appinfo lib templates img js css profiles l10n; do
 		if [ -e "$path" ]; then
 			cp -a "$path" "$target/"
 		fi
