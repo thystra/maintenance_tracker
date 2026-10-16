@@ -97,6 +97,12 @@ const lifecycleService = await read('lib/Service/UserLifecycleService.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
 const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
+const integrationProjector = await read('lib/Service/IntegrationProjector.php')
+const reminderService = await read('lib/Service/ReminderService.php')
+const integrationSettings = await read('lib/Service/IntegrationSettingsService.php')
+const calendarEventBuilder = await read('lib/Service/CalendarEventBuilder.php')
+const integrationEventMap = await read('lib/Service/IntegrationEventMap.php')
+const migration1120 = await read('lib/Migration/Version1120Date20261016160000.php')
 const architecture = await read('docs/architecture.md')
 const domainModel = await read('docs/domain-model.md')
 const productArchitecture = await read('docs/product-architecture.md')
@@ -228,6 +234,12 @@ expect(evidenceService.includes('$this->rootFolder->getUserFolder($viewerUid)') 
 expect(!evidenceFolderService.includes('PERMISSION_SHARE |') && !evidenceFolderService.includes('PERMISSION_ALL') && evidenceFolderService.includes('getNonExistingName'), 'Evidence folder shares must not grant reshare, and the app must never adopt an existing folder it did not create.')
 expect(!evidenceController.includes('$this->run(') && evidenceController.includes('runOutsideTransaction(') && !/\$this->evidenceFolders->(syncShares|prepareForMembers)\([^)]*\);/.test(membershipService.replace(/afterCommit\(fn \(\) => \$this->evidenceFolders->[^;]*;/g, '')), 'Nextcloud Files and sharing calls must run outside the app database transaction (PostgreSQL aborts the whole transaction on a caught core error); defer them with afterCommit or runOutsideTransaction.')
 expect(ownershipService.includes("'swap' => $this->swap(") && ownershipService.includes('->move($target)') && ownershipService.indexOf('private function snapshot(') < ownershipService.indexOf('private function swap('), 'Ownership transfer must move files and re-point references before roles swap, through the persisted step machine.')
+expect(!integrationProjector.includes('beginTransaction') && !reminderService.includes('beginTransaction') && !integrationProjector.includes('->runLocked(') && !reminderService.includes('->runLocked('), 'Activity, notification, and calendar delivery must run outside any app database transaction.')
+expect(integrationProjector.includes('AuditMapper') && integrationProjector.includes('CURSOR_KEY') && !integrationProjector.includes('->insert(') && !integrationProjector.includes('->update('), 'Activity and transfer notifications must be a cursor-driven projection of the append-only audit trail, never a write path into domain data.')
+expect(reminderService.includes('MaintenanceForecastService') && !reminderService.includes('DueStatePolicy') && !migration1120.includes('due_state'), 'Reminders must consume the forecast/status projection and must not persist due state.')
+expect(reminderService.includes("'Maintenance due'") && calendarEventBuilder.includes('VALUE=DATE') && !calendarEventBuilder.includes('DESCRIPTION'), 'Calendar projection must use a neutral title and never copy task, asset, or workspace details into a calendar.')
+expect(integrationSettings.includes('ICalendarIsShared') && integrationSettings.includes('ICreateFromString') && !/OCA\\DAV/.test(integrationSettings + reminderService), 'Calendar projection must write only to the user\'s own writable calendars through public OCP Calendar APIs.')
+expect(integrationEventMap.includes('SAFE_DETAIL_KEYS') && !integrationEventMap.includes("'targetUuid', 'reason'"), 'Activity events must carry only bounded identifiers and reviewed detail keys.')
 expect(lifecycleService.includes('$this->orphanWorkspace($workspaceId, $userUid)') && lifecycleService.includes('hasOtherMembers'), 'Owner account deletion must never silently purge a workspace that other members still use.')
 expect(ownerMatch !== null && contributorMatch !== null && viewerMatch !== null && contributorMatch[1].includes('EVIDENCE_CREATE') && !contributorMatch[1].includes('EVIDENCE_MANAGE') && !viewerMatch[1].includes('EVIDENCE_CREATE'), 'Contributors attach evidence; only Owner/Manager manage others\' evidence; Viewers read only.')
 const outsideLinksVue = await read('src/components/OutsideLinks.vue')
@@ -247,7 +259,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger', 'outside-links', 'evidence-files', 'workspace-ownership-transfer']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger', 'outside-links', 'evidence-files', 'workspace-ownership-transfer', 'activity-integration', 'notifications', 'calendar-projection']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
