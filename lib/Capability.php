@@ -49,6 +49,7 @@ final class Capability implements ICapability {
 					'cost-ledger',
 					'outside-links',
 					'evidence-files',
+					'workspace-ownership-transfer',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',
