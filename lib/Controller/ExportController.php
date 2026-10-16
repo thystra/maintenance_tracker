@@ -16,10 +16,10 @@ use OCA\MaintenanceTracker\Service\AuthorizationCatalog;
 use OCA\MaintenanceTracker\Service\CurrentUser;
 use OCA\MaintenanceTracker\Service\ExportService;
 use OCA\MaintenanceTracker\Service\WorkspaceService;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataDownloadResponse;
-use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\AppFramework\OCS\OCSBadRequestException;
 use OCP\AppFramework\OCS\OCSForbiddenException;
@@ -43,10 +43,20 @@ final class ExportController extends OCSController {
 	 * CSV tables and optionally the evidence files the caller can open.
 	 * Authorization runs first; the export reads Files outside any app
 	 * database transaction.
+	 *
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @param string $format Format
+	 * @param bool $includeFiles Include files
+	 * @return DataDownloadResponse<Http::STATUS_OK, 'application/json', array{}>|StreamResponse<Http::STATUS_OK, array{Content-Type: 'application/zip'}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Export file
 	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/export')]
-	public function export(?string $workspace = null, string $format = 'zip', bool $includeFiles = false): Response {
+	public function export(?string $workspace = null, string $format = 'zip', bool $includeFiles = false): DataDownloadResponse|StreamResponse {
 		try {
 			$uid = $this->currentUser->uid();
 			$context = $this->workspaces->authorize($uid, $workspace, AuthorizationCatalog::WORKSPACE_EXPORT);

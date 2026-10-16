@@ -17,6 +17,7 @@ use OCA\MaintenanceTracker\Service\AuthorizationCatalog;
 use OCA\MaintenanceTracker\Service\CurrentUser;
 use OCA\MaintenanceTracker\Service\MaintenanceOccurrenceService;
 use OCA\MaintenanceTracker\Service\WorkspaceService;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataResponse;
@@ -38,6 +39,20 @@ final class MaintenanceOccurrenceController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List maintenance occurrences
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $includeClosed Include closed
+	 * @param string|null $asOf As of
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/maintenance-occurrences')]
 	public function index(string $assetUuid, ?string $includeClosed = null, ?string $asOf = null, ?string $workspace = null): DataResponse {
@@ -48,6 +63,19 @@ final class MaintenanceOccurrenceController extends OCSController {
 		);
 	}
 
+	/**
+	 * Reconcile (maintenance occurrence)
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $asOf As of
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/maintenance-occurrences/reconcile')]
 	public function reconcile(string $assetUuid, ?string $asOf = null, ?string $workspace = null): DataResponse {

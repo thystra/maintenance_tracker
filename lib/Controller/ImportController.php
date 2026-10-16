@@ -39,10 +39,10 @@ final class ImportController extends OCSController {
 	 *
 	 * @param string|null $name Name of the new workspace; defaults to "<original> (restored)"
 	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid or unsupported export
+	 * @throws OCSForbiddenException Account is not active
 	 *
 	 * 201: Workspace restored
-	 * 400: Invalid or unsupported export
-	 * 403: Account is not active
 	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/import')]

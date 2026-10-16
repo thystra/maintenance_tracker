@@ -24,9 +24,55 @@ use OCP\AppFramework\OCSController;
 use OCP\IRequest;
 
 final class CategoryController extends OCSController {
-	public function __construct(string $appName,IRequest $request,private CurrentUser $currentUser,private WorkspaceService $workspaceService,private CategoryService $service){parent::__construct($appName,$request);}
-	#[NoAdminRequired] #[ApiRoute(verb:'GET',url:'/api/v1/categories')]
-	public function index(?string $workspace=null):DataResponse{try{return $this->workspaceService->runWithCapability($this->currentUser->uid(),$workspace,'inventory.read',fn($c)=>new DataResponse(['workspace'=>$c->workspace()->getUuid(),'items'=>$this->service->list($c)]));}catch(AccessDeniedException $e){throw new OCSForbiddenException($e->getMessage(),$e);}}
-	#[NoAdminRequired] #[ApiRoute(verb:'POST',url:'/api/v1/categories')]
-	public function create(array $category,?string $workspace=null):DataResponse{try{return $this->workspaceService->runWithCapability($this->currentUser->uid(),$workspace,'inventory.manage',fn($c)=>new DataResponse($this->service->create($c,$category)->toApi(),Http::STATUS_CREATED));}catch(AccessDeniedException $e){throw new OCSForbiddenException($e->getMessage(),$e);}catch(ValidationException $e){throw new OCSBadRequestException($e->getMessage(),$e);}}
+	public function __construct(
+		string $appName,
+		IRequest $request,
+		private CurrentUser $currentUser,
+		private WorkspaceService $workspaceService,
+		private CategoryService $service,
+	) {
+		parent::__construct($appName, $request);
+	}
+
+	/**
+	 * List categories
+	 *
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSForbiddenException Not allowed
+	 *
+	 * 200: Success
+	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/categories')]
+	public function index(?string $workspace = null): DataResponse {
+		try {
+			return $this->workspaceService->runWithCapability($this->currentUser->uid(), $workspace, 'inventory.read', fn ($c): DataResponse => new DataResponse(['workspace' => $c->workspace()->getUuid(), 'items' => $this->service->list($c)]));
+		} catch (AccessDeniedException $e) {
+			throw new OCSForbiddenException($e->getMessage(), $e);
+		}
+	}
+
+	/**
+	 * Create category
+	 *
+	 * @param array<string, mixed> $category Category fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSBadRequestException Invalid input
+	 *
+	 * 201: Category created
+	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/categories')]
+	public function create(array $category, ?string $workspace = null): DataResponse {
+		try {
+			return $this->workspaceService->runWithCapability($this->currentUser->uid(), $workspace, 'inventory.manage', fn ($c): DataResponse => new DataResponse($this->service->create($c, $category)->toApi(), Http::STATUS_CREATED));
+		} catch (AccessDeniedException $e) {
+			throw new OCSForbiddenException($e->getMessage(), $e);
+		} catch (ValidationException $e) {
+			throw new OCSBadRequestException($e->getMessage(), $e);
+		}
+	}
 }

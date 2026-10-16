@@ -33,6 +33,12 @@ final class AdminSettingsController extends Controller {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * Update outside links (admin settings)
+	 *
+	 * @param string $enabled Enabled
+	 * @return RedirectResponse
+	 */
 	#[FrontpageRoute(verb: 'POST', url: '/admin/outside-links')]
 	public function updateOutsideLinks(string $enabled = '0'): RedirectResponse {
 		$value = $enabled === '1';

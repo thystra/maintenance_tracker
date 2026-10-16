@@ -36,6 +36,15 @@ final class MembershipController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List memberships
+	 *
+	 * @param string $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSForbiddenException Not allowed
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/workspaces/{workspace}/members')]
 	public function index(string $workspace): DataResponse {
@@ -54,6 +63,17 @@ final class MembershipController extends OCSController {
 		}
 	}
 
+	/**
+	 * Create membership
+	 *
+	 * @param string $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @param array<string, mixed> $member Member fields
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 *
+	 * 201: Membership created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/workspaces/{workspace}/members')]
 	public function create(string $workspace, array $member): DataResponse {
@@ -78,6 +98,19 @@ final class MembershipController extends OCSController {
 		}
 	}
 
+	/**
+	 * Update membership
+	 *
+	 * @param string $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @param string $userUid User uid
+	 * @param array<string, mixed> $member Member fields
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PATCH', url: '/api/v1/workspaces/{workspace}/members/{userUid}')]
 	public function update(string $workspace, string $userUid, array $member): DataResponse {
@@ -101,6 +134,18 @@ final class MembershipController extends OCSController {
 		}
 	}
 
+	/**
+	 * Delete membership
+	 *
+	 * @param string $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @param string $userUid User uid
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/workspaces/{workspace}/members/{userUid}')]
 	public function destroy(string $workspace, string $userUid): DataResponse {

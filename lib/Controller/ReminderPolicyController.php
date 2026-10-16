@@ -16,6 +16,7 @@ use OCA\MaintenanceTracker\Service\AuthorizationCatalog;
 use OCA\MaintenanceTracker\Service\CurrentUser;
 use OCA\MaintenanceTracker\Service\ReminderPolicyService;
 use OCA\MaintenanceTracker\Service\WorkspaceService;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataResponse;
@@ -36,6 +37,15 @@ final class ReminderPolicyController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * Get reminder policy
+	 *
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSForbiddenException Not allowed
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/reminder-policy')]
 	public function show(?string $workspace = null): DataResponse {
@@ -51,6 +61,18 @@ final class ReminderPolicyController extends OCSController {
 		}
 	}
 
+	/**
+	 * Update reminder policy
+	 *
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param array<string, mixed> $policy Policy fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PATCH', url: '/api/v1/reminder-policy')]
 	public function update(int $expectedRevision, array $policy, ?string $workspace = null): DataResponse {

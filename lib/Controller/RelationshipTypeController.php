@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\MaintenanceTracker\Controller;
 
 use OCA\MaintenanceTracker\Service\RelationshipTypeCatalog;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataResponse;
@@ -25,6 +26,13 @@ final class RelationshipTypeController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List relationship types
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/relationship-types')]
 	public function index(): DataResponse {

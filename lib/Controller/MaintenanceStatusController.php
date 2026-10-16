@@ -16,6 +16,7 @@ use OCA\MaintenanceTracker\Service\AuthorizationCatalog;
 use OCA\MaintenanceTracker\Service\CurrentUser;
 use OCA\MaintenanceTracker\Service\MaintenanceStatusService;
 use OCA\MaintenanceTracker\Service\WorkspaceService;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataResponse;
@@ -36,6 +37,19 @@ final class MaintenanceStatusController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List maintenance status
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $asOf As of
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/maintenance-status')]
 	public function index(string $assetUuid, ?string $asOf = null, ?string $workspace = null): DataResponse {

@@ -38,6 +38,15 @@ final class RelationshipController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List relationships
+	 *
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSForbiddenException Not allowed
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/relationships')]
 	public function index(?string $workspace = null): DataResponse {
@@ -56,6 +65,18 @@ final class RelationshipController extends OCSController {
 		}
 	}
 
+	/**
+	 * Get relationship
+	 *
+	 * @param string $uuid UUID of the relationship
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/relationships/{uuid}')]
 	public function show(string $uuid, ?string $workspace = null): DataResponse {
@@ -75,6 +96,18 @@ final class RelationshipController extends OCSController {
 		}
 	}
 
+	/**
+	 * Create relationship
+	 *
+	 * @param array<string, mixed> $relationship Relationship fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Relationship created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/relationships')]
 	public function create(array $relationship, ?string $workspace = null): DataResponse {
@@ -99,6 +132,20 @@ final class RelationshipController extends OCSController {
 		}
 	}
 
+	/**
+	 * Update relationship
+	 *
+	 * @param string $uuid UUID of the relationship
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param array<string, mixed> $relationship Relationship fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PATCH', url: '/api/v1/relationships/{uuid}')]
 	public function update(string $uuid, int $expectedRevision, array $relationship, ?string $workspace = null): DataResponse {
@@ -122,6 +169,19 @@ final class RelationshipController extends OCSController {
 		}
 	}
 
+	/**
+	 * Delete relationship
+	 *
+	 * @param string $uuid UUID of the relationship
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/relationships/{uuid}')]
 	public function destroy(string $uuid, int $expectedRevision, ?string $workspace = null): DataResponse {

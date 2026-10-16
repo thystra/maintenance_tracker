@@ -14,6 +14,7 @@ use OCA\MaintenanceTracker\Exception\ValidationException;
 use OCA\MaintenanceTracker\Service\AuditService;
 use OCA\MaintenanceTracker\Service\CurrentUser;
 use OCA\MaintenanceTracker\Service\WorkspaceService;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataResponse;
@@ -33,6 +34,17 @@ final class AuditController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List audits
+	 *
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @param int $limit Maximum number of items to return
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/audit')]
 	public function index(?string $workspace = null, int $limit = 100): DataResponse {

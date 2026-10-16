@@ -36,6 +36,17 @@ final class SpecificationController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List specifications
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/specifications')]
 	public function index(string $assetUuid, ?string $workspace = null): DataResponse {
@@ -53,6 +64,19 @@ final class SpecificationController extends OCSController {
 		}
 	}
 
+	/**
+	 * Create specification
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param array<string, mixed> $specification Specification fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Specification created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/specifications')]
 	public function create(string $assetUuid, array $specification, ?string $workspace = null): DataResponse {

@@ -18,6 +18,11 @@ use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\TemplateResponse;
 
 final class PageController extends Controller {
+	/**
+	 * List pages
+	 *
+	 * @return TemplateResponse
+	 */
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[OpenAPI(OpenAPI::SCOPE_IGNORE)]
