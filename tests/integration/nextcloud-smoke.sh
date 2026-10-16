@@ -2264,6 +2264,91 @@ assert_contains "$xfer_assign" 'completed' 'occ assigns owner to orphaned worksp
 assert_contains "$(ocs_as "$xc" GET /workspaces)" "\"uuid\":\"${xfer_d_ws}\",\"name\":\"Personal maintenance\",\"kind\":\"shared\",\"ownerUid\":\"xfer_c\",\"orphaned\":false,\"role\":\"owner\"" 'assigned owner holds the workspace'
 assert_contains "$(docker exec --user www-data "$container" php occ maintenance_tracker:workspace:list-orphaned)" 'No orphaned workspaces' 'no orphans remain'
 
+# v0.1.12 integrations: audit-projected Activity, ownership-transfer and
+# due/overdue notifications, background offer expiry, and idempotent
+# projection of due dates into a user-selected writable calendar. Users,
+# tasks and calendars are synthetic placeholders.
+for ntf_user in ntf_a ntf_b; do
+	docker exec --env OC_PASS="${ntf_user}-test-only" --user www-data "$container" \
+		php occ user:add --password-from-env "$ntf_user" >/dev/null
+done
+na="ntf_a:ntf_a-test-only"; nb="ntf_b:ntf_b-test-only"
+run_integrations() { docker exec --user www-data "$container" php occ maintenance_tracker:integrations:run; }
+# Start from a drained projection so later counts belong to this section.
+run_integrations >/dev/null
+ntf_ws=$(ocs_as "$na" GET /workspaces | python3 -c 'import json,sys;print(json.load(sys.stdin)["ocs"]["data"]["items"][0]["uuid"])')
+nws="workspace=${ntf_ws}"
+ntf_asset='a1b2c3d4-0000-4000-8000-00000000b001'
+ntf_def='a1b2c3d4-0000-4000-8000-00000000b002'
+ntf_done=$(date -u -d '-3 day' +%Y-%m-%d)
+ntf_due=$(date -u -d '-2 day' +%Y%m%d)
+assert_contains "$(ocs_as "$na" POST "/assets?${nws}" "{\"asset\":{\"uuid\":\"${ntf_asset}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Reminder test van\"}}")" '"statuscode":201' 'integration asset'
+assert_contains "$(ocs_as "$na" POST "/workspaces/${ntf_ws}/members" '{"member":{"userUid":"ntf_b","role":"contributor"}}')" '"statuscode":201' 'integration member'
+assert_contains "$(ocs_as "$na" POST "/assets/${ntf_asset}/work-definitions?${nws}" "{\"definition\":{\"uuid\":\"${ntf_def}\",\"key\":\"wiper_check\",\"title\":\"Wiper check\",\"kind\":\"inspection\",\"schedule\":{\"combination\":\"any\",\"rules\":[{\"type\":\"calendar\",\"interval\":{\"value\":1,\"unit\":\"day\"}}]}}}")" '"statuscode":201' 'integration calendar task'
+assert_contains "$(ocs_as "$na" POST "/assets/${ntf_asset}/activities?${nws}" "{\"activity\":{\"uuid\":\"a1b2c3d4-0000-4000-8000-00000000b003\",\"performedAt\":\"${ntf_done}T12:00:00Z\",\"summary\":\"Checked\",\"items\":[{\"uuid\":\"a1b2c3d4-0000-4000-8000-00000000b004\",\"definitionUuid\":\"${ntf_def}\"}]}}")" '"statuscode":201' 'integration overdue baseline'
+
+# Calendar selection: only the user's own writable calendars are accepted.
+docker exec --user www-data "$container" php occ dav:create-calendar ntf_a maintenance >/dev/null
+assert_contains "$(ocs_as "$na" GET /integrations/calendars)" '"uri":"maintenance"' 'writable calendar listed'
+assert_contains "$(ocs_as "$na" PUT /integrations/settings '{"settings":{"calendarUri":"not-a-calendar"}}')" '"statuscode":400' 'unknown calendar rejected'
+assert_contains "$(ocs_as "$na" PUT /integrations/settings '{"settings":{"calendarUri":"maintenance"}}')" '"calendarUri":"maintenance"' 'calendar selected'
+assert_contains "$(ocs_as "$nb" GET /integrations/settings)" '"reminders":true' 'reminders default on'
+assert_contains "$(docker exec "$container" curl -s --user "$na" -H 'OCS-APIRequest: true' -H 'Accept: application/json' 'http://127.0.0.1/ocs/v2.php/cloud/capabilities?format=json')" '"calendar-projection"' 'integration capability'
+
+ntf_run=$(run_integrations)
+assert_contains "$ntf_run" 'notifications=2' 'overdue reminder for both members'
+assert_contains "$ntf_run" 'calendarEvents=1' 'due date projected once'
+ntf_run_again=$(run_integrations)
+assert_contains "$ntf_run_again" 'projected=0 ' 'audit projection is at-most-once'
+assert_contains "$ntf_run_again" 'notifications=0 withdrawn=0 calendarEvents=0' 'reminders and calendar are idempotent'
+notifications_of() { docker exec "$container" curl -s --user "$1" -H 'OCS-APIRequest: true' -H 'Accept: application/json' 'http://127.0.0.1/ocs/v2.php/apps/notifications/api/v2/notifications?format=json'; }
+activity_of() { docker exec "$container" curl -s --user "$1" -H 'OCS-APIRequest: true' -H 'Accept: application/json' 'http://127.0.0.1/ocs/v2.php/apps/activity/api/v2/activity/maintenance_tracker?format=json&limit=50'; }
+assert_contains "$(notifications_of "$nb")" 'Maintenance overdue: Wiper check on Reminder test van' 'member overdue notification'
+ntf_b_activity=$(activity_of "$nb")
+assert_contains "$ntf_b_activity" 'added you to Personal maintenance as contributor' 'membership activity'
+assert_contains "$ntf_b_activity" 'recorded maintenance in Personal maintenance' 'maintenance activity'
+assert_not_contains "$ntf_b_activity" 'Checked' 'activity never copies record text'
+ntf_cal=$(docker exec "$container" curl -s --user "$na" -X PROPFIND -H 'Depth: 1' 'http://127.0.0.1/remote.php/dav/calendars/ntf_a/maintenance/')
+assert_contains "$ntf_cal" 'maintenance-tracker-' 'projected event stored in selected calendar'
+ntf_ics=$(docker exec "$container" curl -s --user "$na" "http://127.0.0.1/remote.php/dav/calendars/ntf_a/maintenance/$(printf '%s' "$ntf_cal" | grep -o 'maintenance-tracker-[0-9a-f]*\.ics' | head -n1)")
+assert_contains "$ntf_ics" 'SUMMARY:Maintenance due' 'calendar title is neutral'
+assert_contains "$ntf_ics" "DTSTART;VALUE=DATE:${ntf_due}" 'calendar date is the derived due date'
+assert_not_contains "$ntf_ics" 'Wiper' 'calendar never discloses task names'
+
+# A new completion establishes a new baseline: the overdue reminder is withdrawn
+# and the next due date is projected as a new event.
+assert_contains "$(ocs_as "$nb" POST "/assets/${ntf_asset}/activities?${nws}" "{\"activity\":{\"uuid\":\"a1b2c3d4-0000-4000-8000-00000000b005\",\"performedAt\":\"$(date -u +%Y-%m-%dT00:00:00Z)\",\"summary\":\"Checked again\",\"items\":[{\"uuid\":\"a1b2c3d4-0000-4000-8000-00000000b006\",\"definitionUuid\":\"${ntf_def}\"}]}}")" '"statuscode":201' 'integration new baseline'
+ntf_resolved=$(run_integrations)
+assert_contains "$ntf_resolved" 'calendarEvents=1' 'next due date projected'
+assert_not_contains "$(notifications_of "$nb")" 'Maintenance overdue: Wiper check' 'overdue reminder withdrawn after completion'
+assert_contains "$(ocs_as "$nb" PUT /integrations/settings '{"settings":{"reminders":false}}')" '"reminders":false' 'member opts out of reminders'
+
+# Ownership offers notify the recipient; declining withdraws it and tells the offerer.
+ntf_offer=$(ocs_as "$na" POST "/workspaces/${ntf_ws}/ownership-transfers" '{"transfer":{"toUid":"ntf_b"}}')
+ntf_offer_uuid=$(printf '%s' "$ntf_offer" | json_field uuid)
+run_integrations >/dev/null
+assert_contains "$(notifications_of "$nb")" 'offered you ownership of Personal maintenance' 'transfer offer notification'
+assert_contains "$(ocs_as "$nb" POST "/ownership-transfers/${ntf_offer_uuid}/decline")" '"status":"declined"' 'integration offer declined'
+run_integrations >/dev/null
+assert_not_contains "$(notifications_of "$nb")" 'offered you ownership' 'offer notification withdrawn'
+assert_contains "$(notifications_of "$na")" 'declined ownership of Personal maintenance' 'offerer told about decline'
+assert_contains "$(activity_of "$na")" 'declined ownership of Personal maintenance' 'ownership activity'
+
+# The background job expires an offer past its deadline and notifies the offerer.
+ntf_expiring=$(ocs_as "$na" POST "/workspaces/${ntf_ws}/ownership-transfers" '{"transfer":{"toUid":"ntf_b","expiresInDays":1}}')
+ntf_expiring_uuid=$(printf '%s' "$ntf_expiring" | json_field uuid)
+docker exec --user www-data --workdir /var/www/html "$container" php -r '
+	require "lib/base.php";
+	$db = \OCP\Server::get(\OCP\IDBConnection::class);
+	$q = $db->getQueryBuilder();
+	$q->update("maint_ws_transfers")->set("expires_at", $q->createNamedParameter(1, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT))
+		->where($q->expr()->eq("uuid", $q->createNamedParameter($argv[1])))->executeStatement();
+' "$ntf_expiring_uuid"
+assert_contains "$(run_integrations)" 'expired=1' 'background job expires stale offer'
+assert_contains "$(ocs_as "$na" GET "/ownership-transfers/${ntf_expiring_uuid}")" '"status":"expired"' 'offer marked expired'
+assert_contains "$(notifications_of "$na")" 'expired' 'offerer told about expiry'
+assert_not_contains "$(notifications_of "$nb")" 'offered you ownership' 'expired offer notification withdrawn'
+
 # @@V0111_NEXT@@
 
 page_status=$(docker exec "$container" curl --silent --show-error \
