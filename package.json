@@ -6,6 +6,7 @@
 	"type": "module",
 	"scripts": {
 		"build": "npm run clean:build && vite build",
+		"check:a11y": "node scripts/check-a11y.mjs",
 		"clean:build": "node scripts/clean-build.mjs",
 		"dev": "npm run clean:build && vite --mode development build",
 		"lint": "eslint src scripts eslint.config.mjs stylelint.config.mjs vite.config.ts package.json",
