@@ -80,6 +80,8 @@ const fitmentRepository = await read('lib/Service/FitmentRepository.php')
 const assetFitmentDescriptorService = await read('lib/Service/AssetFitmentDescriptorService.php')
 const fitmentService = await read('lib/Service/FitmentService.php')
 const fitmentController = await read('lib/Controller/FitmentController.php')
+const activityPartRepository = await read('lib/Service/ActivityPartRepository.php')
+const activityPartService = await read('lib/Service/ActivityPartService.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
 const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
@@ -297,6 +299,9 @@ expect(activityService.includes('activity-created readings require an explicit u
 expect(activityService.includes("source']=['type'=>'activity','reference'=>$a->getUuid()]") || activityService.includes("['type'=>'activity','reference'=>$a->getUuid()]"), 'Activity-created readings must carry activity source provenance.')
 expect(!activityItemMapper.includes('->update(') && !activityItemMapper.includes('->delete('), 'Activity item mapper must remain append/read-only.')
 expect(!activityMeterMapper.includes('->update(') && !activityMeterMapper.includes('->delete('), 'Activity meter snapshot mapper must remain append/read-only.')
+expect(!activityPartRepository.includes('->update(') && !activityPartRepository.includes('->delete('), 'Activity parts-used persistence must remain append/read-only.')
+expect(activityPartService.includes("'manufacturer' => (string)$part['manufacturer']") && activityPartService.includes("'vendor_name' =>"), 'Activity parts must snapshot part/vendor display facts for durable history.')
+expect(activityPartService.includes('DecimalQuantity::parse(') && !activityPartService.includes('(float)') && !activityPartService.includes('floatval'), 'Activity part quantities must be exact scaled integers, never floats.')
 
 // v0.1.7 maintenance status is a deterministic read-time projection, never stored truth.
 expect(maintenanceStatusController.includes('/maintenance-status') && maintenanceStatusController.includes('MAINTENANCE_DEFINITION_READ'), 'Maintenance status endpoint must remain read-only behind maintenance.definition.read.')
@@ -382,7 +387,7 @@ for (const table of [...workspaceTables].sort()) {
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 

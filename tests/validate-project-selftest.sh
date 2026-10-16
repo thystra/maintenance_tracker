@@ -24,6 +24,9 @@ fixture_paths=(
 	lib/Migration/Version1070Date20260907080000.php
 	lib/Migration/Version1080Date20260907130000.php
 	lib/Migration/Version1090Date20260907193000.php
+	lib/Migration/Version1100Date20261016000000.php
+	lib/Migration/Version1101Date20261016010000.php
+	lib/Service/ActivityPartRepository.php lib/Service/ActivityPartService.php
 	lib/Service/UserLifecycleService.php lib/Service/WorkspaceService.php
 	lib/Service/AuthorizationCatalog.php lib/Service/AuditService.php
 	lib/Service/AuditEventCatalog.php lib/Db/AuditMapper.php

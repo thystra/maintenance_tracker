@@ -4,6 +4,7 @@
 -->
 
 <script setup lang="ts">
+import type { Part } from './catalogTypes.ts'
 import type {
 	Activity,
 	Asset,
@@ -72,6 +73,7 @@ import {
 	updateReminderPolicy,
 	validateProfile,
 } from './services/api.ts'
+import { getParts } from './services/catalogApi.ts'
 
 const assets = ref<Asset[]>([])
 const categories = ref<Category[]>([])
@@ -133,7 +135,12 @@ const activityDraft = reactive({
 	meterUuid: '',
 	meterValue: '',
 	meterUnit: 'mi',
+	partUuid: '',
+	partQuantity: '1',
+	partUnit: 'each',
 })
+const catalogParts = ref<Part[]>([])
+const partUnits = ['each', 'pair', 'set', 'kit', 'ml', 'l', 'fl_oz', 'qt', 'gal', 'g', 'kg', 'oz', 'lb', 'mm', 'cm', 'm', 'in', 'ft']
 const relationshipDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'general', isDefault: false })
 const assignmentDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'trip', isPrimary: true, effectiveFrom: '', effectiveUntil: '' })
 const reminderPolicyDraft = reactive({ calendarLeadDays: 14, meterLeadPercent: 10 })
@@ -291,7 +298,16 @@ function readableError(reason: unknown): string {
 	return 'The request could not be completed.'
 }
 
+async function loadCatalogParts(): Promise<void> {
+	try {
+		catalogParts.value = (await getParts()).items
+	} catch (reason) {
+		error.value = readableError(reason)
+	}
+}
+
 async function load(): Promise<void> {
+	void loadCatalogParts()
 	loading.value = true
 	error.value = ''
 	try {
@@ -671,6 +687,9 @@ async function submitActivity(asset: Asset): Promise<void> {
 		const meterList = activityDraft.meterUuid !== '' && activityDraft.meterValue.trim() !== ''
 			? [{ uuid: crypto.randomUUID(), meterUuid: activityDraft.meterUuid, reading: { uuid: crypto.randomUUID(), value: activityDraft.meterValue, unit: activityDraft.meterUnit } }]
 			: []
+		const partList = activityDraft.partUuid !== ''
+			? [{ uuid: crypto.randomUUID(), partUuid: activityDraft.partUuid, quantity: activityDraft.partQuantity.trim(), unit: activityDraft.partUnit }]
+			: []
 		const created = await createActivity(asset.uuid, {
 			uuid: crypto.randomUUID(),
 			performedAt: new Date(activityDraft.performedAt).toISOString().replace('.000Z', 'Z'),
@@ -678,6 +697,7 @@ async function submitActivity(asset: Asset): Promise<void> {
 			notes: activityDraft.notes.trim() || null,
 			items: [item],
 			meters: meterList,
+			parts: partList,
 		})
 		activities.value[asset.uuid] = [created, ...(activities.value[asset.uuid] ?? [])]
 		await refreshMaintenanceStatus(asset.uuid)
@@ -685,6 +705,8 @@ async function submitActivity(asset: Asset): Promise<void> {
 		activityDraft.summary = ''
 		activityDraft.notes = ''
 		activityDraft.meterValue = ''
+		activityDraft.partUuid = ''
+		activityDraft.partQuantity = '1'
 		activityDraft.performedAt = localNow()
 	} catch (reason) {
 		error.value = readableError(reason)
@@ -835,7 +857,7 @@ onMounted(load)
 					</form>
 				</section>
 
-				<PartsCatalogPanel />
+				<PartsCatalogPanel @changed="loadCatalogParts" />
 
 				<section class="panel">
 					<h2>Asset relationships</h2>
@@ -1292,6 +1314,7 @@ onMounted(load)
 											<strong>{{ activity.summary || activity.items[0]?.title || 'Maintenance activity' }}</strong>
 											<span>{{ new Date(activity.performedAt).toLocaleString() }}</span>
 											<span v-if="activity.items[0]?.componentName">{{ activity.items[0]?.componentName }}</span>
+											<span v-for="used in activity.parts ?? []" :key="used.uuid">{{ used.quantity }} {{ used.unit }} × {{ used.manufacturer }} {{ used.partNumber }}<template v-if="used.vendorName"> ({{ used.vendorName }})</template></span>
 										</li>
 									</ul>
 									<form class="activity-form" @submit.prevent="submitActivity(asset)">
@@ -1319,6 +1342,25 @@ onMounted(load)
 										</select>
 										<input v-model="activityDraft.meterValue" placeholder="Meter value (optional)">
 										<input v-model="activityDraft.meterUnit" placeholder="unit">
+										<select v-model="activityDraft.partUuid" aria-label="Part used">
+											<option value="">
+												No part used
+											</option>
+											<option v-for="part in catalogParts" :key="part.uuid" :value="part.uuid">
+												{{ part.manufacturer }} {{ part.partNumber }}
+											</option>
+										</select>
+										<input
+											v-if="activityDraft.partUuid !== ''"
+											v-model="activityDraft.partQuantity"
+											inputmode="decimal"
+											aria-label="Part quantity"
+											placeholder="Quantity">
+										<select v-if="activityDraft.partUuid !== ''" v-model="activityDraft.partUnit" aria-label="Part quantity unit">
+											<option v-for="unit in partUnits" :key="unit" :value="unit">
+												{{ unit }}
+											</option>
+										</select>
 										<button type="submit">
 											Record activity
 										</button>

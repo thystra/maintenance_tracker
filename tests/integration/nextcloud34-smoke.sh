@@ -1917,6 +1917,26 @@ assert_contains "$v0110_vendor" '"statuscode":201' 'owner vendor create'
 v0110_vendor_denied=$(contributor_ocs POST "/vendors?${ws}" '{"vendor":{"name":"Denied"}}')
 assert_contains "$v0110_vendor_denied" '"statuscode":403' 'contributor vendor create denied'
 
+v0110_asset_uuid='3e7c1d5b-9f4a-4b6c-8d8e-0f1a2b3c4d5e'
+v0110_asset=$(owner_ocs POST "/assets?${ws}" "{\"asset\":{\"uuid\":\"${v0110_asset_uuid}\",\"category\":\"vehicle\",\"name\":\"v0.1.10 smoke vehicle\"}}")
+assert_contains "$v0110_asset" '"statuscode":201' 'v0.1.10 smoke asset'
+
+v0110_activity_uuid='4f8d2e6c-0a5b-4c7d-9e9f-1a2b3c4d5e6f'
+v0110_activity_body="{\"activity\":{\"uuid\":\"${v0110_activity_uuid}\",\"performedAt\":\"2026-10-01T12:00:00Z\",\"items\":[{\"uuid\":\"5a9e3f7d-1b6c-4d8e-8f0a-2b3c4d5e6f7a\",\"title\":\"Oil change\",\"kind\":\"maintenance\"}],\"parts\":[{\"uuid\":\"6b0f4a8e-2c7d-4e9f-9a1b-3c4d5e6f7a8b\",\"partUuid\":\"${v0110_part_uuid}\",\"quantity\":\"1\",\"unit\":\"each\",\"vendorUuid\":\"${v0110_vendor_uuid}\"},{\"uuid\":\"7c1a5b9f-3d8e-4fa0-8b2c-4d5e6f7a8b9c\",\"partUuid\":\"${v0110_part_uuid}\",\"quantity\":\"5.5\",\"unit\":\"qt\"}]}}"
+v0110_activity=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" "$v0110_activity_body")
+assert_contains "$v0110_activity" '"statuscode":201' 'contributor activity with parts'
+assert_contains "$v0110_activity" '"quantity":"5.5"' 'activity part exact decimal quantity'
+assert_contains "$v0110_activity" '"vendorName":"Smoke Parts Store"' 'activity part vendor snapshot'
+assert_contains "$v0110_activity" '"description":"Smoke oil filter, long life"' 'activity part description snapshot'
+v0110_activity_retry=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" "$v0110_activity_body")
+assert_contains "$v0110_activity_retry" '"statuscode":201' 'activity with parts idempotent retry'
+v0110_activity_changed=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" "${v0110_activity_body/5.5/6}")
+assert_contains "$v0110_activity_changed" '"statuscode":412' 'activity parts changed retry conflict'
+v0110_activity_bad_part=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" '{"activity":{"uuid":"8d2b6c0a-4e9f-4ab1-9c3d-5e6f7a8b9c0d","performedAt":"2026-10-01T12:00:00Z","items":[{"uuid":"9e3c7d1b-5fa0-4bc2-8d4e-6f7a8b9c0d1e","title":"x","kind":"maintenance"}],"parts":[{"uuid":"af4d8e2c-6ab1-4cd3-9e5f-7a8b9c0d1e2f","partUuid":"b05e9f3d-7bc2-4de4-8f6a-8b9c0d1e2f3a","quantity":"1","unit":"each"}]}}')
+assert_contains "$v0110_activity_bad_part" '"statuscode":400' 'activity unknown part rejected'
+v0110_activity_float=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" '{"activity":{"uuid":"c16fa04e-8cd3-4ef5-9a7b-9c0d1e2f3a4b","performedAt":"2026-10-01T12:00:00Z","items":[{"uuid":"d27ab15f-9de4-4f06-8b8c-0d1e2f3a4b5c","title":"x","kind":"maintenance"}],"parts":[{"uuid":"e38bc26a-aef5-4a17-9c9d-1e2f3a4b5c6d","partUuid":"0b4f8a2e-6c1d-4e3f-9a5b-7c8d9e0f1a2b","quantity":1.5,"unit":"each"}]}}')
+assert_contains "$v0110_activity_float" '"statuscode":400' 'activity float quantity rejected'
+
 # @@V0110_NEXT@@
 
 page_status=$(docker exec "$container" curl --silent --show-error \

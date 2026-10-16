@@ -597,3 +597,11 @@ Parts and vendors are workspace records. Every member may read them (`part.read`
 - `PATCH /parts/{uuid}` with `expectedRevision` and `{"part": {"description"}}` — only the description is mutable; identity fields are rejected as unknown.
 - `DELETE /parts/{uuid}` with `expectedRevision` — archive. Archived parts stay referenced by fitments, recorded part usage, and costs.
 - `GET /vendors`, `GET /vendors/{uuid}`, `POST /vendors` (`uuid`, `name`, optional `notes`), `PATCH /vendors/{uuid}` (`name`, `notes`), `DELETE /vendors/{uuid}` — same revision and archive semantics. Vendor names are not unique; vendors are identified by UUID.
+
+## Parts used per activity — v0.1.10
+
+`POST /assets/{assetUuid}/activities` accepts an optional `parts` array (at most 100 entries) alongside `items` and `meters`. It is covered by the same `activity.create` capability, so Contributors may record parts they used but cannot create catalog parts.
+
+Each entry requires a client `uuid`, a `partUuid` referencing an active canonical part, a `quantity`, and a `unit`; `vendorUuid` (active vendor) and `notes` are optional. `quantity` must be a positive decimal **string** (or integer) with at most three fractional digits, such as `"5.5"`. JSON floating-point numbers are rejected so binary rounding can never enter the ledger; the value is stored as an exact integer in thousandths. `unit` is one of `each`, `pair`, `set`, `kit`, `ml`, `l`, `fl_oz`, `qt`, `gal`, `g`, `kg`, `oz`, `lb`, `mm`, `cm`, `m`, `in`, `ft`.
+
+Parts-used rows are immutable activity children. The part's manufacturer, part number, and description and the vendor name are snapshotted at capture so later catalog corrections or archival never rewrite history. Activity responses include `parts` with `uuid`, `partUuid`, `manufacturer`, `partNumber`, `description`, `quantity` (normalized decimal string), `unit`, `vendorUuid`, `vendorName`, and `notes`. Idempotent activity retries compare the parts payload too; reusing an activity UUID with different parts is a precondition conflict.

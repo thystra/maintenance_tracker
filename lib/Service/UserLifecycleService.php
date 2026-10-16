@@ -35,6 +35,7 @@ final class UserLifecycleService {
 		'maint_profiles',
 		'maint_occurrences',
 		'maint_reminder_policy',
+		'maint_activity_parts',
 		'maint_activity_meters',
 		'maint_activity_items',
 		'maint_activities',
