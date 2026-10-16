@@ -33,7 +33,7 @@ import type {
 	WorkSchedule,
 } from './types.ts'
 
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import AssetCostsPanel from './components/AssetCostsPanel.vue'
@@ -107,6 +107,16 @@ const assignments = ref<Assignment[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
+// Polite screen-reader confirmation when a save finishes without an error;
+// failures are announced by the role="alert" error notice.
+const announcement = ref('')
+watch(saving, async (now, before) => {
+	if (before && !now && error.value === '') {
+		announcement.value = ''
+		await nextTick()
+		announcement.value = 'Saved.'
+	}
+})
 
 const draft = reactive<CreateAsset>({ name: '', category: 'vehicle', manufacturer: null, model: null })
 const categoryDraft = reactive({ key: '', name: '', defaultAssetClass: 'other' as AssetClass })
@@ -844,6 +854,9 @@ function reloadAfterTransfer(): void {
 				<p v-if="error" class="notice notice--error" role="alert">
 					{{ error }}
 				</p>
+				<p class="visually-hidden" role="status" aria-live="polite">
+					{{ announcement }}
+				</p>
 
 				<section class="panel">
 					<h2>Add maintained item</h2>
@@ -888,26 +901,26 @@ function reloadAfterTransfer(): void {
 						</li>
 					</ul>
 					<form class="relationship-form" @submit.prevent="submitRelationship">
-						<select v-model="relationshipDraft.sourceAssetUuid" required>
+						<select v-model="relationshipDraft.sourceAssetUuid" aria-label="Source asset" required>
 							<option value="" disabled>
 								Source asset
 							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
 								{{ asset.name }}
 							</option>
 						</select>
-						<select v-model="relationshipDraft.type">
+						<select v-model="relationshipDraft.type" aria-label="Relationship type">
 							<option v-for="type in relationshipTypes" :key="type.key" :value="type.key">
 								{{ type.label }}
 							</option>
 						</select>
-						<select v-model="relationshipDraft.targetAssetUuid" required>
+						<select v-model="relationshipDraft.targetAssetUuid" aria-label="Target asset" required>
 							<option value="" disabled>
 								Target asset
 							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
 								{{ asset.name }}
 							</option>
 						</select>
-						<input v-model="relationshipDraft.context" placeholder="context (general, trip, fuel)">
+						<input v-model="relationshipDraft.context" aria-label="Context (general, trip, fuel)" placeholder="context (general, trip, fuel)">
 						<label class="check-field"><input v-model="relationshipDraft.isDefault" type="checkbox"><span>Default for context</span></label>
 						<button type="submit" :disabled="saving || assets.length < 2">
 							Add relationship
@@ -927,26 +940,26 @@ function reloadAfterTransfer(): void {
 						</li>
 					</ul>
 					<form class="assignment-form" @submit.prevent="submitAssignment">
-						<select v-model="assignmentDraft.sourceAssetUuid" required>
+						<select v-model="assignmentDraft.sourceAssetUuid" aria-label="Source asset" required>
 							<option value="" disabled>
 								Source asset
 							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
 								{{ asset.name }}
 							</option>
 						</select>
-						<select v-model="assignmentDraft.type">
+						<select v-model="assignmentDraft.type" aria-label="Assignment type">
 							<option v-for="type in relationshipTypes" :key="type.key" :value="type.key">
 								{{ type.label }}
 							</option>
 						</select>
-						<select v-model="assignmentDraft.targetAssetUuid" required>
+						<select v-model="assignmentDraft.targetAssetUuid" aria-label="Target asset" required>
 							<option value="" disabled>
 								Target asset
 							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
 								{{ asset.name }}
 							</option>
 						</select>
-						<input v-model="assignmentDraft.context" placeholder="context (trip, fuel)">
+						<input v-model="assignmentDraft.context" aria-label="Context (trip, fuel)" placeholder="context (trip, fuel)">
 						<label><span>Effective from</span><input v-model="assignmentDraft.effectiveFrom" type="date" required></label>
 						<label><span>Effective until</span><input v-model="assignmentDraft.effectiveUntil" type="date"></label>
 						<label class="check-field"><input v-model="assignmentDraft.isPrimary" type="checkbox"><span>Primary</span></label>
@@ -1079,13 +1092,17 @@ function reloadAfterTransfer(): void {
 										</li>
 									</ul>
 									<form class="inline-form" @submit.prevent="submitComponent(asset)">
-										<input v-model="componentDraft.name" placeholder="Component name" required><input v-model="componentDraft.type" placeholder="type key"><select v-model="componentDraft.parentUuid">
-											<option value="">
-												No parent
-											</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
-												{{ component.name }}
-											</option>
-										</select><button type="submit">
+										<input
+											v-model="componentDraft.name"
+											aria-label="Component name"
+											placeholder="Component name"
+											required><input v-model="componentDraft.type" aria-label="Component type key" placeholder="type key"><select v-model="componentDraft.parentUuid" aria-label="Parent component">
+												<option value="">
+													No parent
+												</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
+													{{ component.name }}
+												</option>
+											</select><button type="submit">
 											Add component
 										</button>
 									</form>
@@ -1097,13 +1114,21 @@ function reloadAfterTransfer(): void {
 										</li>
 									</ul>
 									<form class="spec-form" @submit.prevent="submitSpecification(asset)">
-										<input v-model="specificationDraft.key" placeholder="engine.oil.capacity" required><input v-model="specificationDraft.label" placeholder="Engine oil capacity" required><input v-model="specificationDraft.value" placeholder="13"><input v-model="specificationDraft.unit" placeholder="qt"><input v-model="specificationDraft.regime" placeholder="regime (optional)"><select v-model="specificationDraft.componentUuid">
-											<option value="">
-												Whole asset
-											</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
-												{{ component.name }}
-											</option>
-										</select><button type="submit">
+										<input
+											v-model="specificationDraft.key"
+											aria-label="Specification key"
+											placeholder="engine.oil.capacity"
+											required><input
+												v-model="specificationDraft.label"
+												aria-label="Specification label"
+												placeholder="Engine oil capacity"
+												required><input v-model="specificationDraft.value" aria-label="Value" placeholder="13"><input v-model="specificationDraft.unit" aria-label="Unit" placeholder="qt"><input v-model="specificationDraft.regime" aria-label="Regime (optional)" placeholder="regime (optional)"><select v-model="specificationDraft.componentUuid" aria-label="Component">
+													<option value="">
+														Whole asset
+													</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
+														{{ component.name }}
+													</option>
+												</select><button type="submit">
 											Add specification
 										</button>
 									</form>
@@ -1119,11 +1144,16 @@ function reloadAfterTransfer(): void {
 									<form class="meter-form" @submit.prevent="submitMeter(asset)">
 										<input
 											v-model="meterDraft.key"
+											aria-label="Meter key"
 											pattern="[a-z0-9][a-z0-9_-]*"
 											placeholder="odometer"
 											required>
-										<input v-model="meterDraft.name" placeholder="Odometer" required>
-										<select v-model="meterDraft.dimension" @change="syncMeterUnit">
+										<input
+											v-model="meterDraft.name"
+											aria-label="Meter name"
+											placeholder="Odometer"
+											required>
+										<select v-model="meterDraft.dimension" aria-label="Dimension" @change="syncMeterUnit">
 											<option value="distance">
 												distance
 											</option><option value="runtime">
@@ -1132,12 +1162,12 @@ function reloadAfterTransfer(): void {
 												usage count
 											</option>
 										</select>
-										<select v-model="meterDraft.displayUnit">
+										<select v-model="meterDraft.displayUnit" aria-label="Display unit">
 											<option v-for="unit in meterUnits(meterDraft.dimension)" :key="unit" :value="unit">
 												{{ unit }}
 											</option>
 										</select>
-										<select v-model="meterDraft.componentUuid">
+										<select v-model="meterDraft.componentUuid" aria-label="Component">
 											<option value="">
 												Whole asset
 											</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
@@ -1150,7 +1180,11 @@ function reloadAfterTransfer(): void {
 										</button>
 									</form>
 									<form class="reading-form" @submit.prevent="submitReading">
-										<select v-model="readingDraft.meterUuid" required @change="syncReadingUnit">
+										<select
+											v-model="readingDraft.meterUuid"
+											aria-label="Meter"
+											required
+											@change="syncReadingUnit">
 											<option value="" disabled>
 												Meter
 											</option><option v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid" :value="meter.uuid">
@@ -1159,11 +1193,20 @@ function reloadAfterTransfer(): void {
 										</select>
 										<input
 											v-model="readingDraft.value"
+											aria-label="Reading"
 											inputmode="decimal"
 											placeholder="Reading"
 											required>
-										<input v-model="readingDraft.unit" placeholder="unit" required>
-										<input v-model="readingDraft.observedAt" type="datetime-local" required>
+										<input
+											v-model="readingDraft.unit"
+											aria-label="Unit"
+											placeholder="unit"
+											required>
+										<input
+											v-model="readingDraft.observedAt"
+											aria-label="Observed at"
+											type="datetime-local"
+											required>
 										<button type="submit" :disabled="(meters[asset.uuid] ?? []).length === 0">
 											Record reading
 										</button>
@@ -1226,12 +1269,21 @@ function reloadAfterTransfer(): void {
 									<form class="work-group-form" @submit.prevent="submitWorkGroup(asset)">
 										<input
 											v-model="workGroupDraft.key"
+											aria-label="Group key"
 											pattern="[a-z0-9][a-z0-9_-]*"
 											placeholder="engine"
 											required>
-										<input v-model="workGroupDraft.name" placeholder="Engine" required>
-										<input v-model="workGroupDraft.description" placeholder="Description (optional)">
-										<input v-model.number="workGroupDraft.sortOrder" type="number" placeholder="Sort order">
+										<input
+											v-model="workGroupDraft.name"
+											aria-label="Group name"
+											placeholder="Engine"
+											required>
+										<input v-model="workGroupDraft.description" aria-label="Description (optional)" placeholder="Description (optional)">
+										<input
+											v-model.number="workGroupDraft.sortOrder"
+											aria-label="Sort order"
+											type="number"
+											placeholder="Sort order">
 										<button type="submit">
 											Add work group
 										</button>
@@ -1239,12 +1291,21 @@ function reloadAfterTransfer(): void {
 									<form class="work-definition-form" @submit.prevent="submitWorkDefinition(asset)">
 										<input
 											v-model="workDefinitionDraft.key"
+											aria-label="Task key"
 											pattern="[a-z0-9][a-z0-9_-]*"
 											placeholder="oil_change"
 											required>
-										<input v-model="workDefinitionDraft.title" placeholder="Oil change" required>
-										<input v-model="workDefinitionDraft.kind" placeholder="maintenance" required>
-										<select v-model="workDefinitionDraft.groupUuid">
+										<input
+											v-model="workDefinitionDraft.title"
+											aria-label="Task title"
+											placeholder="Oil change"
+											required>
+										<input
+											v-model="workDefinitionDraft.kind"
+											aria-label="Task kind"
+											placeholder="maintenance"
+											required>
+										<select v-model="workDefinitionDraft.groupUuid" aria-label="Group">
 											<option value="">
 												No work group
 											</option>
@@ -1252,7 +1313,7 @@ function reloadAfterTransfer(): void {
 												{{ group.name }}
 											</option>
 										</select>
-										<select v-model="workDefinitionDraft.componentUuid">
+										<select v-model="workDefinitionDraft.componentUuid" aria-label="Component">
 											<option value="">
 												Whole asset
 											</option>
@@ -1260,7 +1321,7 @@ function reloadAfterTransfer(): void {
 												{{ component.name }}
 											</option>
 										</select>
-										<select v-model="workDefinitionDraft.scheduleMode">
+										<select v-model="workDefinitionDraft.scheduleMode" aria-label="Schedule mode">
 											<option value="none">
 												Unscheduled (schedule: none)
 											</option>
@@ -1280,10 +1341,11 @@ function reloadAfterTransfer(): void {
 										<template v-if="workDefinitionDraft.scheduleMode === 'calendar' || workDefinitionDraft.scheduleMode === 'meter_calendar'">
 											<input
 												v-model.number="workDefinitionDraft.calendarValue"
+												aria-label="Calendar value"
 												type="number"
 												min="1"
 												required>
-											<select v-model="workDefinitionDraft.calendarUnit">
+											<select v-model="workDefinitionDraft.calendarUnit" aria-label="Calendar unit">
 												<option value="day">
 													days
 												</option><option value="week">
@@ -1298,6 +1360,7 @@ function reloadAfterTransfer(): void {
 										<template v-if="workDefinitionDraft.scheduleMode === 'business_days'">
 											<input
 												v-model.number="workDefinitionDraft.businessDaysValue"
+												aria-label="Business days value"
 												type="number"
 												min="1"
 												required>
@@ -1309,7 +1372,11 @@ function reloadAfterTransfer(): void {
 											</div>
 										</template>
 										<template v-if="workDefinitionDraft.scheduleMode === 'meter' || workDefinitionDraft.scheduleMode === 'meter_calendar'">
-											<select v-model="workDefinitionDraft.meterUuid" required @change="syncWorkMeterUnit(asset.uuid)">
+											<select
+												v-model="workDefinitionDraft.meterUuid"
+												aria-label="Schedule meter"
+												required
+												@change="syncWorkMeterUnit(asset.uuid)">
 												<option value="" disabled>
 													Schedule meter
 												</option>
@@ -1319,10 +1386,15 @@ function reloadAfterTransfer(): void {
 											</select>
 											<input
 												v-model="workDefinitionDraft.meterValue"
+												aria-label="Interval"
 												inputmode="decimal"
 												placeholder="Interval"
 												required>
-											<input v-model="workDefinitionDraft.meterUnit" placeholder="unit" required>
+											<input
+												v-model="workDefinitionDraft.meterUnit"
+												aria-label="Unit"
+												placeholder="unit"
+												required>
 										</template>
 										<button type="submit">
 											Add work definition
@@ -1344,7 +1416,7 @@ function reloadAfterTransfer(): void {
 										</li>
 									</ul>
 									<form class="activity-form" @submit.prevent="submitActivity(asset)">
-										<select v-model="activityDraft.definitionUuid">
+										<select v-model="activityDraft.definitionUuid" aria-label="Planned task">
 											<option value="">
 												Ad-hoc work
 											</option>
@@ -1355,19 +1427,24 @@ function reloadAfterTransfer(): void {
 										<input
 											v-if="activityDraft.definitionUuid === ''"
 											v-model="activityDraft.title"
+											aria-label="Ad-hoc work title"
 											placeholder="Ad-hoc work title"
 											required>
-										<input v-model="activityDraft.performedAt" type="datetime-local" required>
-										<input v-model="activityDraft.summary" placeholder="Summary (optional)">
-										<select v-model="activityDraft.meterUuid">
+										<input
+											v-model="activityDraft.performedAt"
+											aria-label="Performed at"
+											type="datetime-local"
+											required>
+										<input v-model="activityDraft.summary" aria-label="Summary (optional)" placeholder="Summary (optional)">
+										<select v-model="activityDraft.meterUuid" aria-label="Meter">
 											<option value="">
 												No meter reading
 											</option><option v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid" :value="meter.uuid">
 												{{ meter.name }}
 											</option>
 										</select>
-										<input v-model="activityDraft.meterValue" placeholder="Meter value (optional)">
-										<input v-model="activityDraft.meterUnit" placeholder="unit">
+										<input v-model="activityDraft.meterValue" aria-label="Meter value (optional)" placeholder="Meter value (optional)">
+										<input v-model="activityDraft.meterUnit" aria-label="Unit" placeholder="unit">
 										<select v-model="activityDraft.partUuid" aria-label="Part used">
 											<option value="">
 												No part used
@@ -1433,6 +1510,10 @@ input, select { min-height: 42px; padding: 8px 10px; border: 1px solid var(--col
 button { min-height: 42px; padding: 8px 16px; border: 0; border-radius: var(--border-radius-pill); background: var(--color-primary-element); color: var(--color-primary-element-text); font-weight: 700; cursor: pointer; }
 
 button:disabled { opacity: .55; }
+
+:is(button, input, select, textarea, summary, a):focus-visible { outline: 2px solid var(--color-primary-element); outline-offset: 2px; }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .button--secondary { border: 1px solid var(--color-border-maxcontrast); background: var(--color-main-background); color: var(--color-main-text); }
 

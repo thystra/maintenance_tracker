@@ -83,7 +83,7 @@ defineExpose({ load })
 					Accepting moves the workspace evidence folder ({{ bytes(transfer.quota.folderBytes) }}) into your Files.
 					Uploads by every member will count against your storage quota; you have {{ bytes(transfer.quota.recipientFreeBytes) }} free.
 				</p>
-				<p v-if="transfer.quota && transfer.quota.fits === false" class="notice notice--error">
+				<p v-if="transfer.quota && transfer.quota.fits === false" class="notice notice--error" role="alert">
 					The folder does not fit in your remaining quota. Free up space or ask an administrator before accepting.
 				</p>
 				<label class="checkbox">
