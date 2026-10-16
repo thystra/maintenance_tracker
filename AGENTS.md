@@ -23,7 +23,7 @@ Environment-specific deployment belongs in infrastructure management.
 
 Current application contract:
 
-- Nextcloud 34 only;
+- Nextcloud 33 through 35, each exercised by the CI integration matrix;
 - PHP 8.2 through 8.5, with PHP 8.5 the primary production target;
 - Node.js 24 for frontend builds;
 - PostgreSQL, MariaDB/MySQL, and SQLite through public Nextcloud database APIs;
@@ -139,7 +139,10 @@ git diff --check
 git diff --exit-code -- js css
 ```
 
-Disposable Nextcloud 34 runtime qualification:
+Disposable Nextcloud runtime qualification (defaults to 34; set `NC_SMOKE_IMAGE`,
+e.g. `nextcloud:35.0.2-apache`, for other declared releases, and
+`NC_SMOKE_QUALIFY=1` only when exercising a release not yet declared in
+`appinfo/info.xml`):
 
 ```bash
 NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh

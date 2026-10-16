@@ -113,12 +113,6 @@ jobs:
         database:
           - sqlite
           - pgsql
-        include:
-          # Qualification targets not yet declared in appinfo/info.xml.
-          - nextcloud: 33.0.10
-            qualify: '1'
-          - nextcloud: 35.0.2
-            qualify: '1'
 
     steps:
       - name: Check out repository
@@ -141,7 +135,6 @@ jobs:
         env:
           NC_SMOKE_DATABASE: ${{ matrix.database }}
           NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
-          NC_SMOKE_QUALIFY: ${{ matrix.qualify || '0' }}
         run: bash tests/integration/nextcloud-smoke.sh
 
   package:

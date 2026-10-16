@@ -82,6 +82,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Nextcloud compatibility widened from 34 only to 33–35 after the full disposable integration suite passed on 33.0.10, 34.0.5, and 35.0.2; CI now runs the suite on all three releases with SQLite and PostgreSQL. The harness is renamed `tests/integration/nextcloud-smoke.sh`.
 - Workspace authorization no longer uses a role-rank gate; controllers request named capabilities and workspace writes retain row-level serialization.
 - `GET /workspaces` now returns all workspaces accessible to the current user instead of only the personal workspace.
 - Account lifecycle cleanup now includes personal-workspace audit rows while preserving shared-workspace history authored by a deleted member.
