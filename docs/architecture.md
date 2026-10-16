@@ -211,8 +211,13 @@ inside our transaction (which PostgreSQL would abort on a caught core error).
 - `ProjectAuditTrail` (5 minutes) reads `maint_audit` after a persisted cursor
   (`audit_projection_cursor` app config, initialized to the end of the trail at
   upgrade so history is not replayed) and publishes Nextcloud Activity events.
-  An exclusive lock stops two runners from publishing the same rows; the
-  cursor makes delivery at most once per audit row. Activity types (each a
+  An exclusive lock stops two runners from publishing the same rows. The
+  cursor advances after each audit row has been fully projected, so a row is
+  never re-projected once completed and never skipped. A crash or kill while a
+  row is being projected (after some of its activities or notifications were
+  published but before the cursor moved) re-projects that one row on the next
+  run, which can duplicate that row's activities for some recipients. A failing
+  integration for a row is logged and the row is still marked done. Activity types (each a
   user-configurable Activity setting under “Maintenance Tracker”):
   - maintenance: activity records and maintenance tasks created/updated/archived;
   - evidence: evidence added, archived, linked, unlinked;

@@ -7,6 +7,10 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Documentation no longer claims Activity delivery is at most once per audit row: a crash while one row is being projected re-projects that row and can duplicate its activities.
+
 ### Added
 
 - v0.1.12 Nextcloud Activity: background job `ProjectAuditTrail` turns the append-only audit trail into Activity events for maintenance records and tasks, evidence, membership changes, and ownership transfers (offers visible only to offerer and recipient). There are four Activity settings and a “Maintenance” filter. Events carry identifiers only, and names are rendered when read. The projection cursor starts at the end of the existing trail on upgrade.

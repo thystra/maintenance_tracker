@@ -27,9 +27,11 @@ use Throwable;
  * notifications. It runs from a background job (and `occ
  * maintenance_tracker:integrations:run`), never inside an app transaction,
  * so a rolled-back write never produces an activity and core Activity or
- * notification storage never runs inside our transaction. A persisted cursor
- * makes delivery at-most-once per audit row; an exclusive lock keeps two
- * runners from publishing the same rows.
+ * notification storage never runs inside our transaction. A persisted cursor,
+ * advanced after each row, means completed rows are never re-projected; a
+ * crash in the middle of one row re-projects that row on the next run and may
+ * duplicate its activities. An exclusive lock keeps two runners from
+ * publishing the same rows.
  */
 final class IntegrationProjector {
 	public const CURSOR_KEY = 'audit_projection_cursor';
