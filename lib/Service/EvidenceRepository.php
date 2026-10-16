@@ -56,6 +56,15 @@ final class EvidenceRepository {
 		return $this->many($q);
 	}
 
+	/** Every evidence row of a workspace, archived included, for export. @return list<array<string,mixed>> */
+	public function allForWorkspace(int $workspaceId): array {
+		$q = $this->db->getQueryBuilder();
+		$q->select('*')->from('maint_evidence')
+			->where($q->expr()->eq('workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC');
+		return $this->many($q);
+	}
+
 	/** @param array<string,mixed> $row */
 	public function insert(array $row): int {
 		$q = $this->db->getQueryBuilder();

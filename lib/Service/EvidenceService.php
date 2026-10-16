@@ -318,6 +318,17 @@ final class EvidenceService {
 		return $out + ['availability' => $stillExists ? 'not_shared' : 'missing', 'file' => null];
 	}
 
+	/**
+	 * The file behind an evidence row as the viewer's own Files sees it, or
+	 * null when the viewer cannot open it. Used by export; never call inside
+	 * an app database transaction.
+	 *
+	 * @param array<string,mixed> $row
+	 */
+	public function readableFile(string $viewerUid, array $row): ?File {
+		return $this->nodeFor($viewerUid, (int)$row['file_id']);
+	}
+
 	/** @param array<string,mixed> $input */
 	private function resolveForActor(string $actorUid, array $input): File {
 		$userFolder = $this->rootFolder->getUserFolder($actorUid);
