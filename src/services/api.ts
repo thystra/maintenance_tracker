@@ -72,7 +72,41 @@ export const requestOptions = {
 	},
 }
 
+const WORKSPACE_KEY = 'maintenance_tracker.workspace'
+
+/** Workspace selected in the switcher; null means the personal workspace. */
+export function currentWorkspace(): string | null {
+	try {
+		return window.localStorage.getItem(WORKSPACE_KEY)
+	} catch {
+		return null
+	}
+}
+
+export function selectWorkspace(uuid: string | null): void {
+	try {
+		if (uuid === null) {
+			window.localStorage.removeItem(WORKSPACE_KEY)
+		} else {
+			window.localStorage.setItem(WORKSPACE_KEY, uuid)
+		}
+	} catch {
+		// Storage unavailable: stay on the personal workspace.
+	}
+}
+
+/**
+ * OCS URL for an app endpoint. Workspace-scoped endpoints carry the selected
+ * workspace; account-level endpoints (workspaces, transfers, capabilities) do not.
+ *
+ * @param path App API path starting with a slash.
+ */
 export function endpoint(path: string): string {
+	const workspace = currentWorkspace()
+	const global = /^\/(workspaces|ownership-transfers|capabilities)(\/|\?|$)/.test(path)
+	if (workspace !== null && !global && !/[?&]workspace=/.test(path)) {
+		path += `${path.includes('?') ? '&' : '?'}workspace=${encodeURIComponent(workspace)}`
+	}
 	return generateOcsUrl(`/apps/maintenance_tracker/api/v1${path}`)
 }
 
