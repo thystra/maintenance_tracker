@@ -54,6 +54,13 @@ jobs:
       - name: Run PHP checks
         run: composer test
 
+      - name: Check OpenAPI contract is up to date
+        run: |
+          set -euo pipefail
+          composer openapi:install --no-progress
+          composer openapi
+          git diff --exit-code -- openapi.json || { echo 'openapi.json is stale; run composer openapi and commit it.' >&2; exit 1; }
+
   frontend:
     name: Frontend and generated assets
     runs-on: forgejo-workstation

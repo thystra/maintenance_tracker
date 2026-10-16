@@ -499,6 +499,12 @@ expect(exportService.includes('ExportPolicy::MAX_FILE_BYTES') && exportService.i
 expect(exportController.includes('AuthorizationCatalog::WORKSPACE_EXPORT') && exportController.includes('->authorize(') && !exportController.includes('runWithCapability('), 'Export endpoint must authorize workspace.export and run outside an app transaction.')
 expect(exportController.includes("'Cache-Control', 'no-store'"), 'Export downloads must not be cached.')
 
+// 1.0 prep: OpenAPI contract.
+const openapi = JSON.parse(await read('openapi.json'))
+expect(openapi.openapi && Object.keys(openapi.paths ?? {}).some((path) => path.includes('/apps/maintenance_tracker/api/v1/import')), 'openapi.json must be the generated contract and include current routes.')
+expect(forgejoCi.includes('composer openapi') && forgejoCi.includes('git diff --exit-code -- openapi.json'), 'CI must regenerate openapi.json and fail when it is stale.')
+expect(nextcloudIgnore.split(/\r?\n/).includes('/vendor-bin'), '.nextcloudignore must exclude development tool installs.')
+
 // 1.0 prep: workspace restore.
 const importPolicy = await read('lib/Service/ImportPolicy.php')
 const importService = await read('lib/Service/ImportService.php')
