@@ -22,7 +22,8 @@ authentication, CSRF handling, rate limiting, logging, and CSP remain in force.
 ## Runtime baseline
 
 - Nextcloud 33 through 35. Each declared release runs the full disposable
-  integration suite on SQLite and PostgreSQL in CI. Nextcloud 35 requires PHP 8.3+,
+  integration suite on SQLite, PostgreSQL, and MariaDB in CI, plus an
+  upgrade-migration test from the v0.1.10 schema. Nextcloud 35 requires PHP 8.3+,
   so PHP 8.2 deployments are limited to Nextcloud 33/34.
 - PHP 8.2–8.5 syntax, tested on 8.2 and 8.5. PHP 8.5 is the production target.
 - Only public `OCP` APIs. Private `OC` and `OCA\DAV` classes are not app

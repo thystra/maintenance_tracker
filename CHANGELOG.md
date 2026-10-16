@@ -14,6 +14,10 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- MariaDB is part of the qualification matrix: the smoke harness accepts `NC_SMOKE_DATABASE=mysql` (MariaDB 11.4 with READ-COMMITTED isolation and row binlogs) and CI runs it on Nextcloud 33–35. No code change was needed.
+- New `tests/integration/upgrade-smoke.sh` installs the v0.1.10 app state, creates data, upgrades to the working tree with `occ upgrade`, and checks that exactly the shipped migrations ran, old data survived, and later features work on it. CI runs it on Nextcloud 33–35 with SQLite, PostgreSQL, and MariaDB.
+- The harnesses accept `NC_SMOKE_NETWORK_MODE=bridge` to reach the database container by IP on the default Docker bridge, for hosts whose firewall drops traffic on user-defined bridges.
+
 - Accessibility fixes: every placeholder-only input and select now has an accessible name, completed saves are announced through a polite status region, the quota warning is announced, keyboard focus has a visible outline, and panel toggles expose `aria-expanded`/`aria-controls`.
 
 ### Fixed
