@@ -25,6 +25,10 @@ and reminders while keeping the data in your Nextcloud.
 		<database>mysql</database>
 		<database>sqlite</database>
 	</dependencies>
+	<commands>
+		<command>OCA\MaintenanceTracker\Command\AssignOwner</command>
+		<command>OCA\MaintenanceTracker\Command\ListOrphaned</command>
+	</commands>
 	<settings>
 		<admin>OCA\MaintenanceTracker\Settings\AdminSettings</admin>
 		<admin-section>OCA\MaintenanceTracker\Settings\AdminSection</admin-section>
