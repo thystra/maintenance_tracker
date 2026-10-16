@@ -35,6 +35,14 @@ final class AuthorizationCatalog {
 	public const FITMENT_READ = 'fitment.read';
 	public const FITMENT_IMPORT = 'fitment.import';
 	public const FITMENT_MAP = 'fitment.map';
+	public const PART_READ = 'part.read';
+	public const PART_MANAGE = 'part.manage';
+	public const VENDOR_READ = 'vendor.read';
+	public const VENDOR_MANAGE = 'vendor.manage';
+	public const COST_READ = 'cost.read';
+	public const COST_CREATE = 'cost.create';
+	public const COST_MANAGE = 'cost.manage';
+	public const WORKSPACE_SETTINGS_MANAGE = 'workspace.settings.manage';
 
 	/**
 	 * Reserved vocabulary is deliberately present before its subsystem exists.
@@ -68,6 +76,14 @@ final class AuthorizationCatalog {
 		self::FITMENT_READ => ['implemented' => true, 'write' => false],
 		self::FITMENT_IMPORT => ['implemented' => true, 'write' => true],
 		self::FITMENT_MAP => ['implemented' => true, 'write' => true],
+		self::PART_READ => ['implemented' => true, 'write' => false],
+		self::PART_MANAGE => ['implemented' => true, 'write' => true],
+		self::VENDOR_READ => ['implemented' => true, 'write' => false],
+		self::VENDOR_MANAGE => ['implemented' => true, 'write' => true],
+		self::COST_READ => ['implemented' => true, 'write' => false],
+		self::COST_CREATE => ['implemented' => true, 'write' => true],
+		self::COST_MANAGE => ['implemented' => true, 'write' => true],
+		self::WORKSPACE_SETTINGS_MANAGE => ['implemented' => true, 'write' => true],
 
 		'maintenance_definition.*' => ['implemented' => false, 'write' => false],
 		'activity.*' => ['implemented' => false, 'write' => false],
@@ -78,7 +94,6 @@ final class AuthorizationCatalog {
 		'report.share.revoke' => ['implemented' => false, 'write' => true],
 		'external_submission.read' => ['implemented' => false, 'write' => false],
 		'external_submission.review' => ['implemented' => false, 'write' => true],
-		'workspace.settings.manage' => ['implemented' => false, 'write' => true],
 		'workspace.delete' => ['implemented' => false, 'write' => true],
 	];
 
@@ -115,6 +130,14 @@ final class AuthorizationCatalog {
 			self::FITMENT_READ,
 			self::FITMENT_IMPORT,
 			self::FITMENT_MAP,
+			self::PART_READ,
+			self::PART_MANAGE,
+			self::VENDOR_READ,
+			self::VENDOR_MANAGE,
+			self::COST_READ,
+			self::COST_CREATE,
+			self::COST_MANAGE,
+			self::WORKSPACE_SETTINGS_MANAGE,
 		],
 		'manager' => [
 			self::WORKSPACE_READ,
@@ -141,6 +164,13 @@ final class AuthorizationCatalog {
 			self::FITMENT_READ,
 			self::FITMENT_IMPORT,
 			self::FITMENT_MAP,
+			self::PART_READ,
+			self::PART_MANAGE,
+			self::VENDOR_READ,
+			self::VENDOR_MANAGE,
+			self::COST_READ,
+			self::COST_CREATE,
+			self::COST_MANAGE,
 		],
 		'contributor' => [
 			self::WORKSPACE_READ,
@@ -155,6 +185,10 @@ final class AuthorizationCatalog {
 			self::REMINDER_POLICY_READ,
 			self::PROFILE_READ,
 			self::FITMENT_READ,
+			self::PART_READ,
+			self::VENDOR_READ,
+			self::COST_READ,
+			self::COST_CREATE,
 		],
 		'viewer' => [
 			self::WORKSPACE_READ,
@@ -167,6 +201,9 @@ final class AuthorizationCatalog {
 			self::REMINDER_POLICY_READ,
 			self::PROFILE_READ,
 			self::FITMENT_READ,
+			self::PART_READ,
+			self::VENDOR_READ,
+			self::COST_READ,
 		],
 	];
 

@@ -35,6 +35,7 @@ final class ActivityService {
 		private ActivityMapper $mapper,
 		private ActivityItemMapper $items,
 		private ActivityMeterMapper $meterSnapshots,
+		private ActivityPartService $activityParts,
 		private ChangeJournal $journal,
 		private ITimeFactory $timeFactory,
 	) {}
@@ -55,7 +56,7 @@ final class ActivityService {
 
 	/** @param array<string,mixed> $input @return array<string,mixed> */
 	public function create(WorkspaceContext $context, string $assetUuid, array $input): array {
-		$this->known($input, ['uuid','performedAt','summary','notes','items','meters'], 'activity');
+		$this->known($input, ['uuid','performedAt','summary','notes','items','meters','parts'], 'activity');
 		foreach (['uuid','performedAt','items'] as $field) if (!array_key_exists($field,$input)) throw new ValidationException("{$field} is required");
 		$asset = $this->assets->find($context, $assetUuid);
 		$uuid = $this->uuid($input['uuid'], 'uuid');
@@ -65,6 +66,7 @@ final class ActivityService {
 		if (!is_array($input['items']) || !array_is_list($input['items']) || $input['items'] === []) throw new ValidationException('items must be a non-empty array');
 		$meterInputs = $input['meters'] ?? [];
 		if (!is_array($meterInputs) || !array_is_list($meterInputs)) throw new ValidationException('meters must be an array');
+		$partInputs = $this->activityParts->validateList($input['parts'] ?? null);
 
 		try {
 			$existing = $this->mapper->findByUuid($context->workspace()->getId(), $uuid, true);
@@ -78,6 +80,7 @@ final class ActivityService {
 			/** @var Activity $a */ $a = $this->mapper->insert($a);
 			foreach ($input['items'] as $position => $itemInput) $this->items->append($this->buildItem($context, $a, $asset->getId(), $itemInput, $position));
 			foreach ($meterInputs as $position => $meterInput) $this->meterSnapshots->append($this->buildMeterSnapshot($context, $a, $asset->getId(), $meterInput, $position));
+			$this->activityParts->appendAll($context, $a, $partInputs);
 			$this->journal->record($a->getWorkspaceId(), 'activity', $uuid, 'upsert', 1, $now);
 			return $this->toApi($context, $a);
 		} catch (DatabaseException $e) {
@@ -135,10 +138,10 @@ final class ActivityService {
 		foreach($storedItems as $i=>$stored){$raw=$rawItems[$i]??null;if(!is_array($raw))return false;$this->known($raw,['uuid','definitionUuid','componentUuid','title','kind','notes'],'activity item');if(!isset($raw['uuid'])||$stored->getUuid()!==$this->uuid($raw['uuid'],'item uuid'))return false;$du=$raw['definitionUuid']??null;if(($du===null?null:$this->uuid($du,'definitionUuid'))!==$stored->getDefinitionUuid())return false;if($du===null){if(!array_key_exists('title',$raw)||!array_key_exists('kind',$raw)||$this->text($raw['title'],'title',255)!==$stored->getTitle()||$this->key($raw['kind'],'kind')!==$stored->getKind())return false;}$rawComponent=$raw['componentUuid']??null;if($rawComponent!==null&&$this->uuid($rawComponent,'componentUuid')!==$stored->getComponentUuid())return false;elseif($rawComponent===null&&$du===null&&$stored->getComponentUuid()!==null)return false;if($this->optionalText($raw['notes']??null,'item notes',20000)!==$stored->getNotes())return false;}
 		$rawMeters=$input['meters']??[];$storedMeters=$this->meterSnapshots->findForActivity($a->getWorkspaceId(),$a->getId());if(!is_array($rawMeters)||count($storedMeters)!==count($rawMeters))return false;
 		foreach($storedMeters as $i=>$stored){$raw=$rawMeters[$i]??null;if(!is_array($raw))return false;$this->known($raw,['uuid','meterUuid','readingUuid','reading'],'activity meter');if(!isset($raw['uuid'],$raw['meterUuid'])||$stored->getUuid()!==$this->uuid($raw['uuid'],'meter snapshot uuid')||$stored->getMeterUuid()!==$this->uuid($raw['meterUuid'],'meterUuid'))return false;$hasUuid=array_key_exists('readingUuid',$raw);$hasNew=array_key_exists('reading',$raw);if($hasUuid===$hasNew)throw new ValidationException('activity meter requires exactly one of readingUuid or reading');if($hasNew){if(!is_array($raw['reading']))throw new ValidationException('reading must be an object');$this->known($raw['reading'],['uuid','value','unit','notes'],'activity-created reading');if(!array_key_exists('uuid',$raw['reading']))throw new ValidationException('activity-created readings require a uuid');if(!array_key_exists('value',$raw['reading']))throw new ValidationException('activity-created readings require a value');if(!array_key_exists('unit',$raw['reading']))throw new ValidationException('activity-created readings require an explicit unit');$requestedReading=$raw['reading']['uuid'];}else{$requestedReading=$raw['readingUuid'];}if(!is_string($requestedReading)||$stored->getReadingUuid()!==$this->uuid($requestedReading,'reading uuid'))return false;if($hasNew){$reading=$this->readings->find($c,$stored->getReadingUuid());$meter=$this->meters->find($c,$stored->getMeterUuid(),true);try{$converted=$this->meterValues->toCanonical($meter->getDimension(),$raw['reading']['value'],$raw['reading']['unit']);}catch(ValidationException){return false;}if($converted['originalUnit']!==$reading->getOriginalUnit()||$converted['originalValue']!==$reading->getOriginalValue()||$this->optionalText($raw['reading']['notes']??null,'reading notes',20000)!==$reading->getNotes()||$reading->getSourceType()!=='activity'||$reading->getSourceRef()!==$a->getUuid())return false;}}
-		return true;
+		return $this->activityParts->matches($c, $a, $input['parts'] ?? null);
 	}
 
-	/** @return array<string,mixed> */ private function toApi(WorkspaceContext $c, Activity $a): array {return ['uuid'=>$a->getUuid(),'performedAt'=>$this->formatTimestamp($a->getPerformedAt()),'summary'=>$a->getSummary(),'notes'=>$a->getNotes(),'revision'=>$a->getRevision(),'items'=>array_map(fn(ActivityItem $r)=>['uuid'=>$r->getUuid(),'definitionUuid'=>$r->getDefinitionUuid(),'componentUuid'=>$r->getComponentUuid(),'componentName'=>$r->getComponentName(),'title'=>$r->getTitle(),'kind'=>$r->getKind(),'notes'=>$r->getNotes()],$this->items->findForActivity($a->getWorkspaceId(),$a->getId())),'meters'=>array_map(fn(ActivityMeter $r)=>['uuid'=>$r->getUuid(),'meterUuid'=>$r->getMeterUuid(),'meterName'=>$r->getMeterName(),'readingUuid'=>$r->getReadingUuid(),'observedAt'=>$this->formatTimestamp($r->getObservedAt()),'canonicalValue'=>$r->getCanonicalValue(),'originalValue'=>$r->getOriginalValue(),'originalUnit'=>$r->getOriginalUnit()],$this->meterSnapshots->findForActivity($a->getWorkspaceId(),$a->getId())),'createdAt'=>$this->formatTimestamp($a->getCreatedAt()),'updatedAt'=>$this->formatTimestamp($a->getUpdatedAt()),'deletedAt'=>$a->getDeletedAt()===null?null:$this->formatTimestamp($a->getDeletedAt())];}
+	/** @return array<string,mixed> */ private function toApi(WorkspaceContext $c, Activity $a): array {return ['uuid'=>$a->getUuid(),'performedAt'=>$this->formatTimestamp($a->getPerformedAt()),'summary'=>$a->getSummary(),'notes'=>$a->getNotes(),'revision'=>$a->getRevision(),'items'=>array_map(fn(ActivityItem $r)=>['uuid'=>$r->getUuid(),'definitionUuid'=>$r->getDefinitionUuid(),'componentUuid'=>$r->getComponentUuid(),'componentName'=>$r->getComponentName(),'title'=>$r->getTitle(),'kind'=>$r->getKind(),'notes'=>$r->getNotes()],$this->items->findForActivity($a->getWorkspaceId(),$a->getId())),'meters'=>array_map(fn(ActivityMeter $r)=>['uuid'=>$r->getUuid(),'meterUuid'=>$r->getMeterUuid(),'meterName'=>$r->getMeterName(),'readingUuid'=>$r->getReadingUuid(),'observedAt'=>$this->formatTimestamp($r->getObservedAt()),'canonicalValue'=>$r->getCanonicalValue(),'originalValue'=>$r->getOriginalValue(),'originalUnit'=>$r->getOriginalUnit()],$this->meterSnapshots->findForActivity($a->getWorkspaceId(),$a->getId())),'parts'=>$this->activityParts->forActivity($c,$a),'createdAt'=>$this->formatTimestamp($a->getCreatedAt()),'updatedAt'=>$this->formatTimestamp($a->getUpdatedAt()),'deletedAt'=>$a->getDeletedAt()===null?null:$this->formatTimestamp($a->getDeletedAt())];}
 	private function componentByUuid(WorkspaceContext $c,string $uuid):Component{try{return $this->components->findByUuid($c->workspace()->getId(),$uuid,true);}catch(DoesNotExistException){throw new NotFoundException('Component not found');}}
 	private function componentById(WorkspaceContext $c,int $id):Component{try{return $this->components->findById($c->workspace()->getId(),$id,true);}catch(DoesNotExistException){throw new NotFoundException('Component not found');}}
 	private function timestamp(mixed $v,string $f):int{if(!is_string($v)||preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/D',trim($v))!==1)throw new ValidationException("{$f} must include seconds and a timezone");$d=DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:sP',str_replace('Z','+00:00',trim($v)));$e=DateTimeImmutable::getLastErrors();if($d===false||(is_array($e)&&($e['warning_count']>0||$e['error_count']>0))||$d->getTimestamp()<0)throw new ValidationException("{$f} is not a valid timestamp");return $d->getTimestamp();}

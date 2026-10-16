@@ -236,6 +236,7 @@ export interface Activity {
 	revision: number
 	items: ActivityItem[]
 	meters: ActivityMeterSnapshot[]
+	parts?: ActivityPartUsage[]
 	createdAt: string
 	updatedAt: string
 	deletedAt: string | null
@@ -243,7 +244,9 @@ export interface Activity {
 export interface ActivityList { workspace: string, items: Activity[] }
 export interface CreateActivityItem { uuid: string, definitionUuid?: string | null, componentUuid?: string | null, title?: string, kind?: string, notes?: string | null }
 export interface CreateActivityMeter { uuid: string, meterUuid: string, readingUuid?: string, reading?: { uuid: string, value: string | number, unit: string, notes?: string | null } }
-export interface CreateActivity { uuid: string, performedAt: string, summary?: string | null, notes?: string | null, items: CreateActivityItem[], meters?: CreateActivityMeter[] }
+export interface ActivityPartUsage { uuid: string, partUuid: string, manufacturer: string, partNumber: string, description: string, quantity: string, unit: string, vendorUuid: string | null, vendorName: string | null, notes: string | null }
+export interface CreateActivityPart { uuid: string, partUuid: string, quantity: string, unit: string, vendorUuid?: string | null, notes?: string | null }
+export interface CreateActivity { uuid: string, performedAt: string, summary?: string | null, notes?: string | null, items: CreateActivityItem[], meters?: CreateActivityMeter[], parts?: CreateActivityPart[] }
 
 export type ProfileDocument = Record<string, unknown>
 export interface ProfileSummary { meters: number, components: number, componentTemplates: number, parts: number, workGroups: number, workDefinitions: number }

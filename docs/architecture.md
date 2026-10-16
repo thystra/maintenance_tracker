@@ -21,7 +21,9 @@ authentication, CSRF handling, rate limiting, logging, and CSP remain in force.
 
 ## Runtime baseline
 
-- Nextcloud 34 only for the initial release.
+- Nextcloud 33 through 35. Each declared release runs the full disposable
+  integration suite on SQLite and PostgreSQL in CI. Nextcloud 35 requires PHP 8.3+,
+  so PHP 8.2 deployments are limited to Nextcloud 33/34.
 - PHP 8.2–8.5 syntax, tested on 8.2 and 8.5. PHP 8.5 is the production target.
 - Only public `OCP` APIs. Private `OC` and `OCA\DAV` classes are not app
   dependencies.
@@ -152,8 +154,10 @@ revision content never becomes mutable domain truth after installation.
 
 A later profile revision produces an explicit user-approved diff. It never silently
 rewrites user-adjusted `schedule` policies or re-enables suppressed components.
-Multi-instance source references must be unambiguous, and profile-v2 parts fail
-installation until the canonical parts subsystem exists rather than being dropped.
+Multi-instance source references must be unambiguous. Profile-v2 parts materialize
+through the canonical part catalog (identity convergence, `part` source bindings, and
+`maint_part_compat` compatibility facts); profiles whose part facts cannot be
+preserved losslessly fail installation rather than being dropped.
 
 Profile provenance includes an ID, semantic version, data license, source URL,
 optional source revision, and content hash. Generic first-party profiles should use
@@ -309,4 +313,4 @@ v0.1.8 keeps three concerns separate. `MaintenanceStatusService` remains the onl
 
 ### v0.1.10 fitment runtime foundation
 
-The fitment interoperability contract now has a runtime persistence and interchange layer. Immutable `maint_fit_packs` / `maint_fit_revs` / `maint_fit_imports` preserve source identity; `maint_fit_bind` preserves source-key provenance; generalized targets are stored separately from explicit local-asset mappings; standardized slots and canonical parts are reusable workspace records; source offers and fitment assertions retain imported provenance. One active target mapping is enforced with the same nullable-marker portability pattern used for maintenance occurrences. Canonical JSON remains the lossless content/hash authority, while bounded CSV/ZIP import/export is a reversible spreadsheet projection that converges through the same validator and persistence path. Community JSON or CSV/ZIP export is reconstructed from canonical mapped facts and revalidated rather than replaying private local records. Profile-part materialization, activity part usage, vendor management, and costs remain pending v0.1.10 work.
+The fitment interoperability contract now has a runtime persistence and interchange layer. Immutable `maint_fit_packs` / `maint_fit_revs` / `maint_fit_imports` preserve source identity; `maint_fit_bind` preserves source-key provenance; generalized targets are stored separately from explicit local-asset mappings; standardized slots and canonical parts are reusable workspace records; source offers and fitment assertions retain imported provenance. One active target mapping is enforced with the same nullable-marker portability pattern used for maintenance occurrences. Canonical JSON remains the lossless content/hash authority, while bounded CSV/ZIP import/export is a reversible spreadsheet projection that converges through the same validator and persistence path. Community JSON or CSV/ZIP export is reconstructed from canonical mapped facts and revalidated rather than replaying private local records. Profile-v2 part materialization, activity parts-used records, vendor management, safe store/vendor links with an administrator switch, and the central cost ledger complete v0.1.10.

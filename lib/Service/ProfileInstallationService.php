@@ -26,6 +26,10 @@ final class ProfileInstallationService {
 		private MeterService $meters,
 		private WorkGroupService $groups,
 		private WorkDefinitionService $definitions,
+		private PartService $parts,
+		private PartCompatibilityRepository $compatibility,
+		private LinkService $links,
+		private OutsideLinkSettings $outsideLinks,
 		private UuidGenerator $uuidGenerator,
 		private ChangeJournal $journal,
 		private ITimeFactory $timeFactory,
@@ -55,8 +59,8 @@ final class ProfileInstallationService {
 		$conflicts = $this->conflicts($context, $asset, $v['profile']);
 		$warnings = [];
 		$applicable = $this->applicable($asset, $v['profile'], $warnings);
-		if ($v['profile']['parts'] !== []) {
-			$conflicts[] = 'Profile contains part definitions that cannot be materialized until the parts subsystem is implemented';
+		foreach ($this->partConflicts($v['profile']['parts']) as $conflict) {
+			$conflicts[] = $conflict;
 		}
 		return [
 			'assetUuid' => $asset->getUuid(),
@@ -110,10 +114,12 @@ final class ProfileInstallationService {
 		$revisionId = $this->profileRevision($workspaceId, $profileId, $profile, $v['contentHash'], $v['canonicalJson'], $now);
 		$assetProfileId = $this->repository->insertInstallation($workspaceId, $asset->getId(), $revisionId, $installationUuid, $now);
 
+		$partIds = $this->materializeParts($context, $assetProfileId, $profile['parts']);
 		$componentUuids = $this->materializeComponents($context, $asset, $assetProfileId, $profile['components']);
 		$meterUuids = $this->materializeMeters($context, $asset, $assetProfileId, $profile['meters']);
 		$groupUuids = $this->materializeGroups($context, $asset, $assetProfileId, $profile['workGroups']);
-		$this->materializeDefinitions($context, $asset, $assetProfileId, $profile['workDefinitions'], $componentUuids, $meterUuids, $groupUuids);
+		$definitionUuids = $this->materializeDefinitions($context, $asset, $assetProfileId, $profile['workDefinitions'], $componentUuids, $meterUuids, $groupUuids);
+		$this->materializeCompatibility($context, $asset, $assetProfileId, $profile, $partIds, $componentUuids, $definitionUuids, $now);
 
 		$updated = $this->assets->update($context, $asset->getUuid(), $asset->getRevision(), [
 			'profileKey' => $profile['id'],
@@ -209,8 +215,73 @@ final class ProfileInstallationService {
 	}
 
 	/** @param list<array<string,mixed>> $templates @param array<string,list<string>> $componentUuids @param array<string,string> $meterUuids @param array<string,string> $groupUuids */
-	private function materializeDefinitions(WorkspaceContext $context, Asset $asset, int $assetProfileId, array $templates, array $componentUuids, array $meterUuids, array $groupUuids): void {
-		foreach($templates as $t){$payload=['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'title'=>$t['title'],'kind'=>$t['kind'],'status'=>$t['enabledByDefault']?'active':'suppressed','schedule'=>$this->runtimeSchedule($t['schedule'],$meterUuids)];if(isset($t['groupKey']))$payload['groupUuid']=$groupUuids[$t['groupKey']];if(isset($t['componentKey']))$payload['componentUuid']=$componentUuids[$t['componentKey']][0];if(isset($t['instructions']))$payload['instructions']=$t['instructions'];if(isset($t['notes']))$payload['notes']=$t['notes'];$row=$this->definitions->create($context,$asset->getUuid(),$payload);$this->repository->insertBinding($context->workspace()->getId(),$assetProfileId,'work_definition',$t['key'],1,$row['uuid']);}
+	private function materializeDefinitions(WorkspaceContext $context, Asset $asset, int $assetProfileId, array $templates, array $componentUuids, array $meterUuids, array $groupUuids): array {
+		$created=[];foreach($templates as $t){$payload=['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'title'=>$t['title'],'kind'=>$t['kind'],'status'=>$t['enabledByDefault']?'active':'suppressed','schedule'=>$this->runtimeSchedule($t['schedule'],$meterUuids)];if(isset($t['groupKey']))$payload['groupUuid']=$groupUuids[$t['groupKey']];if(isset($t['componentKey']))$payload['componentUuid']=$componentUuids[$t['componentKey']][0];if(isset($t['instructions']))$payload['instructions']=$t['instructions'];if(isset($t['notes']))$payload['notes']=$t['notes'];$row=$this->definitions->create($context,$asset->getUuid(),$payload);$this->repository->insertBinding($context->workspace()->getId(),$assetProfileId,'work_definition',$t['key'],1,$row['uuid']);$created[$t['key']]=$row['uuid'];}
+		return $created;
+	}
+
+	/**
+	 * Profile parts converge on the canonical workspace catalog by identity.
+	 *
+	 * @param list<array<string,mixed>> $templates
+	 * @return array<string,int> part key => canonical part id
+	 */
+	private function materializeParts(WorkspaceContext $context, int $assetProfileId, array $templates): array {
+		$ids = [];
+		foreach ($templates as $t) {
+			$row = $this->parts->ensure($context, $this->uuidGenerator->generate(), $t['manufacturer'], $t['partNumber'], $t['description'])['row'];
+			$ids[$t['key']] = (int)$row['id'];
+			$this->repository->insertBinding($context->workspace()->getId(), $assetProfileId, 'part', $t['key'], 1, (string)$row['uuid']);
+			foreach ($t['offers'] as $j => $offer) {
+				$linkUuid = $this->links->ensureForPart($context, (int)$row['id'], $offer['label'], $offer['url']);
+				$this->repository->insertBinding($context->workspace()->getId(), $assetProfileId, 'offer', $t['key'], $j + 1, $linkUuid);
+			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * @param array<string,mixed> $profile
+	 * @param array<string,int> $partIds
+	 * @param array<string,list<string>> $componentUuids
+	 * @param array<string,string> $definitionUuids
+	 */
+	private function materializeCompatibility(WorkspaceContext $context, Asset $asset, int $assetProfileId, array $profile, array $partIds, array $componentUuids, array $definitionUuids, int $now): void {
+		$workspaceId = $context->workspace()->getId();
+		foreach ($profile['components'] as $c) {
+			foreach ($componentUuids[$c['key']] ?? [] as $componentUuid) {
+				foreach ($c['compatiblePartKeys'] as $partKey) {
+					$this->compatibility->insert($workspaceId, $asset->getId(), $partIds[$partKey], 'component', $componentUuid, $assetProfileId, $now);
+				}
+			}
+		}
+		foreach ($profile['workDefinitions'] as $d) {
+			foreach ($d['compatiblePartKeys'] as $partKey) {
+				$this->compatibility->insert($workspaceId, $asset->getId(), $partIds[$partKey], 'work_definition', $definitionUuids[$d['key']], $assetProfileId, $now);
+			}
+		}
+	}
+
+	/**
+	 * Fail closed rather than discard or merge profile part facts.
+	 *
+	 * @param list<array<string,mixed>> $parts
+	 * @return list<string>
+	 */
+	private function partConflicts(array $parts): array {
+		$out = [];
+		$identities = [];
+		foreach ($parts as $part) {
+			$identity = $this->parts->identityHash($part['manufacturer'], $part['partNumber']);
+			if (isset($identities[$identity])) {
+				$out[] = 'Profile parts ' . $identities[$identity] . ' and ' . $part['key'] . ' resolve to the same canonical part identity';
+			}
+			$identities[$identity] = $part['key'];
+			if ($part['offers'] !== [] && !$this->outsideLinks->enabled()) {
+				$out[] = 'Profile part ' . $part['key'] . ' carries store offers, but ' . lcfirst(OutsideLinkSettings::DISABLED_MESSAGE);
+			}
+		}
+		return $out;
 	}
 
 	/** @param array<string,string> $meterUuids */

@@ -189,8 +189,9 @@ final class FitmentRepository {
 		$q = $this->db->getQueryBuilder();
 		$q->select('*')->from('maint_parts')
 			->where($q->expr()->eq('workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
-			->andWhere($q->expr()->eq('identity_hash', $q->createNamedParameter($identityHash, IQueryBuilder::PARAM_STR)))
-			->andWhere($q->expr()->isNull('deleted_at'));
+			->andWhere($q->expr()->eq('identity_hash', $q->createNamedParameter($identityHash, IQueryBuilder::PARAM_STR)));
+		// Archived parts still own their workspace identity (unique index), so
+		// imports bind to the existing canonical row instead of colliding.
 		return $this->one($q);
 	}
 

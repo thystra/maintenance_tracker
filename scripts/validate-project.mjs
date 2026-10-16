@@ -80,6 +80,14 @@ const fitmentRepository = await read('lib/Service/FitmentRepository.php')
 const assetFitmentDescriptorService = await read('lib/Service/AssetFitmentDescriptorService.php')
 const fitmentService = await read('lib/Service/FitmentService.php')
 const fitmentController = await read('lib/Controller/FitmentController.php')
+const activityPartRepository = await read('lib/Service/ActivityPartRepository.php')
+const activityPartService = await read('lib/Service/ActivityPartService.php')
+const costPolicy = await read('lib/Service/CostPolicy.php')
+const costService = await read('lib/Service/CostService.php')
+const migration1103 = await read('lib/Migration/Version1103Date20261016030000.php')
+const outsideLinkPolicy = await read('lib/Service/OutsideLinkPolicy.php')
+const linkService = await read('lib/Service/LinkService.php')
+const adminSettingsController = await read('lib/Controller/AdminSettingsController.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
 const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
@@ -171,6 +179,7 @@ expect(!allControllers.includes('runWithAccess('), 'Controllers must authorize t
 expect(!/runWithCapability\([\s\S]{0,500}?'(?:viewer|editor|owner|manager|contributor)'/.test(allControllers), 'Controller capability calls must not pass workspace role names.')
 expect(authorizationCatalog.includes("if ($role === 'editor')") && authorizationCatalog.includes("return 'manager';"), 'Legacy editor role compatibility must normalize to manager.')
 
+const ownerMatch = authorizationCatalog.match(/'owner'\s*=>\s*\[([\s\S]*?)\n\s*\],\n\s*'manager'/)
 const managerMatch = authorizationCatalog.match(/'manager'\s*=>\s*\[([\s\S]*?)\n\s*\],\n\s*'contributor'/)
 expect(managerMatch !== null, 'Authorization catalog must define an explicit Manager capability bundle.')
 expect(managerMatch !== null && !managerMatch[1].includes('WORKSPACE_MEMBERS_MANAGE'), 'Manager must not receive workspace.members.manage.')
@@ -195,6 +204,21 @@ expect(viewerMatch !== null && viewerMatch[1].includes('PROFILE_READ') && !viewe
 expect(managerMatch !== null && managerMatch[1].includes('FITMENT_READ') && managerMatch[1].includes('FITMENT_IMPORT') && managerMatch[1].includes('FITMENT_MAP'), 'Manager must explicitly receive fitment read/import/map capabilities.')
 expect(contributorMatch !== null && contributorMatch[1].includes('FITMENT_READ') && !contributorMatch[1].includes('FITMENT_IMPORT') && !contributorMatch[1].includes('FITMENT_MAP'), 'Contributor must read fitment data without importing or mapping it.')
 expect(viewerMatch !== null && viewerMatch[1].includes('FITMENT_READ') && !viewerMatch[1].includes('FITMENT_IMPORT') && !viewerMatch[1].includes('FITMENT_MAP'), 'Viewer must remain read-only for fitment data.')
+expect(managerMatch !== null && managerMatch[1].includes('PART_MANAGE') && managerMatch[1].includes('VENDOR_MANAGE'), 'Manager must explicitly receive part and vendor management.')
+expect(contributorMatch !== null && contributorMatch[1].includes('PART_READ') && contributorMatch[1].includes('VENDOR_READ') && !contributorMatch[1].includes('PART_MANAGE') && !contributorMatch[1].includes('VENDOR_MANAGE'), 'Contributor must read but not manage parts/vendors.')
+expect(viewerMatch !== null && viewerMatch[1].includes('PART_READ') && viewerMatch[1].includes('VENDOR_READ') && !viewerMatch[1].includes('PART_MANAGE') && !viewerMatch[1].includes('VENDOR_MANAGE'), 'Viewer must remain read-only for parts/vendors.')
+expect(ownerMatch !== null && ownerMatch[1].includes('WORKSPACE_SETTINGS_MANAGE') && managerMatch !== null && !managerMatch[1].includes('WORKSPACE_SETTINGS_MANAGE'), 'Workspace settings (cost currency/tax) are Owner-only; Manager must not gain them implicitly.')
+expect(managerMatch !== null && managerMatch[1].includes('COST_MANAGE') && contributorMatch !== null && contributorMatch[1].includes('COST_CREATE') && !contributorMatch[1].includes('COST_MANAGE'), 'Contributors may add but not correct/archive cost entries.')
+expect(viewerMatch !== null && viewerMatch[1].includes('COST_READ') && !viewerMatch[1].includes('COST_CREATE'), 'Viewers may read costs but not add them.')
+expect(!/Types::(FLOAT|DECIMAL)/.test(migration1103) && migration1103.includes("addColumn('amount_minor', Types::BIGINT"), 'Cost amounts must be stored as integer minor units, never float/decimal columns.')
+expect(!costPolicy.includes('(float)') && !costPolicy.includes('floatval') && !costService.includes('(float)'), 'Cost ledger code must not use floating point.')
+expect(costService.includes('Single-currency mode requires every active cost entry') && costPolicy.includes('enable multi-currency'), 'Single-currency mode must reject foreign currencies rather than convert them.')
+expect(outsideLinkPolicy.includes("strncmp($url, 'https://', 8)") && outsideLinkPolicy.includes('must not contain credentials') && outsideLinkPolicy.includes('ASCII domain host'), 'Outside links must be https-only, credential-free, and ASCII-host validated.')
+expect(linkService.includes('$this->settings->assertEnabled()') && linkService.includes("['enabled' => false, 'items' => []]"), 'Disabled outside links must refuse writes and hide existing links.')
+expect(profileValidator.includes('OutsideLinkPolicy::validate') && fitmentPackValidator.includes('OutsideLinkPolicy::validate'), 'Profile and fitment offer URLs must use the shared outside-link policy.')
+expect(!adminSettingsController.includes('NoAdminRequired') && !adminSettingsController.includes('NoCSRFRequired'), 'The outside-link admin switch must stay admin-only and CSRF-protected.')
+const outsideLinksVue = await read('src/components/OutsideLinks.vue')
+expect(outsideLinksVue.includes('target="_blank" rel="noopener noreferrer"') && outsideLinksVue.includes("url.startsWith('https://')"), 'Outside links must render https-only with rel="noopener noreferrer" target="_blank".')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -206,12 +230,11 @@ for (const capability of [
 	'report.share.revoke',
 	'external_submission.read',
 	'external_submission.review',
-	'workspace.settings.manage',
 	'workspace.delete',
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger', 'outside-links']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -294,6 +317,9 @@ expect(activityService.includes('activity-created readings require an explicit u
 expect(activityService.includes("source']=['type'=>'activity','reference'=>$a->getUuid()]") || activityService.includes("['type'=>'activity','reference'=>$a->getUuid()]"), 'Activity-created readings must carry activity source provenance.')
 expect(!activityItemMapper.includes('->update(') && !activityItemMapper.includes('->delete('), 'Activity item mapper must remain append/read-only.')
 expect(!activityMeterMapper.includes('->update(') && !activityMeterMapper.includes('->delete('), 'Activity meter snapshot mapper must remain append/read-only.')
+expect(!activityPartRepository.includes('->update(') && !activityPartRepository.includes('->delete('), 'Activity parts-used persistence must remain append/read-only.')
+expect(activityPartService.includes("'manufacturer' => (string)$part['manufacturer']") && activityPartService.includes("'vendor_name' =>"), 'Activity parts must snapshot part/vendor display facts for durable history.')
+expect(activityPartService.includes('DecimalQuantity::parse(') && !activityPartService.includes('(float)') && !activityPartService.includes('floatval'), 'Activity part quantities must be exact scaled integers, never floats.')
 
 // v0.1.7 maintenance status is a deterministic read-time projection, never stored truth.
 expect(maintenanceStatusController.includes('/maintenance-status') && maintenanceStatusController.includes('MAINTENANCE_DEFINITION_READ'), 'Maintenance status endpoint must remain read-only behind maintenance.definition.read.')
@@ -328,7 +354,9 @@ expect(profileValidator.includes("hash('sha256', $canonicalJson)"), 'Profile rev
 expect(profileValidator.includes('$this->positiveDecimal(') && profileValidator.includes('$this->meterValues->toCanonical('), 'Profile revision canonicalization must normalize meter-interval decimals and validate them through the canonical meter converter.')
 expect(validateProfiles.includes('const displayUnits =') && validateProfiles.includes('const meterIntervalUnits =') && validateProfiles.includes("usage_count: new Set(['use', 'count'])"), 'Repository profile validation must distinguish usage-count display units from accepted schedule interval units.')
 expect(profileCatalog.includes("hash_equals($v['contentHash'], $contentHash)") && profileCatalog.includes("'trustState' => 'first_party'"), 'First-party profile trust must require an exact bundled content-hash match.')
-expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'v0.1.9 profile installation must fail closed for part definitions until canonical parts persistence exists.')
+expect(!profileInstallationService.includes('cannot be materialized until the parts subsystem is implemented') && profileInstallationService.includes('$this->parts->ensure('), 'Profile-v2 parts must materialize through the canonical part catalog, not a profile-only table.')
+expect(profileInstallationService.includes('resolve to the same canonical part identity'), 'Profile installation must fail closed rather than merge two profile part keys into one canonical identity.')
+expect(profileInstallationService.includes("'part', $t['key']") && profileInstallationService.includes('materializeCompatibility('), 'Profile part bindings and compatiblePartKeys must be preserved as provenance and compatibility facts.')
 for (const serviceCall of ['$this->components->create(', '$this->meters->create(', '$this->groups->create(', '$this->definitions->create(', '$this->assets->update(']) {
 	expect(profileInstallationService.includes(serviceCall), `Profile installation must materialize through canonical domain service call ${serviceCall}.`)
 }
@@ -371,7 +399,6 @@ expect(fitmentController.includes('DataDownloadResponse') && fitmentController.i
 expect(fitmentRepository.includes("insert('maint_fit_revs')") && fitmentRepository.includes("insert('maint_fit_bind')") && fitmentRepository.includes("insert('maint_fitments')"), 'Fitment repository must persist immutable revision provenance, source bindings, and source-specific fitment assertions.')
 expect(fitmentService.includes("'offers' => []") && fitmentService.includes("'omitted_pending_explicit_selection'"), 'Community fitment export must omit offers until an explicit reviewed offer-selection policy exists.')
 expect(fitmentService.includes('$v = $this->validator->validate($pack)') && fitmentService.includes('communityExport('), 'Community fitment export must be rebuilt through the same runtime validator/canonicalizer.')
-expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'This fitment checkpoint must keep profile-v2 part materialization fail-closed until the canonical profile-parts bridge is implemented.')
 
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
@@ -379,7 +406,7 @@ for (const table of [...workspaceTables].sort()) {
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_links', 'maint_costs', 'maint_cost_settings', 'maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -426,8 +453,8 @@ expect(agents.includes('v0.1.10 fitment interoperability invariant') && agents.i
 expect(validateFitmentPacks.includes('duplicate fitment tuple') && validateFitmentPacks.includes('verified fitment') && validateFitmentPacks.includes('reverse-DNS-style extension'), 'Fitment validator must enforce referential uniqueness, evidence, and extension-key rules.')
 expect(api.includes('/fitment-packs/validate') && api.includes('/fitment-packs/import') && api.includes('/fitment-packs/bundle/validate') && api.includes('/fitment-packs/bundle/import') && api.includes('/fitment-packs/{importUuid}/bundle') && api.includes('/fitment-targets/{targetUuid}/map') && api.includes('/fitment-export/community/bundle'), 'API documentation must cover the implemented v0.1.10 JSON and CSV/ZIP fitment validation/import/mapping/export surface.')
 expect(docs.includes('JSON') && docs.includes('fitment') && docs.includes('CSV/ZIP') && docs.includes('reversible'), 'Documentation must describe CSV/ZIP as a reversible projection into the canonical fitment runtime.')
-expect(roadmap.includes('[ ] v0.1.10') || roadmap.includes('10. [ ]'), 'Roadmap must keep v0.1.10 open while profile-part materialization, activity parts, vendors, and costs remain pending.')
-expect(changelog.includes('0.1.10') && changelog.includes('CSV/ZIP') && readme.includes('fitment') && readme.includes('CSV/ZIP'), 'User-facing documentation must describe the v0.1.10 JSON and CSV/ZIP fitment foundation without claiming the whole tranche complete.')
+expect(roadmap.includes('10. [x] v0.1.10') && roadmap.includes('central cost ledger') && roadmap.includes('store/vendor links'), 'Roadmap must record v0.1.10 complete only with parts, links, and the cost ledger included.')
+expect(changelog.includes('0.1.10') && changelog.includes('CSV/ZIP') && readme.includes('fitment') && readme.includes('CSV/ZIP'), 'User-facing documentation must describe the v0.1.10 JSON and CSV/ZIP fitment foundation.')
 
 try {
 	await access('.github/workflows/ci.yml')

@@ -23,6 +23,7 @@ final class FitmentService {
 		private FitmentRepository $repository,
 		private AssetService $assets,
 		private AssetFitmentDescriptorService $descriptors,
+		private OutsideLinkSettings $outsideLinks,
 		private UuidGenerator $uuidGenerator,
 		private ChangeJournal $journal,
 		private ITimeFactory $timeFactory,
@@ -61,6 +62,10 @@ final class FitmentService {
 			if ($existing !== null && (string)$existing['kind'] !== $slot['kind']) {
 				$conflicts[] = 'Existing standardized fitment slot has a different kind: ' . $slot['key'];
 			}
+		}
+
+		if ($v['pack']['offers'] !== [] && !$this->outsideLinks->enabled()) {
+			$conflicts[] = 'Fitment pack carries store offers, but ' . lcfirst(OutsideLinkSettings::DISABLED_MESSAGE);
 		}
 
 		$targetMatches = [];
@@ -213,10 +218,19 @@ final class FitmentService {
 	public function sourceExport(WorkspaceContext $context, string $importUuid): array {
 		$row = $this->importRow($context, $importUuid);
 		$pack = $this->decodeObject((string)$row['content_json'], 'Stored fitment revision');
+		$offersHidden = false;
+		if (!$this->outsideLinks->enabled() && ($pack['offers'] ?? []) !== []) {
+			// Hide stored offer URLs while outside links are disabled. The
+			// content hash still names the stored immutable revision; the
+			// omission is explicit so the export is never mistaken for it.
+			$pack['offers'] = [];
+			$offersHidden = true;
+		}
 		return [
 			'importUuid' => (string)$row['import_uuid'],
 			'contentHash' => (string)$row['content_hash'],
 			'pack' => $pack,
+			'offersHidden' => $offersHidden,
 		];
 	}
 

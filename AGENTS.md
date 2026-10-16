@@ -23,7 +23,7 @@ Environment-specific deployment belongs in infrastructure management.
 
 Current application contract:
 
-- Nextcloud 34 only;
+- Nextcloud 33 through 35, each exercised by the CI integration matrix;
 - PHP 8.2 through 8.5, with PHP 8.5 the primary production target;
 - Node.js 24 for frontend builds;
 - PostgreSQL, MariaDB/MySQL, and SQLite through public Nextcloud database APIs;
@@ -139,11 +139,14 @@ git diff --check
 git diff --exit-code -- js css
 ```
 
-Disposable Nextcloud 34 runtime qualification:
+Disposable Nextcloud runtime qualification (defaults to 34; set `NC_SMOKE_IMAGE`,
+e.g. `nextcloud:35.0.2-apache`, for other declared releases, and
+`NC_SMOKE_QUALIFY=1` only when exercising a release not yet declared in
+`appinfo/info.xml`):
 
 ```bash
-NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud34-smoke.sh
-NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud34-smoke.sh
+NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh
+NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
 ```
 
 The integration harness must use disposable data and must never point at a real
@@ -230,8 +233,12 @@ and source type/key/ordinal bindings. Only exact bundled ID/version/hash matches
 are first-party. `profile.read` is read-only for all workspace roles;
 `profile.install` remains an Owner/Manager serialized write. Do not silently map
 profile v1, select one instance from a multi-instance source key, fetch arbitrary
-profile/source URLs, or ignore profile-v2 parts before the parts subsystem can
-materialize them. Upgrade handling must be an explicit user-approved diff/merge,
+profile/source URLs, or ignore profile-v2 parts: they materialize through the
+canonical part catalog (offers through the shared `OutsideLinkPolicy` as part links),
+and installation fails closed when part facts (duplicate identities, or offers while
+the administrator has disabled outside links) cannot be preserved. Never bind a
+non-https value to an `href`, render a link without `rel="noopener noreferrer"`, or
+fetch a stored link server-side. Upgrade handling must be an explicit user-approved diff/merge,
 not a reinstall that overwrites customized records.
 
 ## v0.1.10 fitment interoperability invariant
@@ -252,4 +259,4 @@ not a profile-only catalog.
 
 ### v0.1.10 fitment runtime invariant
 
-Fitment-pack import and local-asset mapping are separate operations. Immutable source revisions and source bindings preserve provenance; standardized slots and canonical parts are ordinary reusable workspace records. `fitment.read` is read-only for all workspace roles; only Owner/Manager may import or map. Never silently map by aliases, overwrite canonical user-editable part/slot data from a new pack, strip punctuation when deciding part identity, fetch imported offer/source URLs server-side, or leak local UUID/name/serial/private operational data into a community export. `conflict`/`insufficient` mapping requires explicit confirmation. The current runtime accepts canonical JSON and the reviewed bounded CSV/ZIP projection; both must converge through the same validator/canonical hash and persistence path. CSV/ZIP must retain the exact root-file/header allowlist, model/configuration identifiers, 8 MiB compressed/32 MiB expanded bounds, aggregate row bound, traversal/symlink/duplicate/comment/encryption defenses, and versioned reversible spreadsheet formula escaping. Do not claim profile-v2 part materialization, activity parts, vendor management, or central costs are implemented until their checkpoints qualify.
+Fitment-pack import and local-asset mapping are separate operations. Immutable source revisions and source bindings preserve provenance; standardized slots and canonical parts are ordinary reusable workspace records. `fitment.read` is read-only for all workspace roles; only Owner/Manager may import or map. Never silently map by aliases, overwrite canonical user-editable part/slot data from a new pack, strip punctuation when deciding part identity, fetch imported offer/source URLs server-side, or leak local UUID/name/serial/private operational data into a community export. `conflict`/`insufficient` mapping requires explicit confirmation. The current runtime accepts canonical JSON and the reviewed bounded CSV/ZIP projection; both must converge through the same validator/canonical hash and persistence path. CSV/ZIP must retain the exact root-file/header allowlist, model/configuration identifiers, 8 MiB compressed/32 MiB expanded bounds, aggregate row bound, traversal/symlink/duplicate/comment/encryption defenses, and versioned reversible spreadsheet formula escaping. Profile-v2 parts, activity parts used, vendors, store links, and the cost ledger build on the same canonical part identity; keep them converging there rather than adding parallel part tables.

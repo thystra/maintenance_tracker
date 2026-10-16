@@ -378,9 +378,15 @@ Body: `{ "profile": { ... } }`. Preview revalidates the document and reports
 `applicable`, `installable`, `conflicts`, `warnings`, and `materializes` counts without
 writing anything. Existing profile installation/profile metadata, meter/work-group/
 work-definition key collisions, and applicability mismatches are surfaced here.
-Profile-v2 part definitions remain valid profile vocabulary, but a non-empty `parts`
-array makes the v0.1.9 preview non-installable because the v0.1.10 parts subsystem is
-not yet available to preserve those facts losslessly.
+Since v0.1.10, profile-v2 `parts` materialize into the canonical workspace part catalog
+by manufacturer/part-number identity (an existing or archived identity is reused), each
+part key is recorded as a `part` source binding, and `compatiblePartKeys` on components
+and work definitions become informational compatibility facts (see
+`GET /assets/{assetUuid}/compatible-parts`). Preview reports a conflict, and installation
+fails closed, when two profile part keys resolve to the same canonical identity. Part
+`offers` become `profile`-sourced store links on the canonical part (an existing active
+link with the same URL is reused) with `offer` source bindings; while the administrator
+has disabled outside links, a profile carrying offers is a preview conflict instead.
 
 ### `POST /assets/{assetUuid}/profiles/install`
 
@@ -433,7 +439,7 @@ Canonical JSON endpoints:
 - `POST /fitment-packs/validate` validates and canonicalizes a fitment-pack-v1 JSON document and returns its SHA-256 content identity.
 - `POST /fitment-packs/preview` validates without writing and reports standardized-slot conflicts plus reasoned local-asset match suggestions.
 - `POST /fitment-packs/import` accepts a client-generated `importUuid` and a JSON `pack`. Retrying the same UUID/data is idempotent. An already-imported immutable revision cannot be aliased under a second import UUID.
-- `GET /fitment-packs/{importUuid}/export` returns the immutable canonical source revision, including source offers.
+- `GET /fitment-packs/{importUuid}/export` returns the immutable canonical source revision, including source offers. While outside links are disabled the offers array is emptied and `offersHidden: true` is returned (the `contentHash` still names the stored revision); importing a pack that carries offers is a preview conflict.
 
 CSV/ZIP projection endpoints use a multipart upload field named `bundle` and feed
 the reconstructed pack through the same canonical validator/hash path:
@@ -461,9 +467,8 @@ Mapping/query/export endpoints:
 - `POST /assets/{assetUuid}/fitment-export/community` rebuilds a reviewed generalized community JSON pack from mapped canonical facts and runs it through the same validator/canonicalizer. Local asset UUID/name, serial/VIN-like identity, notes, costs, receipts, and maintenance history are excluded. Offers are currently emitted as an empty array until an explicit local/source offer-selection policy is reviewed.
 - `POST /assets/{assetUuid}/fitment-export/community/bundle` performs the same privacy-minimized community rebuild and downloads the result as normalized CSV/ZIP with the same no-store/no-cache response semantics.
 
-Profile-v2 part materialization remains fail-closed until the profile installer is
-explicitly bridged to these canonical part/fitment records. Activity parts-used
-rows, vendor management, and central costs remain later v0.1.10 checkpoints.
+Profile-v2 parts, parts used per activity, vendors, store links, and the cost ledger
+build on these canonical part records; see the v0.1.10 sections below.
 
 Future resources include evidence, parts/costs, fuel entries, trips, calendar
 bindings, public report shares, external submissions, TCO reports, and mileage
@@ -586,3 +591,66 @@ The default policy is explicit and server-owned: 14 calendar days and 10 percent
 `GET /assets/{assetUuid}/maintenance-occurrences` returns the materialized work queue. By default only open occurrences are returned; `includeClosed=true` includes history. Each occurrence exposes its UUID, work-definition UUID, completion-baseline activity UUID, lifecycle timestamps/reason, revision, and a `current` field containing the live forecast/status projection. Occurrence storage does not contain due dates, due state, remaining values, or meter thresholds.
 
 `POST /assets/{assetUuid}/maintenance-occurrences/reconcile` is an explicit serialized projection write for Owner/Manager. Reconciliation creates an occurrence when the current forecast is `due_soon`, `due`, or `overdue`; preserves the existing row while the same completion baseline remains actionable; closes it as `completed` when a later linked activity becomes the baseline; and closes it as `not_actionable` or `definition_unavailable` when configuration no longer warrants an open work item. A database uniqueness constraint enforces one open occurrence per work definition.
+
+## Canonical parts and vendors — v0.1.10
+
+Parts and vendors are workspace records. Every member may read them (`part.read`, `vendor.read`); only Owner and Manager may create, correct, or archive them (`part.manage`, `vendor.manage`).
+
+- `GET /parts?includeArchived=false` — list canonical parts ordered by manufacturer and part number.
+- `GET /parts/{uuid}` — read one part, including an archived one.
+- `POST /parts` with `{"part": {"uuid", "manufacturer", "partNumber", "description"}}` — create a canonical part. Identity is manufacturer + part number under the fitment-pack normalization (Unicode NFKC, whitespace collapse, case fold). When the identity already exists the existing record is returned with HTTP 200 instead of 201; an archived identity is restored. A client UUID already used by a different record is a precondition conflict.
+- `PATCH /parts/{uuid}` with `expectedRevision` and `{"part": {"description"}}` — only the description is mutable; identity fields are rejected as unknown.
+- `DELETE /parts/{uuid}` with `expectedRevision` — archive. Archived parts stay referenced by fitments, recorded part usage, and costs.
+- `GET /vendors`, `GET /vendors/{uuid}`, `POST /vendors` (`uuid`, `name`, optional `notes`), `PATCH /vendors/{uuid}` (`name`, `notes`), `DELETE /vendors/{uuid}` — same revision and archive semantics. Vendor names are not unique; vendors are identified by UUID.
+
+## Parts used per activity — v0.1.10
+
+`POST /assets/{assetUuid}/activities` accepts an optional `parts` array (at most 100 entries) alongside `items` and `meters`. It is covered by the same `activity.create` capability, so Contributors may record parts they used but cannot create catalog parts.
+
+Each entry requires a client `uuid`, a `partUuid` referencing an active canonical part, a `quantity`, and a `unit`; `vendorUuid` (active vendor) and `notes` are optional. `quantity` must be a positive decimal **string** (or integer) with at most three fractional digits, such as `"5.5"`. JSON floating-point numbers are rejected so binary rounding can never enter the ledger; the value is stored as an exact integer in thousandths. `unit` is one of `each`, `pair`, `set`, `kit`, `ml`, `l`, `fl_oz`, `qt`, `gal`, `g`, `kg`, `oz`, `lb`, `mm`, `cm`, `m`, `in`, `ft`.
+
+Parts-used rows are immutable activity children. The part's manufacturer, part number, and description and the vendor name are snapshotted at capture so later catalog corrections or archival never rewrite history. Activity responses include `parts` with `uuid`, `partUuid`, `manufacturer`, `partNumber`, `description`, `quantity` (normalized decimal string), `unit`, `vendorUuid`, `vendorName`, and `notes`. Idempotent activity retries compare the parts payload too; reusing an activity UUID with different parts is a precondition conflict.
+
+## Cost ledger — v0.1.10
+
+Costs are workspace ledger entries attached to an asset and optionally linked to an activity on that asset, a vendor, and a canonical part.
+
+Role visibility:
+
+| Capability | Owner | Manager | Contributor | Viewer |
+| --- | --- | --- | --- | --- |
+| `cost.read` — list entries, totals, settings | yes | yes | yes | yes |
+| `cost.create` — add an entry | yes | yes | yes | no |
+| `cost.manage` — correct or archive an entry | yes | yes | no | no |
+| `workspace.settings.manage` — change cost settings | yes | no | no | no |
+
+Every member who can see an asset can see what was spent on it; this is deliberate for shared household/fleet workspaces. Contributors may record what they paid but cannot rewrite or remove history; corrections are Owner/Manager actions and are audited.
+
+Amounts are exact. `amount` is a positive decimal **string** (or integer) with no more fractional digits than the currency's ISO 4217 minor unit (2 for USD/EUR, 0 for JPY, 3 for BHD/KWD, …); JSON floating-point numbers are rejected. Values are stored as signed 64-bit integer minor units (`amountMinor`) and rendered back as an exact decimal string (`amount`).
+
+Workspace cost settings (defaults shown) are `defaultCurrency: "USD"`, `taxEnabled: false`, `multiCurrency: false`:
+
+- With `multiCurrency: false` every entry uses `defaultCurrency`; any other `currency` is rejected. Multi-currency cannot be turned off, and the default currency cannot be changed, while active entries exist in another currency.
+- With `multiCurrency: true` each entry stores its own active ISO 4217 code. There is **no exchange-rate conversion**: totals are always reported per currency and never summed across currencies.
+- With `taxEnabled: false` entries are `lineType: "charge"` only. Enabling tax allows `lineType: "tax"` lines (category is always `tax`), reported separately as `tax` in totals. Disabling tax again keeps existing tax lines visible, correctable, and counted.
+
+Endpoints:
+
+- `GET /cost-settings` — current settings plus `source` (`default` until first saved) and `currenciesInUse`.
+- `PATCH /cost-settings` with `expectedRevision` (0 before the first save) and `{"settings": {"defaultCurrency"?, "taxEnabled"?, "multiCurrency"?}}` — Owner only; audited as `cost_settings.updated` with the three resulting values.
+- `GET /assets/{assetUuid}/costs` — active entries, per-currency `totals` (`chargesMinor`, `taxMinor`, `totalMinor`, their decimal strings, `count`), and settings.
+- `POST /assets/{assetUuid}/costs` with `{"cost": {"uuid", "incurredOn" (YYYY-MM-DD), "description", "amount", "currency"?, "lineType"?, "category"?, "activityUuid"?, "vendorUuid"?, "partUuid"?, "notes"?}}` — categories are `parts`, `labor`, `fluids`, `service`, `fees`, `other` (default). Retrying the same UUID with identical facts returns the existing entry; different facts are a precondition conflict.
+- `GET /costs/{uuid}`, `PATCH /costs/{uuid}` with `expectedRevision` and any of `incurredOn`, `category`, `description`, `amount`, `currency`, `vendorUuid`, `partUuid`, `notes` (changing `currency` requires restating `amount`), `DELETE /costs/{uuid}` with `expectedRevision` — archive.
+- `GET /costs/totals` — workspace-wide per-currency totals over active entries.
+
+## Store and vendor links — v0.1.10
+
+Links are https URLs attached to a canonical part or a vendor. Reading follows `part.read`/`vendor.read` (every role); adding and removing follow `part.manage`/`vendor.manage` (Owner/Manager). The server validates but never fetches them.
+
+- `GET /parts/{uuid}/links`, `GET /vendors/{uuid}/links` — `{"enabled": bool, "items": [...]}`; items have `uuid`, `subjectType`, `subjectUuid`, `label`, `url`, `source` (`manual` or `profile`), `revision`, timestamps, and `archived`.
+- `POST /parts/{uuid}/links`, `POST /vendors/{uuid}/links` with `{"link": {"uuid"?, "label", "url"}}` — at most 32 active links per subject; identical UUID retries return the existing link.
+- `DELETE /parts/{uuid}/links/{linkUuid}`, `DELETE /vendors/{uuid}/links/{linkUuid}` with `expectedRevision` — archive.
+
+URL rules: must begin with the literal lowercase `https://`; printable ASCII only (no whitespace or backslashes); ASCII domain or IPv4 host with optional port; no `user:password@`; at most 2048 characters. Anything else, including `javascript:`, `data:`, `http:`, and `//host` URLs, is a 400 validation error. Clients must render links with `target="_blank"` and `rel="noopener noreferrer"`.
+
+Administrator switch: Administration settings → Maintenance Tracker → "Allow store and vendor links" (default on). When off, `GET` returns `enabled: false` with no items, `POST` fails with "Outside links are disabled by the Nextcloud administrator", profile offers and fitment-pack offers become import conflicts, and fitment source exports omit offers. Existing rows are kept and reappear when re-enabled.

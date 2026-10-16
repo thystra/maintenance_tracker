@@ -4,7 +4,7 @@ Maintenance Tracker is a self-hosted Nextcloud app for recurring maintenance,
 usage meters, service history, costs, vehicle mileage, and supporting documents.
 
 The project is in its early 0.1-series implementation phase. The current vertical
-slices provide the Nextcloud 34 foundation plus inventory, relationships, meters,
+slices provide the Nextcloud 33–35 foundation plus inventory, relationships, meters,
 work definitions, activity history, due/forecast workflow, and validated local or
 bundled profile installation into canonical domain records. The architecture deliberately supports
 a future offline-first mobile client without making the first release depend on it.
@@ -23,7 +23,7 @@ reporting channel, but GitHub is not the source, CI, or release authority.
 
 ## Platform targets
 
-- Nextcloud 34
+- Nextcloud 33, 34, and 35 (Nextcloud 35 itself requires PHP 8.3 or newer)
 - PHP 8.2 through 8.5, with PHP 8.5 as the primary deployment target
 - nginx with PHP-FPM is supported by Nextcloud; the app adds no nginx routes
 - PostgreSQL, MariaDB/MySQL, and SQLite through Nextcloud's database APIs
@@ -94,11 +94,13 @@ git diff --check
 git diff --exit-code -- js css
 ```
 
-Run the disposable Nextcloud 34 integration suite when Docker is available:
+Run the disposable Nextcloud integration suite when Docker is available (it uses
+Nextcloud 34 by default; set `NC_SMOKE_IMAGE=nextcloud:33.0.10-apache` or
+`nextcloud:35.0.2-apache` for the other supported releases):
 
 ```bash
-NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud34-smoke.sh
-NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud34-smoke.sh
+NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh
+NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
 ```
 
 The integration harness stages the runtime app and transfers it with
@@ -107,7 +109,7 @@ checkout. This makes the same harness usable with a local daemon and with the
 isolated Docker daemon used by the Forgejo workstation runners.
 
 Authoritative Forgejo CI repeats the PHP/frontend checks, exercises the app on
-Nextcloud 34 with SQLite and PostgreSQL, and publishes an explicitly unsigned
+Nextcloud 33, 34, and 35 with SQLite and PostgreSQL, and publishes an explicitly unsigned
 install-candidate archive plus checksum. App Store releases need a separate
 integrity-signing step and must not treat that unsigned candidate as a published
 release.
@@ -153,6 +155,6 @@ The Nextcloud server app is licensed under
 [AGPL-3.0-or-later](LICENSE). Profile data can carry a separate compatible data
 license and must declare its provenance.
 
-### v0.1.10 fitment foundation (in progress)
+### v0.1.10 parts, fitment, links, and costs
 
-The current v0.1.10 checkpoint implements portable fitment compatibility packs through canonical JSON and a bounded normalized CSV/ZIP spreadsheet projection: standardized service-position slots, canonical parts, immutable import provenance, reasoned equipment matching with explicit Owner/Manager mapping, source export, and privacy-minimized community export. This does **not** complete v0.1.10: profile-v2 part materialization, activity parts-used records, vendor management/store-link editing, and the central cost ledger remain pending.
+v0.1.10 implements portable fitment compatibility packs through canonical JSON and a bounded normalized CSV/ZIP spreadsheet projection: standardized service-position slots, canonical parts, immutable import provenance, reasoned equipment matching with explicit Owner/Manager mapping, source export, and privacy-minimized community export. It also adds a part and vendor catalog, parts used per activity, profile-v2 part installation, https-only store/vendor links that a Nextcloud administrator can switch off (Administration settings → Maintenance Tracker), and a central cost ledger. Costs default to one currency (USD) without tax lines; a workspace Owner can enable tax lines and multiple currencies. Amounts are exact integer minor units, and totals are per currency with no exchange-rate conversion. Every member can view costs, Contributors can add them, and Owners/Managers correct or archive them.

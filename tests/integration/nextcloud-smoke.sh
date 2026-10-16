@@ -15,8 +15,10 @@ case "$database" in
 		;;
 esac
 
-container="${NC_SMOKE_CONTAINER:-maintenance-tracker-nc34-${database}-smoke}"
-image="${NC_SMOKE_IMAGE:-nextcloud:34.0.3-apache}"
+image="${NC_SMOKE_IMAGE:-nextcloud:34.0.5-apache}"
+nc_label="${image##*:}"
+nc_label="${nc_label%%-*}"
+container="${NC_SMOKE_CONTAINER:-maintenance-tracker-nc${nc_label%%.*}-${database}-smoke}"
 network="${NC_SMOKE_NETWORK:-${container}-network}"
 db_container="${NC_SMOKE_DB_CONTAINER:-${container}-db}"
 postgres_image="${NC_SMOKE_POSTGRES_IMAGE:-postgres:17-alpine}"
@@ -181,8 +183,15 @@ docker cp "$staging_root/maintenance_tracker" \
 docker exec "$container" \
 	chown -R www-data:www-data /var/www/html/custom_apps/maintenance_tracker
 
+# NC_SMOKE_QUALIFY=1 force-enables the app on a Nextcloud release that
+# appinfo/info.xml does not declare yet, so a new target can be exercised
+# before the compatibility declaration is widened. Never use it otherwise.
+enable_args=(app:enable maintenance_tracker)
+if [ "${NC_SMOKE_QUALIFY:-0}" = '1' ]; then
+	enable_args+=(--force)
+fi
 docker exec --user www-data "$container" \
-	php occ app:enable maintenance_tracker >/dev/null
+	php occ "${enable_args[@]}" >/dev/null
 
 docker exec "$container" apachectl graceful >/dev/null 2>&1
 
@@ -1865,6 +1874,233 @@ cleanup_assignment_reused=$(docker exec "$container" curl --silent --show-error 
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assignments?format=json')
 assert_contains "$cleanup_assignment_reused" '"statuscode":201' 'cleanup assignment UUID reuse'
 
+# v0.1.10 completion: canonical parts, vendors, activity parts, profile parts,
+# cost ledger, and outside-link policy. A dedicated contributor account
+# qualifies the role boundaries against the owner's shared workspace.
+v0110_user='v0110_contributor'
+v0110_password='v0110-contributor-only'
+docker exec --env OC_PASS="$v0110_password" --user www-data "$container" \
+	php occ user:add --password-from-env "$v0110_user" >/dev/null
+
+ocs_as() {
+	local credentials=$1 method=$2 path=$3 body=${4:-}
+	local separator='?'
+	if [[ "$path" == *'?'* ]]; then
+		separator='&'
+	fi
+	local args=(--silent --show-error --user "$credentials" --request "$method"
+		--header 'OCS-APIRequest: true' --header 'Accept: application/json')
+	if [ -n "$body" ]; then
+		args+=(--header 'Content-Type: application/json' --data "$body")
+	fi
+	docker exec "$container" curl "${args[@]}" \
+		"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1${path}${separator}format=json"
+}
+owner_ocs() { ocs_as "${admin_user}:${admin_password}" "$@"; }
+contributor_ocs() { ocs_as "${v0110_user}:${v0110_password}" "$@"; }
+ws="workspace=${admin_workspace_uuid}"
+
+v0110_member=$(owner_ocs POST "/workspaces/${admin_workspace_uuid}/members" "{\"member\":{\"userUid\":\"${v0110_user}\",\"role\":\"contributor\"}}")
+assert_contains "$v0110_member" '"statuscode":201' 'v0.1.10 contributor membership'
+
+v0110_part_uuid='0b4f8a2e-6c1d-4e3f-9a5b-7c8d9e0f1a2b'
+v0110_part=$(owner_ocs POST "/parts?${ws}" "{\"part\":{\"uuid\":\"${v0110_part_uuid}\",\"manufacturer\":\"Smoke Filters\",\"partNumber\":\"SF-100\",\"description\":\"Smoke oil filter\"}}")
+assert_contains "$v0110_part" '"statuscode":201' 'owner part create'
+v0110_part_again=$(owner_ocs POST "/parts?${ws}" '{"part":{"uuid":"1c5a9b3f-7d2e-4f4a-8b6c-8d9e0f1a2b3c","manufacturer":"  smoke filters ","partNumber":"sf-100","description":"Duplicate identity"}}')
+assert_contains "$v0110_part_again" '"statuscode":200' 'part identity convergence'
+assert_contains "$v0110_part_again" "\"uuid\":\"${v0110_part_uuid}\"" 'part identity convergence uuid'
+v0110_part_denied=$(contributor_ocs POST "/parts?${ws}" '{"part":{"manufacturer":"X","partNumber":"Y","description":"Z"}}')
+assert_contains "$v0110_part_denied" '"statuscode":403' 'contributor part create denied'
+v0110_parts_read=$(contributor_ocs GET "/parts?${ws}")
+assert_contains "$v0110_parts_read" "\"uuid\":\"${v0110_part_uuid}\"" 'contributor part read'
+v0110_part_patch=$(owner_ocs PATCH "/parts/${v0110_part_uuid}?${ws}" '{"expectedRevision":1,"part":{"partNumber":"SF-200"}}')
+assert_contains "$v0110_part_patch" '"statuscode":400' 'part identity immutable'
+v0110_part_patch=$(owner_ocs PATCH "/parts/${v0110_part_uuid}?${ws}" '{"expectedRevision":1,"part":{"description":"Smoke oil filter, long life"}}')
+assert_contains "$v0110_part_patch" '"revision":2' 'part description correction'
+v0110_part_stale=$(owner_ocs PATCH "/parts/${v0110_part_uuid}?${ws}" '{"expectedRevision":1,"part":{"description":"stale"}}')
+assert_contains "$v0110_part_stale" '"statuscode":412' 'part stale revision'
+
+v0110_vendor_uuid='2d6b0c4a-8e3f-4a5b-9c7d-9e0f1a2b3c4d'
+v0110_vendor=$(owner_ocs POST "/vendors?${ws}" "{\"vendor\":{\"uuid\":\"${v0110_vendor_uuid}\",\"name\":\"Smoke Parts Store\"}}")
+assert_contains "$v0110_vendor" '"statuscode":201' 'owner vendor create'
+v0110_vendor_denied=$(contributor_ocs POST "/vendors?${ws}" '{"vendor":{"name":"Denied"}}')
+assert_contains "$v0110_vendor_denied" '"statuscode":403' 'contributor vendor create denied'
+
+v0110_asset_uuid='3e7c1d5b-9f4a-4b6c-8d8e-0f1a2b3c4d5e'
+v0110_asset=$(owner_ocs POST "/assets?${ws}" "{\"asset\":{\"uuid\":\"${v0110_asset_uuid}\",\"category\":\"vehicle\",\"name\":\"v0.1.10 smoke vehicle\"}}")
+assert_contains "$v0110_asset" '"statuscode":201' 'v0.1.10 smoke asset'
+
+v0110_activity_uuid='4f8d2e6c-0a5b-4c7d-9e9f-1a2b3c4d5e6f'
+v0110_activity_body="{\"activity\":{\"uuid\":\"${v0110_activity_uuid}\",\"performedAt\":\"2026-10-01T12:00:00Z\",\"items\":[{\"uuid\":\"5a9e3f7d-1b6c-4d8e-8f0a-2b3c4d5e6f7a\",\"title\":\"Oil change\",\"kind\":\"maintenance\"}],\"parts\":[{\"uuid\":\"6b0f4a8e-2c7d-4e9f-9a1b-3c4d5e6f7a8b\",\"partUuid\":\"${v0110_part_uuid}\",\"quantity\":\"1\",\"unit\":\"each\",\"vendorUuid\":\"${v0110_vendor_uuid}\"},{\"uuid\":\"7c1a5b9f-3d8e-4fa0-8b2c-4d5e6f7a8b9c\",\"partUuid\":\"${v0110_part_uuid}\",\"quantity\":\"5.5\",\"unit\":\"qt\"}]}}"
+v0110_activity=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" "$v0110_activity_body")
+assert_contains "$v0110_activity" '"statuscode":201' 'contributor activity with parts'
+assert_contains "$v0110_activity" '"quantity":"5.5"' 'activity part exact decimal quantity'
+assert_contains "$v0110_activity" '"vendorName":"Smoke Parts Store"' 'activity part vendor snapshot'
+assert_contains "$v0110_activity" '"description":"Smoke oil filter, long life"' 'activity part description snapshot'
+v0110_activity_retry=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" "$v0110_activity_body")
+assert_contains "$v0110_activity_retry" '"statuscode":201' 'activity with parts idempotent retry'
+v0110_activity_changed=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" "${v0110_activity_body/5.5/6}")
+assert_contains "$v0110_activity_changed" '"statuscode":412' 'activity parts changed retry conflict'
+v0110_activity_bad_part=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" '{"activity":{"uuid":"8d2b6c0a-4e9f-4ab1-9c3d-5e6f7a8b9c0d","performedAt":"2026-10-01T12:00:00Z","items":[{"uuid":"9e3c7d1b-5fa0-4bc2-8d4e-6f7a8b9c0d1e","title":"x","kind":"maintenance"}],"parts":[{"uuid":"af4d8e2c-6ab1-4cd3-9e5f-7a8b9c0d1e2f","partUuid":"b05e9f3d-7bc2-4de4-8f6a-8b9c0d1e2f3a","quantity":"1","unit":"each"}]}}')
+assert_contains "$v0110_activity_bad_part" '"statuscode":400' 'activity unknown part rejected'
+v0110_activity_float=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" '{"activity":{"uuid":"c16fa04e-8cd3-4ef5-9a7b-9c0d1e2f3a4b","performedAt":"2026-10-01T12:00:00Z","items":[{"uuid":"d27ab15f-9de4-4f06-8b8c-0d1e2f3a4b5c","title":"x","kind":"maintenance"}],"parts":[{"uuid":"e38bc26a-aef5-4a17-9c9d-1e2f3a4b5c6d","partUuid":"0b4f8a2e-6c1d-4e3f-9a5b-7c8d9e0f1a2b","quantity":1.5,"unit":"each"}]}}')
+assert_contains "$v0110_activity_float" '"statuscode":400' 'activity float quantity rejected'
+
+v0110_profile_asset_uuid='5b0c2d4e-6f7a-4b8c-9d0e-1f2a3b4c5d6e'
+v0110_profile_asset=$(owner_ocs POST "/assets?${ws}" "{\"asset\":{\"uuid\":\"${v0110_profile_asset_uuid}\",\"category\":\"vehicle\",\"name\":\"v0.1.10 profile parts vehicle\"}}")
+assert_contains "$v0110_profile_asset" '"statuscode":201' 'v0.1.10 profile-parts asset'
+v0110_profile_php='$p=json_decode(file_get_contents("/var/www/html/custom_apps/maintenance_tracker/profiles/generic-car.json"),true);
+$p["id"]="org.argentwolf.maintenance.smoke-parts";
+$p["parts"]=[
+	["key"=>"cabin_filter_a","manufacturer"=>"SMOKE FILTERS","partNumber"=>"SF-100","description"=>"Profile-supplied description","offers"=>[]],
+	["key"=>"cabin_filter_b","manufacturer"=>"Profile Parts Co","partNumber"=>"PP-7","description"=>"Profile-only filter","offers"=>[]],
+];
+foreach($p["components"] as &$c){if($c["key"]==="cabin_filter"){$c["compatiblePartKeys"]=["cabin_filter_a","cabin_filter_b"];}}unset($c);
+foreach($p["workDefinitions"] as &$d){if($d["key"]==="replace_cabin_filter"){$d["compatiblePartKeys"]=["cabin_filter_b"];}}unset($d);
+$mode=getenv("MODE");
+if($mode==="duplicate"){$p["parts"][1]["manufacturer"]="smoke filters";$p["parts"][1]["partNumber"]="sf-100";}
+if($mode==="offers"||$mode==="offers-install"){$p["id"]="org.argentwolf.maintenance.smoke-offers";$p["parts"][1]["offers"]=[["label"=>"Store","url"=>"https://example.com/pp-7"]];}
+$out=["profile"=>$p];if($mode==="install"){$out["installationUuid"]="6c1d3e5f-7a8b-4c9d-8e0f-2a3b4c5d6e7f";}if($mode==="offers-install"){$out["installationUuid"]="0a5b7c9d-1e2f-4a3b-8c4d-6e7f80910213";}
+echo json_encode($out,JSON_UNESCAPED_SLASHES);'
+v0110_profile_payload() { docker exec --env MODE="$1" "$container" php -r "$v0110_profile_php"; }
+
+v0110_profile_dup=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload duplicate)")
+assert_contains "$v0110_profile_dup" '"installable":false' 'profile duplicate part identity fails closed'
+assert_contains "$v0110_profile_dup" 'resolve to the same canonical part identity' 'profile duplicate part identity reason'
+v0110_profile_preview=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload preview)")
+assert_contains "$v0110_profile_preview" '"installable":true' 'profile with parts installable'
+assert_contains "$v0110_profile_preview" '"parts":2' 'profile preview part count'
+v0110_profile_install=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/install?${ws}" "$(v0110_profile_payload install)")
+assert_contains "$v0110_profile_install" '"statuscode":201' 'profile with parts install'
+assert_contains "$v0110_profile_install" '"sourceType":"part"' 'profile part source binding'
+assert_contains "$v0110_profile_install" "\"targetUuid\":\"${v0110_part_uuid}\"" 'profile part converges on existing canonical identity'
+v0110_compat=$(contributor_ocs GET "/assets/${v0110_profile_asset_uuid}/compatible-parts?${ws}")
+assert_contains "$v0110_compat" '"statuscode":200' 'compatible parts read'
+assert_contains "$v0110_compat" '"subjectType":"component"' 'component compatibility fact'
+assert_contains "$v0110_compat" '"subjectType":"work_definition"' 'work-definition compatibility fact'
+assert_contains "$v0110_compat" '"partNumber":"PP-7"' 'profile-created canonical part'
+v0110_parts_after_profile=$(owner_ocs GET "/parts?${ws}")
+assert_contains "$v0110_parts_after_profile" '"description":"Smoke oil filter, long life"' 'profile does not overwrite canonical part description'
+
+assert_contains "$capabilities" '"cost-ledger"' 'cost ledger capability'
+v0110_cost_settings=$(contributor_ocs GET "/cost-settings?${ws}")
+assert_contains "$v0110_cost_settings" '"taxEnabled":false' 'cost settings default no tax'
+assert_contains "$v0110_cost_settings" '"multiCurrency":false' 'cost settings default single currency'
+v0110_cost_uuid='7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f80'
+v0110_cost_body="{\"cost\":{\"uuid\":\"${v0110_cost_uuid}\",\"incurredOn\":\"2026-10-01\",\"description\":\"Oil filter\",\"amount\":\"12.50\",\"category\":\"parts\",\"vendorUuid\":\"${v0110_vendor_uuid}\"}}"
+v0110_cost=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" "$v0110_cost_body")
+assert_contains "$v0110_cost" '"statuscode":201' 'contributor adds cost'
+assert_contains "$v0110_cost" '"amountMinor":1250' 'cost stored in minor units'
+assert_contains "$v0110_cost" '"currency":"USD"' 'cost default currency'
+v0110_cost_retry=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" "$v0110_cost_body")
+assert_contains "$v0110_cost_retry" '"revision":1' 'cost create idempotent retry'
+v0110_cost_float=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f81","incurredOn":"2026-10-01","description":"Float","amount":12.5}}')
+assert_contains "$v0110_cost_float" '"statuscode":400' 'cost float amount rejected'
+v0110_cost_eur=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f82","incurredOn":"2026-10-01","description":"Euro","amount":"5","currency":"EUR"}}')
+assert_contains "$v0110_cost_eur" '"statuscode":400' 'single-currency workspace rejects EUR'
+v0110_cost_tax=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f83","incurredOn":"2026-10-01","description":"Tax","amount":"1","lineType":"tax"}}')
+assert_contains "$v0110_cost_tax" '"statuscode":400' 'tax line rejected while disabled'
+v0110_settings_denied=$(contributor_ocs PATCH "/cost-settings?${ws}" '{"expectedRevision":0,"settings":{"taxEnabled":true}}')
+assert_contains "$v0110_settings_denied" '"statuscode":403' 'contributor cannot change cost settings'
+v0110_cost_archive_denied=$(contributor_ocs DELETE "/costs/${v0110_cost_uuid}?${ws}" '{"expectedRevision":1}')
+assert_contains "$v0110_cost_archive_denied" '"statuscode":403' 'contributor cannot archive cost'
+v0110_settings=$(owner_ocs PATCH "/cost-settings?${ws}" '{"expectedRevision":0,"settings":{"taxEnabled":true,"multiCurrency":true}}')
+assert_contains "$v0110_settings" '"statuscode":200' 'owner enables tax and multi-currency'
+assert_contains "$v0110_settings" '"revision":1' 'cost settings revision'
+v0110_cost_eur=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f82","incurredOn":"2026-10-02","description":"Euro","amount":"5","currency":"EUR"}}')
+assert_contains "$v0110_cost_eur" '"statuscode":201' 'multi-currency EUR entry'
+v0110_cost_tax=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f83","incurredOn":"2026-10-01","description":"Sales tax","amount":"1.00","lineType":"tax"}}')
+assert_contains "$v0110_cost_tax" '"category":"tax"' 'tax line accepted when enabled'
+v0110_costs=$(contributor_ocs GET "/assets/${v0110_asset_uuid}/costs?${ws}")
+assert_contains "$v0110_costs" '"currency":"EUR","exponent":2,"chargesMinor":500' 'EUR total kept separate'
+assert_contains "$v0110_costs" '"currency":"USD","exponent":2,"chargesMinor":1250,"taxMinor":100,"totalMinor":1350' 'USD total with tax'
+v0110_single_denied=$(owner_ocs PATCH "/cost-settings?${ws}" '{"expectedRevision":1,"settings":{"multiCurrency":false}}')
+assert_contains "$v0110_single_denied" '"statuscode":400' 'cannot return to single currency while EUR entries exist'
+v0110_cost_fix=$(owner_ocs PATCH "/costs/${v0110_cost_uuid}?${ws}" '{"expectedRevision":1,"cost":{"amount":"13.00"}}')
+assert_contains "$v0110_cost_fix" '"amountMinor":1300' 'owner corrects cost'
+v0110_cost_archive=$(owner_ocs DELETE "/costs/7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f82?${ws}" '{"expectedRevision":1}')
+assert_contains "$v0110_cost_archive" '"statuscode":200' 'owner archives cost'
+v0110_cost_totals=$(contributor_ocs GET "/costs/totals?${ws}")
+assert_contains "$v0110_cost_totals" '"totalMinor":1400' 'workspace totals'
+assert_not_contains "$v0110_cost_totals" '"EUR"' 'archived EUR entry excluded from totals'
+v0110_cost_audit=$(owner_ocs GET "/audit?${ws}&limit=100")
+assert_contains "$v0110_cost_audit" 'cost_settings.updated' 'cost settings audited'
+assert_contains "$v0110_cost_audit" 'cost.archived' 'cost archive audited'
+
+assert_contains "$capabilities" '"outside-links"' 'outside links capability'
+v0110_link_uuid='8e3f5a7b-9c0d-4e1f-8a2b-4c5d6e7f8091'
+v0110_link=$(owner_ocs POST "/parts/${v0110_part_uuid}/links?${ws}" "{\"link\":{\"uuid\":\"${v0110_link_uuid}\",\"label\":\"Smoke store\",\"url\":\"https://example.com/sf-100?ref=mt\"}}")
+assert_contains "$v0110_link" '"statuscode":201' 'part link created'
+assert_contains "$v0110_link" '"source":"manual"' 'manual part link'
+for v0110_bad_url in 'http://example.com/x' 'javascript:alert(1)' 'data:text/html,x' 'https://user:pass@example.com/' 'https://example.com@evil.example/' '//example.com/x'; do
+	v0110_bad=$(owner_ocs POST "/parts/${v0110_part_uuid}/links?${ws}" "{\"link\":{\"label\":\"Bad\",\"url\":\"${v0110_bad_url}\"}}")
+	assert_contains "$v0110_bad" '"statuscode":400' "unsafe link rejected: ${v0110_bad_url}"
+done
+v0110_link_denied=$(contributor_ocs POST "/vendors/${v0110_vendor_uuid}/links?${ws}" '{"link":{"label":"Vendor","url":"https://vendor.example/"}}')
+assert_contains "$v0110_link_denied" '"statuscode":403' 'contributor cannot add vendor link'
+v0110_vendor_link=$(owner_ocs POST "/vendors/${v0110_vendor_uuid}/links?${ws}" '{"link":{"label":"Vendor site","url":"https://vendor.example/"}}')
+assert_contains "$v0110_vendor_link" '"statuscode":201' 'vendor link created'
+v0110_links=$(contributor_ocs GET "/parts/${v0110_part_uuid}/links?${ws}")
+assert_contains "$v0110_links" '"enabled":true' 'links enabled by default'
+assert_contains "$v0110_links" 'sf-100?ref=mt' 'contributor reads part link'
+
+v0110_offer_asset_uuid='9f4a6b8c-0d1e-4f2a-9b3c-5d6e7f809102'
+v0110_offer_asset=$(owner_ocs POST "/assets?${ws}" "{\"asset\":{\"uuid\":\"${v0110_offer_asset_uuid}\",\"category\":\"vehicle\",\"name\":\"v0.1.10 profile offers vehicle\"}}")
+assert_contains "$v0110_offer_asset" '"statuscode":201' 'profile offers asset'
+v0110_offer_preview=$(owner_ocs POST "/assets/${v0110_offer_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload offers)")
+assert_contains "$v0110_offer_preview" '"installable":true' 'profile offers installable when links enabled'
+v0110_offer_install=$(owner_ocs POST "/assets/${v0110_offer_asset_uuid}/profiles/install?${ws}" "$(v0110_profile_payload offers-install)")
+assert_contains "$v0110_offer_install" '"statuscode":201' 'profile with offers installs'
+assert_contains "$v0110_offer_install" '"sourceType":"offer"' 'profile offer source binding'
+v0110_pp7_uuid=$(printf '%s' "$v0110_compat" | docker exec -i "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);foreach($d["ocs"]["data"]["items"] as $f){if($f["part"]["partNumber"]==="PP-7"){echo $f["part"]["uuid"];break;}}')
+v0110_pp7_links=$(contributor_ocs GET "/parts/${v0110_pp7_uuid}/links?${ws}")
+assert_contains "$v0110_pp7_links" 'pp-7"' 'profile offer materialized as part link'
+assert_contains "$v0110_pp7_links" '"source":"profile"' 'profile link source'
+
+v0110_admin_page=$(docker exec "$container" curl --silent --show-error --user "${admin_user}:${admin_password}" \
+	"http://127.0.0.1/index.php/settings/admin/maintenance_tracker")
+assert_contains "$v0110_admin_page" 'Allow store and vendor links' 'admin outside-link settings section'
+assert_contains "$v0110_admin_page" 'name="requesttoken"' 'admin settings form carries CSRF token'
+v0110_admin_post_nocsrf=$(docker exec "$container" curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+	--user "${admin_user}:${admin_password}" --data 'enabled=0' \
+	"http://127.0.0.1/index.php/apps/maintenance_tracker/admin/outside-links")
+assert_not_contains "$v0110_admin_post_nocsrf" '303' 'admin setting POST without CSRF token is refused'
+v0110_links_still=$(owner_ocs GET "/parts/${v0110_part_uuid}/links?${ws}")
+assert_contains "$v0110_links_still" '"enabled":true' 'CSRF-less POST did not change the setting'
+v0110_contrib_admin=$(docker exec "$container" curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+	--user "${v0110_user}:${v0110_password}" \
+	"http://127.0.0.1/index.php/settings/admin/maintenance_tracker")
+assert_not_contains "$v0110_contrib_admin" '200' 'non-admin cannot open admin settings'
+
+# Toggle through the real admin form (session cookie + CSRF token) so the web
+# process's APCu-backed app config cache sees the change; occ runs with a
+# separate CLI cache that the web process does not observe immediately.
+v0110_admin_toggle() {
+	docker exec --env NC_CRED="${admin_user}:${admin_password}" --env ENABLED="$1" "$container" sh -c '
+		jar=$(mktemp); base=http://127.0.0.1/index.php
+		token=$(curl -s -u "$NC_CRED" -c "$jar" -b "$jar" "$base/settings/admin/maintenance_tracker" | sed -n "s/.*name=\"requesttoken\" value=\"\([^\"]*\)\".*/\1/p" | head -n 1)
+		curl -s -o /dev/null -w "%{http_code}" -u "$NC_CRED" -c "$jar" -b "$jar" --data "enabled=$ENABLED" --data-urlencode "requesttoken=$token" "$base/apps/maintenance_tracker/admin/outside-links"
+		rm -f "$jar"'
+}
+v0110_toggle_off=$(v0110_admin_toggle 0)
+assert_contains "$v0110_toggle_off" '303' 'admin form disables outside links'
+v0110_links_off=$(contributor_ocs GET "/parts/${v0110_part_uuid}/links?${ws}")
+assert_contains "$v0110_links_off" '"enabled":false' 'links disabled flag'
+assert_not_contains "$v0110_links_off" 'example.com' 'existing links hidden while disabled'
+v0110_link_off=$(owner_ocs POST "/parts/${v0110_part_uuid}/links?${ws}" '{"link":{"label":"Off","url":"https://example.com/off"}}')
+assert_contains "$v0110_link_off" '"statuscode":400' 'new link refused while disabled'
+assert_contains "$v0110_link_off" 'disabled by the Nextcloud administrator' 'disabled link reason'
+v0110_offer_off=$(owner_ocs POST "/assets/${v0110_offer_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload offers)")
+assert_contains "$v0110_offer_off" '"installable":false' 'profile offers fail closed while links disabled'
+v0110_toggle_on=$(v0110_admin_toggle 1)
+assert_contains "$v0110_toggle_on" '303' 'admin form re-enables outside links'
+v0110_links_on=$(contributor_ocs GET "/parts/${v0110_part_uuid}/links?${ws}")
+assert_contains "$v0110_links_on" 'sf-100?ref=mt' 'links reappear when re-enabled'
+v0110_link_audit=$(owner_ocs GET "/audit?${ws}&limit=100")
+assert_contains "$v0110_link_audit" 'link.created' 'link creation audited'
+
+# @@V0110_NEXT@@
+
 page_status=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
 	--output /dev/null \
@@ -1894,4 +2130,4 @@ if [ "$app_errors" != '0' ]; then
 	exit 1
 fi
 
-echo "Nextcloud 34 smoke test passed (${database})."
+echo "Nextcloud ${nc_label} smoke test passed (${database})."

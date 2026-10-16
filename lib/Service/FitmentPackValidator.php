@@ -597,11 +597,7 @@ final class FitmentPackValidator {
 	}
 
 	private function httpsUrl(mixed $value, string $field): string {
-		$s = $this->text($value, $field, 2048);
-		if (!str_starts_with(strtolower($s), 'https://') || filter_var($s, FILTER_VALIDATE_URL) === false) {
-			throw new ValidationException("{$field} must be an HTTPS URL");
-		}
-		return $s;
+		return OutsideLinkPolicy::validate($this->text($value, $field, OutsideLinkPolicy::MAX_LENGTH), $field);
 	}
 
 	/** @param list<string> $allowed */
