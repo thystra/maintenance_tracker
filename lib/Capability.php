@@ -52,6 +52,7 @@ final class Capability implements ICapability {
 					'workspace-ownership-transfer',
 					'activity-integration',
 					'notifications',
+					'calendar-projection',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

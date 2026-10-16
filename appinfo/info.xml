@@ -28,10 +28,12 @@ and reminders while keeping the data in your Nextcloud.
 	<background-jobs>
 		<job>OCA\MaintenanceTracker\BackgroundJob\ProjectAuditTrail</job>
 		<job>OCA\MaintenanceTracker\BackgroundJob\ExpireOwnershipTransfers</job>
+		<job>OCA\MaintenanceTracker\BackgroundJob\SendMaintenanceReminders</job>
 	</background-jobs>
 	<commands>
 		<command>OCA\MaintenanceTracker\Command\AssignOwner</command>
 		<command>OCA\MaintenanceTracker\Command\ListOrphaned</command>
+		<command>OCA\MaintenanceTracker\Command\RunIntegrations</command>
 	</commands>
 	<settings>
 		<admin>OCA\MaintenanceTracker\Settings\AdminSettings</admin>
