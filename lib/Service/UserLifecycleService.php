@@ -19,6 +19,8 @@ use Throwable;
 
 final class UserLifecycleService {
 	private const WORKSPACE_PURGE_ORDER = [
+		'maint_notify_log',
+		'maint_cal_events',
 		'maint_asset_fit',
 		'maint_fitments',
 		'maint_offers',
@@ -216,6 +218,18 @@ final class UserLifecycleService {
 					$query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR),
 				));
 			$query->executeStatement();
+
+			// Reminder/calendar delivery bookkeeping is per member; a reused
+			// UID must start without the previous account's delivery history.
+			foreach (['maint_notify_log', 'maint_cal_events'] as $table) {
+				$query = $this->db->getQueryBuilder();
+				$query->delete($table)
+					->where($query->expr()->eq(
+						'user_uid',
+						$query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR),
+					));
+				$query->executeStatement();
+			}
 
 			$query = $this->db->getQueryBuilder();
 			$query->delete('maint_members')

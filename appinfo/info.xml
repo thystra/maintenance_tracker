@@ -25,14 +25,34 @@ and reminders while keeping the data in your Nextcloud.
 		<database>mysql</database>
 		<database>sqlite</database>
 	</dependencies>
+	<background-jobs>
+		<job>OCA\MaintenanceTracker\BackgroundJob\ProjectAuditTrail</job>
+		<job>OCA\MaintenanceTracker\BackgroundJob\ExpireOwnershipTransfers</job>
+		<job>OCA\MaintenanceTracker\BackgroundJob\SendMaintenanceReminders</job>
+	</background-jobs>
 	<commands>
 		<command>OCA\MaintenanceTracker\Command\AssignOwner</command>
 		<command>OCA\MaintenanceTracker\Command\ListOrphaned</command>
+		<command>OCA\MaintenanceTracker\Command\RunIntegrations</command>
 	</commands>
 	<settings>
 		<admin>OCA\MaintenanceTracker\Settings\AdminSettings</admin>
 		<admin-section>OCA\MaintenanceTracker\Settings\AdminSection</admin-section>
 	</settings>
+	<activity>
+		<settings>
+			<setting>OCA\MaintenanceTracker\Activity\MaintenanceSetting</setting>
+			<setting>OCA\MaintenanceTracker\Activity\EvidenceSetting</setting>
+			<setting>OCA\MaintenanceTracker\Activity\MembershipSetting</setting>
+			<setting>OCA\MaintenanceTracker\Activity\OwnershipSetting</setting>
+		</settings>
+		<filters>
+			<filter>OCA\MaintenanceTracker\Activity\Filter</filter>
+		</filters>
+		<providers>
+			<provider>OCA\MaintenanceTracker\Activity\Provider</provider>
+		</providers>
+	</activity>
 	<navigations>
 		<navigation>
 			<id>maintenance_tracker</id>

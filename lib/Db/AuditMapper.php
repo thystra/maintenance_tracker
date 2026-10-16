@@ -92,4 +92,29 @@ final class AuditMapper {
 			$result->closeCursor();
 		}
 	}
+
+	/**
+	 * Read-only forward scan of the whole trail for the integration projection
+	 * (Activity and notifications). Rows are returned oldest first.
+	 *
+	 * @return list<array<string, mixed>>
+	 */
+	public function findAfter(int $afterId, int $limit): array {
+		$query = $this->db->getQueryBuilder();
+		$query->select('id', 'workspace_id', 'event_type', 'actor_uid', 'subject_type', 'subject_id', 'details_json', 'created_at')
+			->from('maint_audit')
+			->where($query->expr()->gt('id', $query->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC')
+			->setMaxResults($limit);
+
+		$result = $query->executeQuery();
+		try {
+			/** @var list<array<string, mixed>> $rows */
+			$rows = $result->fetchAllAssociative();
+
+			return $rows;
+		} finally {
+			$result->closeCursor();
+		}
+	}
 }

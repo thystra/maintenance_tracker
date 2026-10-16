@@ -42,6 +42,7 @@ fixture_paths=(
 	lib/Db/MaintenanceOccurrenceMapper.php
 	lib/Service/ProfileValidator.php lib/Service/ProfileCatalog.php lib/Service/ProfileRepository.php lib/Service/ProfileInstallationService.php
 	lib/Service/FitmentPackValidator.php lib/Service/FitmentCsvBundleService.php lib/Service/FitmentZipBundleService.php lib/Service/FitmentRepository.php lib/Service/AssetFitmentDescriptorService.php lib/Service/FitmentService.php
+	lib/Migration/Version1120Date20261016160000.php lib/Service/IntegrationProjector.php lib/Service/ReminderService.php lib/Service/IntegrationSettingsService.php lib/Service/CalendarEventBuilder.php lib/Service/IntegrationEventMap.php
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 )
 
@@ -60,6 +61,14 @@ expect_rejected() {
 
 copy_fixture
 run_validator >/dev/null
+
+copy_fixture
+sed -i 's/\t\t$this->calendarCache = \[\];/\t\t$this->db->beginTransaction();\n\t\t$this->calendarCache = [];/' "$tmp/fixture/lib/Service/ReminderService.php"
+expect_rejected 'integration delivery inside a transaction' 'Activity, notification, and calendar delivery must run outside any app database transaction.' "$tmp/integration-tx.out"
+
+copy_fixture
+sed -i "s/'Maintenance due'/'Maintenance due: ' . \$definitionUuid/" "$tmp/fixture/lib/Service/ReminderService.php"
+expect_rejected 'a non-neutral calendar title' 'Calendar projection must use a neutral title' "$tmp/calendar-title.out"
 
 copy_fixture
 sed -i 's/runs-on: forgejo-workstation/runs-on: ubuntu-latest/' "$tmp/fixture/.forgejo/workflows/ci.yml"

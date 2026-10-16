@@ -103,7 +103,7 @@ export function selectWorkspace(uuid: string | null): void {
  */
 export function endpoint(path: string): string {
 	const workspace = currentWorkspace()
-	const global = /^\/(workspaces|ownership-transfers|capabilities)(\/|\?|$)/.test(path)
+	const global = /^\/(workspaces|ownership-transfers|integrations|capabilities)(\/|\?|$)/.test(path)
 	if (workspace !== null && !global && !/[?&]workspace=/.test(path)) {
 		path += `${path.includes('?') ? '&' : '?'}workspace=${encodeURIComponent(workspace)}`
 	}

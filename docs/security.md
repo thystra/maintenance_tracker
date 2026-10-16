@@ -136,9 +136,21 @@ data even though the app is not a medical product.
 
 ## Calendar privacy
 
-Calendar events default to a neutral title such as “Maintenance due.” Detailed
-CPAP or health-component names in a shared calendar could reveal medical
-information. Users can opt into more descriptive titles after a warning.
+Calendar events use the neutral title “Maintenance due” with no description.
+Detailed CPAP or health-component names in a shared calendar could reveal
+medical information. v0.1.12 offers no descriptive-title option, and writes only
+to a calendar the user owns and selected, never to one shared with them.
+
+## Activity and notifications
+
+Activity events and notifications are projections of the audit trail and
+inherit its rule: only identifiers and reviewed detail keys, never titles,
+notes, file names, or paths. Names are resolved when the stream or
+notification is rendered. A user who is no longer a member sees a neutral
+workspace label, and their pending reminders and offer notifications are
+withdrawn instead of rendered. Ownership offers are visible only to the offerer
+and the recipient until a transfer completes. Delivery runs in background jobs
+outside app transactions. Failures are logged by exception class only.
 
 ## Tax and location privacy
 

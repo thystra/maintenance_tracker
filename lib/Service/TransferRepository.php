@@ -52,6 +52,16 @@ final class TransferRepository {
 		return $this->many($q);
 	}
 
+	/** Pending offers whose deadline has passed, oldest first. @return list<array<string,mixed>> */
+	public function findExpiredPending(int $now, int $limit): array {
+		$q = $this->db->getQueryBuilder();
+		$q->select('*')->from('maint_ws_transfers')
+			->where($q->expr()->eq('status', $q->createNamedParameter(OwnershipTransferPolicy::STATUS_PENDING)))
+			->andWhere($q->expr()->lte('expires_at', $q->createNamedParameter($now, IQueryBuilder::PARAM_INT)))
+			->orderBy('id')->setMaxResults($limit);
+		return $this->many($q);
+	}
+
 	/** @param array<string,mixed> $row */
 	public function insert(array $row): int {
 		$q = $this->db->getQueryBuilder();

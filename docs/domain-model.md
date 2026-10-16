@@ -302,6 +302,19 @@ Work definitions describe what may or should be done. Activities describe what a
 
 Activity creation is an atomic workspace mutation. When an activity creates a meter reading, the reading and its activity source provenance are committed or rolled back with the activity header, work items, meter snapshots, change journal, and audit event.
 
+## Integration delivery bookkeeping (v0.1.12)
+
+- `maint_notify_log`: one row per (workspace, member, work definition, completion
+  baseline, level) reminder already delivered, with `cleared_at` once withdrawn.
+- `maint_cal_events`: one row per (workspace, member, calendar URI, work
+  definition, completion baseline) event already written, with the event UID and
+  the date written.
+
+Neither table is maintenance truth. Due state stays derived, and the `due_on`
+column only records what was written to the calendar. Both tables are in the
+account-deletion purge registry, and a deleted account's rows are removed in
+every workspace so a reused UID starts clean.
+
 ## Derived maintenance status (v0.1.7)
 
 Maintenance status is a projection, not a stored record. The authoritative inputs are the current work definition and its explicit `schedule`, the latest non-archived activity that contains an item linked to that definition, and effective meter readings/snapshots.
