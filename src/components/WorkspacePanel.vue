@@ -8,6 +8,7 @@ import type { OwnershipTransfer, WorkspaceMemberSummary, WorkspaceSummary } from
 
 import { computed, onMounted, reactive, ref } from 'vue'
 import ExportPanel from './ExportPanel.vue'
+import ImportPanel from './ImportPanel.vue'
 import { t } from '../l10n.ts'
 import { currentWorkspace, selectWorkspace } from '../services/api.ts'
 import { listMembers, listTransfers, listWorkspaces, ocsMessage, offerTransfer, transferAction } from '../services/workspaceApi.ts'
@@ -68,6 +69,11 @@ async function offer(): Promise<void> {
 	await act(() => offerTransfer(workspace.uuid, { toUid: draft.toUid, leaveAfter: draft.leaveAfter, expiresInDays: Number(draft.expiresInDays) }))
 }
 
+function restored(workspace: string): void {
+	selectWorkspace(workspace)
+	window.location.reload()
+}
+
 onMounted(load)
 defineExpose({ load })
 </script>
@@ -97,7 +103,7 @@ defineExpose({ load })
 				aria-controls="workspace-export"
 				:aria-expanded="exportOpen ? 'true' : 'false'"
 				@click="exportOpen = !exportOpen">
-				{{ exportOpen ? t('maintenance_tracker', 'Hide export') : t('maintenance_tracker', 'Export data') }}
+				{{ exportOpen ? t('maintenance_tracker', 'Hide export and restore') : t('maintenance_tracker', 'Export or restore') }}
 			</button>
 		</div>
 		<p v-if="active?.orphaned" class="notice notice--error" role="status">
@@ -170,6 +176,7 @@ defineExpose({ load })
 			id="workspace-export"
 			:workspace="active.uuid"
 			:role="active.role" />
+		<ImportPanel v-if="exportOpen" id="workspace-import" @imported="restored" />
 	</section>
 </template>
 

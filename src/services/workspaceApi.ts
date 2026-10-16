@@ -90,3 +90,25 @@ export async function downloadExport(workspace: string, format: ExportFormat, in
 		throw reason
 	}
 }
+
+export interface ImportResult {
+	workspace: WorkspaceSummary
+	restored: Record<string, number>
+	notRestored: string[]
+	evidence: { restored: number, skipped: { evidenceUuid: string, reason: string }[] }
+}
+
+/**
+ * Restore a complete owner export into a new workspace owned by the caller.
+ *
+ * @param file The JSON or ZIP export.
+ * @param name Optional name of the new workspace.
+ */
+export async function importWorkspace(file: File, name: string): Promise<ImportResult> {
+	const form = new FormData()
+	form.append('file', file)
+	if (name.trim() !== '') {
+		form.append('name', name.trim())
+	}
+	return data(await axios.post<OcsEnvelope<ImportResult>>(endpoint('/import'), form, requestOptions))
+}
