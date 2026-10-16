@@ -38,6 +38,7 @@ import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import AssetCostsPanel from './components/AssetCostsPanel.vue'
 import EvidencePanel from './components/EvidencePanel.vue'
+import IntegrationsPanel from './components/IntegrationsPanel.vue'
 import OwnershipBanner from './components/OwnershipBanner.vue'
 import PartsCatalogPanel from './components/PartsCatalogPanel.vue'
 import WorkspacePanel from './components/WorkspacePanel.vue'
@@ -838,6 +839,7 @@ function reloadAfterTransfer(): void {
 
 				<OwnershipBanner @changed="reloadAfterTransfer" />
 				<WorkspacePanel ref="workspacePanel" />
+				<IntegrationsPanel />
 
 				<p v-if="error" class="notice notice--error" role="alert">
 					{{ error }}
