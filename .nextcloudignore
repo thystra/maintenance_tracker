@@ -22,4 +22,5 @@
 /stylelint.config.mjs
 /tests
 /tsconfig.json
+/vendor-bin
 /vite.config.ts
