@@ -294,6 +294,40 @@ file name.
   admin-installed app with their own ACL model. App data storage was rejected
   because it is not browsable in Files and bypasses user quota and versions.
 
+## Ownership transfer
+
+A workspace has exactly one owner, whose Files hold the evidence folder. Ownership moves
+only by an explicit offer that an existing member accepts, or by the account-deletion
+default below.
+
+- Offer: owner only (`workspace.ownership.transfer`). One open transfer per workspace.
+  Offers expire after `expiresInDays` (1–30, default 7), evaluated lazily on read.
+  Cancel, decline, and expiry are audited.
+- Quota: the recipient sees the folder size and their free space. Accepting requires
+  `acknowledgeQuota` and enough space (unlimited quota always fits).
+- Steps (`maint_ws_transfers.step`, compare-and-set):
+  - `snapshot`: record evidence file ids and paths in `maint_ws_xfer_items`
+  - `unshare`
+  - `move`: the target path is persisted first, and the node move keeps file ids
+  - `repoint`: evidence follows moved ids or recorded paths; anything else is reported
+  - `swap`: one DB transaction for owner, kind `shared`, roles, and audit
+  - `share`: shares are re-created from the new owner
+  - `done`
+- Failure and recovery: a failure leaves the transfer `in_progress` at its step. `resume`
+  continues it. `abort` works until the folder has left the old owner's Files.
+- No Files or sharing call runs inside an app DB transaction (PostgreSQL 25P02).
+- Share changes made on another user's behalf (the recipient accepting, occ, account
+  deletion) run with the folder owner as the volatile active user
+  (`IUserSession::setVolatileActiveUser`, always restored). Nextcloud share events resolve
+  paths relative to the session user.
+- Account deletion (`BeforeUserDeletedEvent`):
+  - A workspace with other members goes to the longest-standing Manager, and the deleted
+    owner leaves.
+  - With no Manager, or with `owner_deletion_policy=orphan`, the workspace is marked
+    `orphaned_at` and kept. File operations are refused until `assign-owner` runs.
+  - Workspaces without other members are purged as before, as are orphans that lose
+    their last member.
+
 ## Audit trail
 
 `maint_audit` is an append-only workspace event stream distinct from the sync

@@ -248,6 +248,25 @@ Each event contains event type/version, actor UID, subject type/ID/revision,
 level, bounded structured details, and timestamp. Free-form maintenance notes
 and evidence/document contents are not copied into audit details.
 
+## Ownership transfer endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/ownership-transfers` | Open transfers involving the caller |
+| POST | `/api/v1/workspaces/{workspace}/ownership-transfers` | `{transfer:{toUid, expiresInDays?, leaveAfter?}}`, owner, 201 |
+| GET | `/api/v1/ownership-transfers/{uuid}` | Participants. Pending offers include `quota` |
+| POST | `/api/v1/ownership-transfers/{uuid}/accept` | `{acknowledgeQuota:true}`, recipient |
+| POST | `/api/v1/ownership-transfers/{uuid}/decline` | Recipient |
+| DELETE | `/api/v1/ownership-transfers/{uuid}` | Cancel, owner |
+| POST | `/api/v1/ownership-transfers/{uuid}/resume` | Continue an interrupted transfer |
+| POST | `/api/v1/ownership-transfers/{uuid}/abort` | Before the folder has moved |
+
+occ commands:
+- `maintenance_tracker:workspace:list-orphaned`
+- `maintenance_tracker:workspace:assign-owner <workspace> <user> [--remove-previous]`
+
+Workspace objects now include `ownerUid` and `orphaned`.
+
 ## Errors
 
 - `400`: invalid or unknown fields.

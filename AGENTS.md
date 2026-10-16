@@ -89,6 +89,9 @@ Preserve these invariants:
   deletion purge registry, with child/history tables removed before assets;
 - profiles are bounded, data-only, non-executable input; runtime installation accepts profile v2 only, never fetches provenance URLs, and must fail rather than discard unsupported profile facts;
 - the common work-definition scheduling field is named `schedule` and is REQUIRED on creation/profile-v2 input; never infer or default a missing schedule; `schedule: none` is explicitly unscheduled/ad-hoc work and any non-`none` policy is scheduled maintenance;
+- ownership transfers never call Files or sharing inside an app DB transaction, stay
+  resumable from their persisted step, and owner deletion must transfer or orphan, never
+  silently purge, a workspace that still has other members;
 - receipt/photo bytes belong in Nextcloud Files, not database blobs or a public
   app directory;
 - calendar, Activity, and notifications are projections/integrations, not the
