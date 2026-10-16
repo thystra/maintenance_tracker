@@ -2468,6 +2468,50 @@ assert_contains "$exp_zip_report" 'viewer:named=no' 'viewer export never names u
 assert_contains "$exp_zip_report" 'viewer:audit=no' 'viewer ZIP omits audit'
 assert_contains "$exp_zip_report" 'owner:urls=no' 'export carries no session URLs'
 assert_contains "$exp_zip_report" 'owner:unsafe=no' 'ZIP entry names are safe'
+# Import/restore: a complete owner export becomes a new workspace owned by the
+# caller with fresh UUIDs, remapped references and evidence files written to
+# the caller's Files; partial or tampered exports are rejected atomically.
+import_as() {
+	docker exec "$container" curl --silent --show-error --user "$1" --header 'OCS-APIRequest: true' --header 'Accept: application/json' \
+		--form "file=@/tmp/$2" ${3:+--form "name=$3"} \
+		'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/import?format=json'
+}
+workspace_count() { ocs_as "$1" GET /workspaces | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["ocs"]["data"]["items"]))'; }
+assert_contains "$(docker exec "$container" curl -s --user "$na" -H 'OCS-APIRequest: true' -H 'Accept: application/json' 'http://127.0.0.1/ocs/v2.php/cloud/capabilities?format=json')" '"workspace-import"' 'import capability'
+imp_before=$(workspace_count "$na")
+assert_contains "$(import_as "$nb" exp-viewer.zip)" '"statuscode":400' 'viewer export cannot be restored'
+docker exec "$container" sh -c 'cat /tmp/exp-owner.json' > "$tmp_export_dir/tampered.json"
+python3 - "$tmp_export_dir/tampered.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["tables"]["assets"][-1]["evil_column"] = 1
+json.dump(d, open(sys.argv[1], "w"))
+PY
+docker cp "$tmp_export_dir/tampered.json" "$container:/tmp/exp-tampered.json"
+assert_contains "$(import_as "$na" exp-tampered.json)" '"statuscode":400' 'unknown column rejected'
+assert_contains "$(workspace_count "$na")" "$imp_before" 'rejected import leaves no workspace behind'
+imp_result=$(import_as "$na" exp-owner.zip 'Restored van')
+assert_contains "$imp_result" '"statuscode":201' 'owner ZIP restored'
+assert_contains "$imp_result" '"name":"Restored van"' 'restored workspace named'
+assert_contains "$imp_result" '"role":"owner"' 'importer owns the restored workspace'
+assert_contains "$imp_result" '"restored":1' 'evidence file restored'
+assert_contains "$imp_result" '"notRestored":["members","audit"]' 'members and audit reported as not restored'
+imp_ws=$(printf '%s' "$imp_result" | json_field workspace.uuid)
+iws="workspace=${imp_ws}"
+imp_assets=$(ocs_as "$na" GET "/assets?${iws}")
+assert_contains "$imp_assets" 'Reminder test van' 'restored assets'
+assert_not_contains "$imp_assets" "$ntf_asset" 'restored assets get new UUIDs'
+imp_asset=$(printf '%s' "$imp_assets" | python3 -c 'import json,sys;print([a["uuid"] for a in json.load(sys.stdin)["ocs"]["data"]["items"] if a["name"]=="Reminder test van"][0])')
+assert_contains "$(ocs_as "$na" GET "/assets/${imp_asset}/work-definitions?${iws}")" 'Wiper check' 'restored work definitions follow remapped asset'
+assert_contains "$(ocs_as "$na" GET "/assets/${imp_asset}/activities?${iws}")" 'Checked again' 'restored activities'
+assert_contains "$(ocs_as "$na" GET "/assets/${imp_asset}/maintenance-status?${iws}")" '"statuscode":200' 'due state on restored data'
+imp_evidence=$(ocs_as "$na" GET "/evidence?${iws}&targetType=asset&targetUuid=${imp_asset}")
+assert_contains "$imp_evidence" '"availability":"available"' 'restored evidence opens in Files'
+assert_contains "$imp_evidence" 'Maintenance Tracker imports' 'restored evidence written to import folder'
+assert_contains "$(ocs_as "$na" GET "/audit?${iws}&limit=5")" 'workspace.imported' 'import audited'
+assert_contains "$(ocs_as "$na" GET "/assets?${nws}")" "$ntf_asset" 'original workspace untouched'
+assert_contains "$(import_as "$na" exp-owner.zip)" '"statuscode":201' 'same export can be restored twice'
+assert_contains "$(ocs_as "$nb" GET "/assets?${iws}")" '"statuscode":403' 'other members do not get access to the restored workspace'
+docker exec "$container" rm -f /tmp/exp-tampered.json
 docker exec "$container" rm -f /tmp/exp-owner.json /tmp/exp-member.json /tmp/exp-bad.json /tmp/exp-viewer.zip /tmp/exp-owner.zip /tmp/exp.png
 
 # @@V0111_NEXT@@

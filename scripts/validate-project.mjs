@@ -498,6 +498,19 @@ expect(exportService.includes("unset($item['file']['filesUrl'], $item['file']['d
 expect(exportService.includes('ExportPolicy::MAX_FILE_BYTES') && exportService.includes('ExportPolicy::MAX_TOTAL_FILE_BYTES') && exportPolicy.includes('function fileEntry('), 'Evidence files in export ZIPs must be size-bounded and use sanitized entry names.')
 expect(exportController.includes('AuthorizationCatalog::WORKSPACE_EXPORT') && exportController.includes('->authorize(') && !exportController.includes('runWithCapability('), 'Export endpoint must authorize workspace.export and run outside an app transaction.')
 expect(exportController.includes("'Cache-Control', 'no-store'"), 'Export downloads must not be cached.')
+
+// 1.0 prep: workspace restore.
+const importPolicy = await read('lib/Service/ImportPolicy.php')
+const importService = await read('lib/Service/ImportService.php')
+const importSections = new Set([...importPolicy.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]))
+for (const section of [...exportPolicy.matchAll(/^\t\t'([a-z_]+)' => AuthorizationCatalog::/gm)].map((m) => m[1])) {
+	expect(importSections.has(section), `Import policy must restore or explicitly skip export section ${section}.`)
+}
+expect(importPolicy.includes("'role'") && importPolicy.includes("!== 'owner'"), 'Import must accept only complete Owner exports.')
+expect(['MAX_UPLOAD_BYTES', 'MAX_DATA_BYTES', 'MAX_ROWS', 'MAX_ZIP_ENTRIES'].every((c) => importPolicy.includes(`const ${c}`) && (importService + importPolicy).includes(`::${c}`)), 'Import must keep its upload, data, row and ZIP-entry bounds.')
+const importTx = importService.slice(importService.indexOf('->runForActiveUser('), importService.indexOf('});', importService.indexOf('->runForActiveUser(')))
+expect(importTx.length > 0 && !/rootFolder|newFile|putContent|ZipArchive|evidenceService/.test(importTx), 'Import must not touch Files, archives or evidence attachment inside the database transaction.')
+expect(importPolicy.includes('function uuidMap(') && importPolicy.includes('function remap('), 'Import must regenerate UUIDs and remap numeric IDs.')
 expect(api.includes('GET /export') && security.includes('Export boundary') && agents.includes('v0.1.13 export invariant'), 'Docs must cover the export API, its security boundary, and the AGENTS invariant.')
 const a11yScript = await read('scripts/check-a11y.mjs')
 const ciWorkflow = await read('.forgejo/workflows/ci.yml')
