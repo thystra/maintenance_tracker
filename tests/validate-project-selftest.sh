@@ -43,6 +43,7 @@ fixture_paths=(
 	lib/Service/ProfileValidator.php lib/Service/ProfileCatalog.php lib/Service/ProfileRepository.php lib/Service/ProfileInstallationService.php
 	lib/Service/FitmentPackValidator.php lib/Service/FitmentCsvBundleService.php lib/Service/FitmentZipBundleService.php lib/Service/FitmentRepository.php lib/Service/AssetFitmentDescriptorService.php lib/Service/FitmentService.php
 	lib/Migration/Version1120Date20261016160000.php lib/Service/IntegrationProjector.php lib/Service/ReminderService.php lib/Service/IntegrationSettingsService.php lib/Service/CalendarEventBuilder.php lib/Service/IntegrationEventMap.php
+	lib/Service/ExportPolicy.php lib/Service/ExportService.php scripts/check-a11y.mjs
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 )
 
@@ -621,5 +622,19 @@ expect_rejected 'fitment revision import UUID aliasing' 'The same fitment revisi
 copy_fixture
 sed -i "s/'length' => 8388608/'length' => 65535/" "$tmp/fixture/lib/Migration/Version1090Date20260907193000.php"
 expect_rejected 'undersized fitment revision JSON storage' 'Fitment revision JSON storage must retain the reviewed 8 MiB bound.' "$tmp/fitment-json-bound.out"
+
+copy_fixture
+python3 - "$tmp/fixture/lib/Service/ExportService.php" <<'PY3'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(); old="			$this->audit->record($workspace->getId(), 'workspace.exported'"
+if old not in s: raise SystemExit('export audit call missing')
+p.write_text(s.replace(old, "			$this->evidenceService->readableFile($viewerUid, []);\n" + old, 1))
+PY3
+expect_rejected 'Files access inside the export transaction' 'Workspace export must not call Files, evidence projection, or archive I/O inside the locked database transaction.' "$tmp/export-tx.out"
+
+copy_fixture
+sed -i "s/'maint_notify_log', //" "$tmp/fixture/lib/Service/ExportPolicy.php"
+expect_rejected 'unclassified workspace table in export' 'Workspace export policy must either export or explicitly exclude workspace-scoped table maint_notify_log.' "$tmp/export-table.out"
 
 echo 'Project validator self-tests passed.'

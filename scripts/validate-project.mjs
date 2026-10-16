@@ -481,6 +481,29 @@ expect(docs.includes('JSON') && docs.includes('fitment') && docs.includes('CSV/Z
 expect(roadmap.includes('10. [x] v0.1.10') && roadmap.includes('central cost ledger') && roadmap.includes('store/vendor links'), 'Roadmap must record v0.1.10 complete only with parts, links, and the cost ledger included.')
 expect(changelog.includes('0.1.10') && changelog.includes('CSV/ZIP') && readme.includes('fitment') && readme.includes('CSV/ZIP'), 'User-facing documentation must describe the v0.1.10 JSON and CSV/ZIP fitment foundation.')
 
+// v0.1.13 export and accessibility.
+const exportPolicy = await read('lib/Service/ExportPolicy.php')
+const exportService = await read('lib/Service/ExportService.php')
+const exportController = await read('lib/Controller/ExportController.php')
+const exportTables = new Set([...exportPolicy.matchAll(/'(maint_[a-z_]+)'/g)].map((m) => m[1]))
+for (const table of [...workspaceTables].sort()) {
+	expect(exportTables.has(table), `Workspace export policy must either export or explicitly exclude workspace-scoped table ${table}.`)
+}
+expect(exportPolicy.includes("'audit' => AuthorizationCatalog::AUDIT_READ") && exportPolicy.includes("'members' => AuthorizationCatalog::WORKSPACE_MEMBERS_READ") && exportPolicy.includes("'evidence' => AuthorizationCatalog::EVIDENCE_READ"), 'Export sections must keep their own read capability (audit, members, evidence).')
+expect(exportPolicy.includes("'workspace_id'") && exportPolicy.includes("'write_lock_token'") && exportPolicy.includes("'maint_ev_shares'") && exportPolicy.includes("'maint_changes'"), 'Export must drop internal columns and exclude share/journal tables.')
+const exportLocked = exportService.slice(exportService.indexOf('->runLocked('), exportService.indexOf('});', exportService.indexOf('->runLocked(')))
+expect(exportLocked.length > 0 && !/evidenceService|readableFile|tempManager|ZipArchive/.test(exportLocked), 'Workspace export must not call Files, evidence projection, or archive I/O inside the locked database transaction.')
+expect(exportLocked.includes("'workspace.exported'"), 'Workspace export must be audited inside the snapshot transaction.')
+expect(exportService.includes("unset($item['file']['filesUrl'], $item['file']['downloadUrl'], $item['file']['previewUrl'])"), 'Exported evidence must not carry session-bound Files URLs.')
+expect(exportService.includes('ExportPolicy::MAX_FILE_BYTES') && exportService.includes('ExportPolicy::MAX_TOTAL_FILE_BYTES') && exportPolicy.includes('function fileEntry('), 'Evidence files in export ZIPs must be size-bounded and use sanitized entry names.')
+expect(exportController.includes('AuthorizationCatalog::WORKSPACE_EXPORT') && exportController.includes('->authorize(') && !exportController.includes('runWithCapability('), 'Export endpoint must authorize workspace.export and run outside an app transaction.')
+expect(exportController.includes("'Cache-Control', 'no-store'"), 'Export downloads must not be cached.')
+expect(api.includes('GET /export') && security.includes('Export boundary') && agents.includes('v0.1.13 export invariant'), 'Docs must cover the export API, its security boundary, and the AGENTS invariant.')
+const a11yScript = await read('scripts/check-a11y.mjs')
+const ciWorkflow = await read('.forgejo/workflows/ci.yml')
+expect(packageJson.scripts?.['check:a11y'] === 'node scripts/check-a11y.mjs' && ciWorkflow.includes('npm run check:a11y') && a11yScript.includes('control-label'), 'Accessibility static checks must be wired into npm and CI.')
+expect(roadmap.includes('13. [x] v0.1.13') && changelog.includes('workspace export'), 'Roadmap/CHANGELOG must record the v0.1.13 export and accessibility increment.')
+
 try {
 	await access('.github/workflows/ci.yml')
 	failures.push('GitHub mirror must not retain a competing automatic CI workflow.')
