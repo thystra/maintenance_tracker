@@ -45,6 +45,7 @@ fixture_paths=(
 	lib/Migration/Version1120Date20261016160000.php lib/Service/IntegrationProjector.php lib/Service/ReminderService.php lib/Service/IntegrationSettingsService.php lib/Service/CalendarEventBuilder.php lib/Service/IntegrationEventMap.php
 	lib/Service/ExportPolicy.php lib/Service/ExportService.php scripts/check-a11y.mjs
 	tests/integration/nextcloud-smoke.sh tests/integration/upgrade-smoke.sh
+	scripts/l10n.mjs .l10nignore templates lib/Settings/AdminSection.php
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 )
 

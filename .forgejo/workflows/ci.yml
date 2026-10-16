@@ -85,6 +85,7 @@ jobs:
           npm run lint
           npm run stylelint
           npm run check:a11y
+          npm run l10n:check
           npm run build
           test -f js/maintenance_tracker-main.mjs
           test -f css/maintenance_tracker-main.css

@@ -511,6 +511,16 @@ expect(/database:\n\s+- sqlite\n\s+- pgsql\n\s+- mysql/.test(forgejoCi), 'CI mus
 expect(smokeHarness.includes('sqlite|pgsql|mysql') && smokeHarness.includes('--transaction-isolation=READ-COMMITTED') && smokeHarness.includes('NC_SMOKE_NETWORK_MODE'), 'Smoke harness must support MariaDB with READ-COMMITTED isolation and the bridge network mode.')
 expect(forgejoCi.includes('tests/integration/upgrade-smoke.sh') && forgejoCi.includes('fetch-depth: 0') && upgradeHarness.includes('occ upgrade') && upgradeHarness.includes('expected_migrations'), 'CI must run the upgrade-migration test, which must verify every shipped migration ran.')
 
+// 1.0 prep: localization.
+const l10nScript = await read('scripts/l10n.mjs')
+const l10nIgnore = await read('.l10nignore')
+const adminTemplate = await read('templates/admin-settings.php')
+expect(packageJson.scripts?.['l10n:check'] === 'node scripts/l10n.mjs check' && packageJson.scripts?.['l10n:extract'] === 'node scripts/l10n.mjs extract' && forgejoCi.includes('npm run l10n:check'), 'Localization check and extraction must be wired into npm and CI.')
+expect(packageJson.dependencies?.['@nextcloud/l10n'] !== undefined && l10nScript.includes('template-text') && l10nScript.includes('script-string'), 'The frontend must translate through @nextcloud/l10n and the checker must cover template and script strings.')
+expect(['js/', 'vendor/', 'node_modules/'].every((path) => l10nIgnore.split(/\r?\n/).includes(path)), '.l10nignore must keep generated and third-party code out of translation extraction.')
+expect(adminTemplate.includes("$l->t('Outside links')") && !/<h2>[A-Za-z]/.test(adminTemplate), 'Admin settings template text must be translated.')
+expect(!/getName\(\): string \{\s*return '/.test(await read('lib/Settings/AdminSection.php')), 'Admin section name must be translated.')
+
 try {
 	await access('.github/workflows/ci.yml')
 	failures.push('GitHub mirror must not retain a competing automatic CI workflow.')
