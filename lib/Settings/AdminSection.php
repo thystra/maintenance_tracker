@@ -10,11 +10,15 @@ declare(strict_types=1);
 namespace OCA\MaintenanceTracker\Settings;
 
 use OCA\MaintenanceTracker\AppInfo\Application;
+use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\Settings\IIconSection;
 
 final class AdminSection implements IIconSection {
-	public function __construct(private IURLGenerator $urlGenerator) {
+	public function __construct(
+		private IURLGenerator $urlGenerator,
+		private IL10N $l,
+	) {
 	}
 
 	public function getID(): string {
@@ -22,7 +26,7 @@ final class AdminSection implements IIconSection {
 	}
 
 	public function getName(): string {
-		return 'Maintenance Tracker';
+		return $this->l->t('Maintenance Tracker');
 	}
 
 	public function getPriority(): int {
