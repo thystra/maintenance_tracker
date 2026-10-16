@@ -264,6 +264,16 @@ quota, antivirus, and storage backends. The client then attaches the file by
 path. Existing files anywhere in the user's own Files (or shared with them) can
 still be linked through the Nextcloud file picker.
 
+**Transactions.** Nextcloud Files and sharing calls never run inside the app's
+database transaction. Core code (for example the user mount cache) catches
+unique-constraint violations as normal control flow, and on PostgreSQL any failed
+statement aborts the whole surrounding transaction. Membership changes therefore
+queue folder and share reconciliation with `UserLifecycleService::afterCommit()`,
+which runs it after commit (best effort and idempotent; the next membership change
+or owner upload reconciles again). Evidence endpoints authorize first, do their
+Files work outside any transaction, and wrap only their database writes in a
+short `WorkspaceService::runLocked()` transaction.
+
 **Visibility.** File metadata is resolved through the *viewing* user's own
 Files at read time. A member sees name, path, preview, and download links only
 for files they can open themselves. Otherwise the record reports

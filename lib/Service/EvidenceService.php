@@ -52,6 +52,7 @@ final class EvidenceService {
 		private ChangeJournal $journal,
 		private AuditService $audit,
 		private ITimeFactory $timeFactory,
+		private WorkspaceService $workspaces,
 	) {
 	}
 
@@ -97,51 +98,61 @@ final class EvidenceService {
 		$workspaceId = $context->workspace()->getId();
 		$fileId = (int)$file->getId();
 
-		$existing = $this->repository->findByUuid($workspaceId, $uuid);
-		if ($existing !== null) {
-			if ($existing['deleted_at'] === null && $existing['file_id'] === $fileId && $existing['kind'] === $kind) {
-				return $this->toApi($context, $existing, $actorUid);
-			}
-			throw new RevisionConflictException('The supplied evidence UUID already exists with different data');
-		}
-		if ($this->repository->findByUuid(null, $uuid) !== null) {
-			throw new RevisionConflictException('The supplied evidence UUID already exists with different data');
-		}
-		$duplicate = $this->repository->findActiveByFile($workspaceId, $fileId);
-		if ($duplicate !== null) {
-			throw new RevisionConflictException('This file is already evidence ' . $duplicate['uuid'] . ' in this workspace; link that evidence instead');
-		}
-
 		$now = $this->timeFactory->getTime();
 		$userFolder = $this->rootFolder->getUserFolder($actorUid);
 		$storage = $this->inWorkspaceFolder($context, $fileId) ? 'workspace' : 'linked';
 		// A privately linked file's name can itself be sensitive, so its default
 		// title is the kind label; workspace-folder files are visible to members anyway.
 		$fallbackTitle = $storage === 'workspace' ? (string)$file->getName() : EvidencePolicy::defaultTitle($kind);
-		$id = $this->repository->insert([
-			'workspace_id' => $workspaceId,
-			'uuid' => $uuid,
-			'kind' => $kind,
-			'title' => EvidencePolicy::title($input['title'] ?? null, $fallbackTitle),
-			'file_id' => $fileId,
-			'attached_by' => $actorUid,
-			'storage' => $storage,
-			'mime' => substr($mime, 0, 255),
+		$facts = [
 			'size' => max(0, (int)$file->getSize()),
 			'sha256' => $this->sha256($file),
 			'original_name' => substr((string)$file->getName(), 0, 255),
 			'last_known_path' => $userFolder->getRelativePath($file->getPath()) ?? '',
-			'notes' => CatalogInput::optionalText($input['notes'] ?? null, 'notes', 2000, true),
-			'revision' => 1,
-			'created_at' => $now,
-			'updated_at' => $now,
-			'deleted_at' => null,
-		]);
-		foreach ($targets as $target) {
-			$this->repository->addLink($workspaceId, $id, $target['type'], $target['id'], $now);
-		}
-		$this->journal->record($workspaceId, 'evidence', $uuid, 'upsert', 1, $now);
-		return $this->toApi($context, $this->row($context, $uuid), $actorUid);
+		];
+		// File work above runs outside any transaction; only database writes are locked.
+		$row = $this->workspaces->runLocked($actorUid, $context, function () use ($context, $workspaceId, $uuid, $fileId, $kind, $input, $fallbackTitle, $actorUid, $storage, $mime, $facts, $targets, $now): array {
+			$existing = $this->repository->findByUuid($workspaceId, $uuid);
+			if ($existing !== null) {
+				if ($existing['deleted_at'] === null && $existing['file_id'] === $fileId && $existing['kind'] === $kind) {
+					return $existing;
+				}
+				throw new RevisionConflictException('The supplied evidence UUID already exists with different data');
+			}
+			if ($this->repository->findByUuid(null, $uuid) !== null) {
+				throw new RevisionConflictException('The supplied evidence UUID already exists with different data');
+			}
+			$duplicate = $this->repository->findActiveByFile($workspaceId, $fileId);
+			if ($duplicate !== null) {
+				throw new RevisionConflictException('This file is already evidence ' . $duplicate['uuid'] . ' in this workspace; link that evidence instead');
+			}
+
+			$id = $this->repository->insert([
+				'workspace_id' => $workspaceId,
+				'uuid' => $uuid,
+				'kind' => $kind,
+				'title' => EvidencePolicy::title($input['title'] ?? null, $fallbackTitle),
+				'file_id' => $fileId,
+				'attached_by' => $actorUid,
+				'storage' => $storage,
+				'mime' => substr($mime, 0, 255),
+				'size' => $facts['size'],
+				'sha256' => $facts['sha256'],
+				'original_name' => $facts['original_name'],
+				'last_known_path' => $facts['last_known_path'],
+				'notes' => CatalogInput::optionalText($input['notes'] ?? null, 'notes', 2000, true),
+				'revision' => 1,
+				'created_at' => $now,
+				'updated_at' => $now,
+				'deleted_at' => null,
+			]);
+			foreach ($targets as $target) {
+				$this->repository->addLink($workspaceId, $id, $target['type'], $target['id'], $now);
+			}
+			$this->journal->record($workspaceId, 'evidence', $uuid, 'upsert', 1, $now);
+			return $this->row($context, $uuid);
+		});
+		return $this->toApi($context, $row, $actorUid);
 	}
 
 	/** @param array<string,mixed> $input @return array<string,mixed> */
@@ -162,19 +173,33 @@ final class EvidenceService {
 			$changes['notes'] = CatalogInput::optionalText($input['notes'], 'notes', 2000, true);
 		}
 		$changes += $this->refreshedLocation($context, $row);
-		return $this->write($context, $actorUid, $row, $expectedRevision, $changes, 'upsert');
+		$updated = $this->workspaces->runLocked($actorUid, $context, function () use ($context, $actorUid, $uuid, $expectedRevision, $changes): array {
+			$row = $this->row($context, $uuid);
+			$this->assertMayChange($context, $actorUid, $row);
+			$this->assertRevision($row, $expectedRevision);
+			return $this->write($context, $row, $expectedRevision, $changes, 'upsert');
+		});
+		return $this->toApi($context, $updated, $actorUid);
 	}
 
 	/** Remove the evidence record. The file itself is never touched. @return array<string,mixed> */
 	public function archive(WorkspaceContext $context, string $actorUid, string $uuid, int $expectedRevision): array {
-		$row = $this->row($context, $uuid);
-		$this->assertMayChange($context, $actorUid, $row);
-		$this->assertRevision($row, $expectedRevision);
-		return $this->write($context, $actorUid, $row, $expectedRevision, ['deleted_at' => $this->timeFactory->getTime()], 'delete');
+		$updated = $this->workspaces->runLocked($actorUid, $context, function () use ($context, $actorUid, $uuid, $expectedRevision): array {
+			$row = $this->row($context, $uuid);
+			$this->assertMayChange($context, $actorUid, $row);
+			$this->assertRevision($row, $expectedRevision);
+			return $this->write($context, $row, $expectedRevision, ['deleted_at' => $this->timeFactory->getTime()], 'delete');
+		});
+		return $this->toApi($context, $updated, $actorUid);
 	}
 
 	/** @return array<string,mixed> */
 	public function link(WorkspaceContext $context, string $actorUid, string $uuid, string $targetType, string $targetUuid): array {
+		$this->workspaces->runLocked($actorUid, $context, fn () => $this->linkLocked($context, $actorUid, $uuid, $targetType, $targetUuid));
+		return $this->toApi($context, $this->row($context, $uuid), $actorUid);
+	}
+
+	private function linkLocked(WorkspaceContext $context, string $actorUid, string $uuid, string $targetType, string $targetUuid): void {
 		$row = $this->row($context, $uuid);
 		$target = $this->target($context, EvidencePolicy::targetType($targetType), $targetUuid);
 		if (count($this->repository->links($context->workspace()->getId(), $row['id'])) >= EvidencePolicy::MAX_LINKS) {
@@ -183,11 +208,15 @@ final class EvidenceService {
 		if ($this->repository->addLink($context->workspace()->getId(), $row['id'], $target['type'], $target['id'], $this->timeFactory->getTime())) {
 			$this->audit->record($context->workspace()->getId(), 'evidence.linked', $actorUid, (string)$row['uuid'], (int)$row['revision'], ['targetType' => $target['type'], 'targetUuid' => $target['uuid']]);
 		}
-		return $this->toApi($context, $this->row($context, $uuid), $actorUid);
 	}
 
 	/** @return array<string,mixed> */
 	public function unlink(WorkspaceContext $context, string $actorUid, string $uuid, string $targetType, string $targetUuid): array {
+		$this->workspaces->runLocked($actorUid, $context, fn () => $this->unlinkLocked($context, $actorUid, $uuid, $targetType, $targetUuid));
+		return $this->toApi($context, $this->row($context, $uuid), $actorUid);
+	}
+
+	private function unlinkLocked(WorkspaceContext $context, string $actorUid, string $uuid, string $targetType, string $targetUuid): void {
 		$row = $this->row($context, $uuid);
 		$this->assertMayChange($context, $actorUid, $row);
 		$target = $this->target($context, EvidencePolicy::targetType($targetType), $targetUuid, true);
@@ -199,7 +228,6 @@ final class EvidenceService {
 			throw new NotFoundException('Evidence link not found');
 		}
 		$this->audit->record($context->workspace()->getId(), 'evidence.unlinked', $actorUid, (string)$row['uuid'], (int)$row['revision'], ['targetType' => $target['type'], 'targetUuid' => $target['uuid']]);
-		return $this->toApi($context, $this->row($context, $uuid), $actorUid);
 	}
 
 	/**
@@ -399,14 +427,13 @@ final class EvidenceService {
 	}
 
 	/** @param array<string,mixed> $row @param array<string,mixed> $changes @return array<string,mixed> */
-	private function write(WorkspaceContext $context, string $actorUid, array $row, int $expectedRevision, array $changes, string $op): array {
+	private function write(WorkspaceContext $context, array $row, int $expectedRevision, array $changes, string $op): array {
 		$now = $this->timeFactory->getTime();
 		if (!$this->repository->update($context->workspace()->getId(), $row['id'], $expectedRevision, $changes, $now)) {
 			throw new RevisionConflictException('The evidence revision does not match');
 		}
 		$this->journal->record($context->workspace()->getId(), 'evidence', (string)$row['uuid'], $op, $expectedRevision + 1, $now);
-		$updated = $this->repository->findByUuid($context->workspace()->getId(), (string)$row['uuid']) ?? throw new \LogicException('Evidence disappeared');
-		return $this->toApi($context, $updated, $actorUid);
+		return $this->repository->findByUuid($context->workspace()->getId(), (string)$row['uuid']) ?? throw new \LogicException('Evidence disappeared');
 	}
 
 	/** @return array<string,mixed> */

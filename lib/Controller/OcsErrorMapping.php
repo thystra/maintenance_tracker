@@ -26,8 +26,24 @@ use OCP\AppFramework\OCS\OCSPreconditionFailedException;
  */
 trait OcsErrorMapping {
 	private function run(string $capability, ?string $workspace, callable $operation): DataResponse {
+		return $this->mapErrors(fn (): DataResponse => $this->workspaces->runWithCapability($this->currentUser->uid(), $workspace, $capability, $operation));
+	}
+
+	/**
+	 * Authorize, then run $operation OUTSIDE any database transaction. Used by
+	 * operations that call Nextcloud Files or sharing; their database writes use
+	 * WorkspaceService::runLocked().
+	 */
+	private function runOutsideTransaction(string $capability, ?string $workspace, callable $operation): DataResponse {
+		return $this->mapErrors(function () use ($capability, $workspace, $operation): DataResponse {
+			$context = $this->workspaces->authorize($this->currentUser->uid(), $workspace, $capability);
+			return $operation($context);
+		});
+	}
+
+	private function mapErrors(callable $operation): DataResponse {
 		try {
-			return $this->workspaces->runWithCapability($this->currentUser->uid(), $workspace, $capability, $operation);
+			return $operation();
 		} catch (AccessDeniedException $exception) {
 			throw new OCSForbiddenException($exception->getMessage(), $exception);
 		} catch (NotFoundException $exception) {

@@ -84,6 +84,8 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- v0.1.11 evidence on PostgreSQL: evidence-folder and share setup no longer runs inside the membership database transaction. Nextcloud core caught a unique violation in its mount cache, which aborts the whole transaction on PostgreSQL (SQLSTATE 25P02) and rolled back the membership change. Folder and share reconciliation now runs after commit. Evidence endpoints do their Files work outside any transaction and lock only their database writes.
+
 - Nextcloud compatibility widened from 34 only to 33–35 after the full disposable integration suite passed on 33.0.10, 34.0.5, and 35.0.2; CI now runs the suite on all three releases with SQLite and PostgreSQL. The harness is renamed `tests/integration/nextcloud-smoke.sh`.
 - Workspace authorization no longer uses a role-rank gate; controllers request named capabilities and workspace writes retain row-level serialization.
 - `GET /workspaces` now returns all workspaces accessible to the current user instead of only the personal workspace.

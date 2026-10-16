@@ -26,6 +26,7 @@ final class MembershipService {
 		private IUserManager $userManager,
 		private ITimeFactory $timeFactory,
 		private EvidenceFolderService $evidenceFolders,
+		private UserLifecycleService $lifecycle,
 	) {
 	}
 
@@ -77,7 +78,8 @@ final class MembershipService {
 			null,
 			['role' => $role],
 		);
-		$this->evidenceFolders->prepareForMembers($context->workspace(), $actorUid);
+		$workspace = $context->workspace();
+		$this->lifecycle->afterCommit(fn () => $this->evidenceFolders->prepareForMembers($workspace, $actorUid));
 
 		return $this->toApi($inserted);
 	}
@@ -114,7 +116,8 @@ final class MembershipService {
 			null,
 			['fromRole' => $oldRole, 'toRole' => $role],
 		);
-		$this->evidenceFolders->syncShares($context->workspace(), $actorUid);
+		$workspace = $context->workspace();
+		$this->lifecycle->afterCommit(fn () => $this->evidenceFolders->syncShares($workspace, $actorUid));
 
 		return $this->toApi($updated);
 	}
@@ -141,7 +144,8 @@ final class MembershipService {
 			['role' => $role],
 		);
 		// Revoke the removed member's share of the evidence folder.
-		$this->evidenceFolders->syncShares($context->workspace(), $actorUid);
+		$workspace = $context->workspace();
+		$this->lifecycle->afterCommit(fn () => $this->evidenceFolders->syncShares($workspace, $actorUid));
 	}
 
 	public function targetUidFromInput(array $input): string {

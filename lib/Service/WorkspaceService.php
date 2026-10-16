@@ -118,6 +118,34 @@ final class WorkspaceService {
 		);
 	}
 
+	/**
+	 * Authorize without keeping a transaction open, for operations that must
+	 * call Nextcloud Files or sharing (which must never run inside our
+	 * transaction; see UserLifecycleService::afterCommit). Database writes of
+	 * such operations go through runLocked().
+	 */
+	public function authorize(string $userUid, ?string $workspaceUuid, string $capability): WorkspaceContext {
+		return $this->userLifecycleService->runForActiveUser(
+			$userUid,
+			fn (): WorkspaceContext => $this->requireCapabilityUnlocked($userUid, $workspaceUuid, $capability),
+		);
+	}
+
+	/**
+	 * Short database-only transaction under the actor's lifecycle lock and the
+	 * workspace write lock. Never call Files or sharing inside $operation.
+	 *
+	 * @template T
+	 * @param callable(): T $operation
+	 * @return T
+	 */
+	public function runLocked(string $userUid, WorkspaceContext $context, callable $operation): mixed {
+		return $this->userLifecycleService->runForActiveUser($userUid, function () use ($context, $operation): mixed {
+			$this->workspaceMapper->serializeWrite($context->workspace()->getId(), $this->uuidGenerator->generate());
+			return $operation();
+		});
+	}
+
 	private function getOrCreatePersonalUnlocked(string $userUid): Workspace {
 		try {
 			return $this->workspaceMapper->findPersonalByOwner($userUid);

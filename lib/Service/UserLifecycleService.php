@@ -14,6 +14,7 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\Exception as DatabaseException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 final class UserLifecycleService {
@@ -63,10 +64,57 @@ final class UserLifecycleService {
 		'maint_members',
 	];
 
+	/** @var list<callable(): void> */
+	private array $afterCommit = [];
+	private int $depth = 0;
+
 	public function __construct(
 		private IDBConnection $db,
 		private ITimeFactory $timeFactory,
+		private LoggerInterface $logger,
 	) {
+	}
+
+	/**
+	 * Run $callback once the outermost lifecycle transaction has committed
+	 * (immediately when none is open); it is dropped on rollback. Nextcloud
+	 * Files and sharing must never run inside our transaction: core code (for
+	 * example the user mount cache) relies on catching unique violations,
+	 * which aborts the whole transaction on PostgreSQL. Callbacks are
+	 * best-effort; failures are logged without user data and never surface.
+	 *
+	 * @param callable(): void $callback
+	 */
+	public function afterCommit(callable $callback): void {
+		if ($this->depth === 0) {
+			$this->runCallback($callback);
+			return;
+		}
+		$this->afterCommit[] = $callback;
+	}
+
+	private function runCallback(callable $callback): void {
+		try {
+			$callback();
+		} catch (Throwable $exception) {
+			$this->logger->warning('Maintenance Tracker post-commit task failed', [
+				'app' => 'maintenance_tracker',
+				'exception' => $exception::class,
+			]);
+		}
+	}
+
+	private function flushAfterCommit(bool $committed): void {
+		if ($this->depth !== 0) {
+			return;
+		}
+		$callbacks = $this->afterCommit;
+		$this->afterCommit = [];
+		if ($committed) {
+			foreach ($callbacks as $callback) {
+				$this->runCallback($callback);
+			}
+		}
 	}
 
 	/**
@@ -99,6 +147,7 @@ final class UserLifecycleService {
 
 		for ($attempt = 0; $attempt < 3; ++$attempt) {
 			$this->db->beginTransaction();
+			++$this->depth;
 			try {
 				foreach ($userUids as $userUid) {
 					if ($this->lockStateInTransaction($userUid, 'active') !== 'active') {
@@ -108,10 +157,14 @@ final class UserLifecycleService {
 
 				$result = $operation();
 				$this->db->commit();
+				--$this->depth;
+				$this->flushAfterCommit(true);
 
 				return $result;
 			} catch (DatabaseException $exception) {
+				--$this->depth;
 				$this->rollback();
+				$this->flushAfterCommit(false);
 				if (
 					$attempt < 2
 					&& $exception->getReason()
@@ -122,7 +175,9 @@ final class UserLifecycleService {
 
 				throw $exception;
 			} catch (Throwable $exception) {
+				--$this->depth;
 				$this->rollback();
+				$this->flushAfterCommit(false);
 				throw $exception;
 			}
 		}
