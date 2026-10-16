@@ -54,7 +54,7 @@ import type {
 import axios from '@nextcloud/axios'
 import { generateOcsUrl } from '@nextcloud/router'
 
-interface OcsEnvelope<T> {
+export interface OcsEnvelope<T> {
 	ocs: {
 		meta: {
 			status: string
@@ -65,18 +65,18 @@ interface OcsEnvelope<T> {
 	}
 }
 
-const requestOptions = {
+export const requestOptions = {
 	headers: {
 		'OCS-APIRequest': 'true',
 		Accept: 'application/json',
 	},
 }
 
-function endpoint(path: string): string {
+export function endpoint(path: string): string {
 	return generateOcsUrl(`/apps/maintenance_tracker/api/v1${path}`)
 }
 
-function data<T>(response: { data: OcsEnvelope<T> }): T {
+export function data<T>(response: { data: OcsEnvelope<T> }): T {
 	return response.data.ocs.data
 }
 

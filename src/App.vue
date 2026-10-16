@@ -35,6 +35,7 @@ import type {
 import { computed, onMounted, reactive, ref } from 'vue'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
+import PartsCatalogPanel from './components/PartsCatalogPanel.vue'
 import {
 	createActivity,
 	createAsset,
@@ -833,6 +834,8 @@ onMounted(load)
 						</button>
 					</form>
 				</section>
+
+				<PartsCatalogPanel />
 
 				<section class="panel">
 					<h2>Asset relationships</h2>

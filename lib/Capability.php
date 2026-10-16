@@ -44,6 +44,8 @@ final class Capability implements ICapability {
 					'profile-installation',
 					'fitment-packs',
 					'fitment-csv-zip',
+					'parts-catalog',
+					'vendors',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

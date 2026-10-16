@@ -195,6 +195,9 @@ expect(viewerMatch !== null && viewerMatch[1].includes('PROFILE_READ') && !viewe
 expect(managerMatch !== null && managerMatch[1].includes('FITMENT_READ') && managerMatch[1].includes('FITMENT_IMPORT') && managerMatch[1].includes('FITMENT_MAP'), 'Manager must explicitly receive fitment read/import/map capabilities.')
 expect(contributorMatch !== null && contributorMatch[1].includes('FITMENT_READ') && !contributorMatch[1].includes('FITMENT_IMPORT') && !contributorMatch[1].includes('FITMENT_MAP'), 'Contributor must read fitment data without importing or mapping it.')
 expect(viewerMatch !== null && viewerMatch[1].includes('FITMENT_READ') && !viewerMatch[1].includes('FITMENT_IMPORT') && !viewerMatch[1].includes('FITMENT_MAP'), 'Viewer must remain read-only for fitment data.')
+expect(managerMatch !== null && managerMatch[1].includes('PART_MANAGE') && managerMatch[1].includes('VENDOR_MANAGE'), 'Manager must explicitly receive part and vendor management.')
+expect(contributorMatch !== null && contributorMatch[1].includes('PART_READ') && contributorMatch[1].includes('VENDOR_READ') && !contributorMatch[1].includes('PART_MANAGE') && !contributorMatch[1].includes('VENDOR_MANAGE'), 'Contributor must read but not manage parts/vendors.')
+expect(viewerMatch !== null && viewerMatch[1].includes('PART_READ') && viewerMatch[1].includes('VENDOR_READ') && !viewerMatch[1].includes('PART_MANAGE') && !viewerMatch[1].includes('VENDOR_MANAGE'), 'Viewer must remain read-only for parts/vendors.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -211,7 +214,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -379,7 +382,7 @@ for (const table of [...workspaceTables].sort()) {
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 

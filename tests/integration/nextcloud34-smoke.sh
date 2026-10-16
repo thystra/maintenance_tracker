@@ -1865,6 +1865,60 @@ cleanup_assignment_reused=$(docker exec "$container" curl --silent --show-error 
 	'http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/assignments?format=json')
 assert_contains "$cleanup_assignment_reused" '"statuscode":201' 'cleanup assignment UUID reuse'
 
+# v0.1.10 completion: canonical parts, vendors, activity parts, profile parts,
+# cost ledger, and outside-link policy. A dedicated contributor account
+# qualifies the role boundaries against the owner's shared workspace.
+v0110_user='v0110_contributor'
+v0110_password='v0110-contributor-only'
+docker exec --env OC_PASS="$v0110_password" --user www-data "$container" \
+	php occ user:add --password-from-env "$v0110_user" >/dev/null
+
+ocs_as() {
+	local credentials=$1 method=$2 path=$3 body=${4:-}
+	local separator='?'
+	if [[ "$path" == *'?'* ]]; then
+		separator='&'
+	fi
+	local args=(--silent --show-error --user "$credentials" --request "$method"
+		--header 'OCS-APIRequest: true' --header 'Accept: application/json')
+	if [ -n "$body" ]; then
+		args+=(--header 'Content-Type: application/json' --data "$body")
+	fi
+	docker exec "$container" curl "${args[@]}" \
+		"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1${path}${separator}format=json"
+}
+owner_ocs() { ocs_as "${admin_user}:${admin_password}" "$@"; }
+contributor_ocs() { ocs_as "${v0110_user}:${v0110_password}" "$@"; }
+ws="workspace=${admin_workspace_uuid}"
+
+v0110_member=$(owner_ocs POST "/workspaces/${admin_workspace_uuid}/members" "{\"member\":{\"userUid\":\"${v0110_user}\",\"role\":\"contributor\"}}")
+assert_contains "$v0110_member" '"statuscode":201' 'v0.1.10 contributor membership'
+
+v0110_part_uuid='0b4f8a2e-6c1d-4e3f-9a5b-7c8d9e0f1a2b'
+v0110_part=$(owner_ocs POST "/parts?${ws}" "{\"part\":{\"uuid\":\"${v0110_part_uuid}\",\"manufacturer\":\"Smoke Filters\",\"partNumber\":\"SF-100\",\"description\":\"Smoke oil filter\"}}")
+assert_contains "$v0110_part" '"statuscode":201' 'owner part create'
+v0110_part_again=$(owner_ocs POST "/parts?${ws}" '{"part":{"uuid":"1c5a9b3f-7d2e-4f4a-8b6c-8d9e0f1a2b3c","manufacturer":"  smoke filters ","partNumber":"sf-100","description":"Duplicate identity"}}')
+assert_contains "$v0110_part_again" '"statuscode":200' 'part identity convergence'
+assert_contains "$v0110_part_again" "\"uuid\":\"${v0110_part_uuid}\"" 'part identity convergence uuid'
+v0110_part_denied=$(contributor_ocs POST "/parts?${ws}" '{"part":{"manufacturer":"X","partNumber":"Y","description":"Z"}}')
+assert_contains "$v0110_part_denied" '"statuscode":403' 'contributor part create denied'
+v0110_parts_read=$(contributor_ocs GET "/parts?${ws}")
+assert_contains "$v0110_parts_read" "\"uuid\":\"${v0110_part_uuid}\"" 'contributor part read'
+v0110_part_patch=$(owner_ocs PATCH "/parts/${v0110_part_uuid}?${ws}" '{"expectedRevision":1,"part":{"partNumber":"SF-200"}}')
+assert_contains "$v0110_part_patch" '"statuscode":400' 'part identity immutable'
+v0110_part_patch=$(owner_ocs PATCH "/parts/${v0110_part_uuid}?${ws}" '{"expectedRevision":1,"part":{"description":"Smoke oil filter, long life"}}')
+assert_contains "$v0110_part_patch" '"revision":2' 'part description correction'
+v0110_part_stale=$(owner_ocs PATCH "/parts/${v0110_part_uuid}?${ws}" '{"expectedRevision":1,"part":{"description":"stale"}}')
+assert_contains "$v0110_part_stale" '"statuscode":412' 'part stale revision'
+
+v0110_vendor_uuid='2d6b0c4a-8e3f-4a5b-9c7d-9e0f1a2b3c4d'
+v0110_vendor=$(owner_ocs POST "/vendors?${ws}" "{\"vendor\":{\"uuid\":\"${v0110_vendor_uuid}\",\"name\":\"Smoke Parts Store\"}}")
+assert_contains "$v0110_vendor" '"statuscode":201' 'owner vendor create'
+v0110_vendor_denied=$(contributor_ocs POST "/vendors?${ws}" '{"vendor":{"name":"Denied"}}')
+assert_contains "$v0110_vendor_denied" '"statuscode":403' 'contributor vendor create denied'
+
+# @@V0110_NEXT@@
+
 page_status=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
 	--output /dev/null \

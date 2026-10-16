@@ -586,3 +586,14 @@ The default policy is explicit and server-owned: 14 calendar days and 10 percent
 `GET /assets/{assetUuid}/maintenance-occurrences` returns the materialized work queue. By default only open occurrences are returned; `includeClosed=true` includes history. Each occurrence exposes its UUID, work-definition UUID, completion-baseline activity UUID, lifecycle timestamps/reason, revision, and a `current` field containing the live forecast/status projection. Occurrence storage does not contain due dates, due state, remaining values, or meter thresholds.
 
 `POST /assets/{assetUuid}/maintenance-occurrences/reconcile` is an explicit serialized projection write for Owner/Manager. Reconciliation creates an occurrence when the current forecast is `due_soon`, `due`, or `overdue`; preserves the existing row while the same completion baseline remains actionable; closes it as `completed` when a later linked activity becomes the baseline; and closes it as `not_actionable` or `definition_unavailable` when configuration no longer warrants an open work item. A database uniqueness constraint enforces one open occurrence per work definition.
+
+## Canonical parts and vendors — v0.1.10
+
+Parts and vendors are workspace records. Every member may read them (`part.read`, `vendor.read`); only Owner and Manager may create, correct, or archive them (`part.manage`, `vendor.manage`).
+
+- `GET /parts?includeArchived=false` — list canonical parts ordered by manufacturer and part number.
+- `GET /parts/{uuid}` — read one part, including an archived one.
+- `POST /parts` with `{"part": {"uuid", "manufacturer", "partNumber", "description"}}` — create a canonical part. Identity is manufacturer + part number under the fitment-pack normalization (Unicode NFKC, whitespace collapse, case fold). When the identity already exists the existing record is returned with HTTP 200 instead of 201; an archived identity is restored. A client UUID already used by a different record is a precondition conflict.
+- `PATCH /parts/{uuid}` with `expectedRevision` and `{"part": {"description"}}` — only the description is mutable; identity fields are rejected as unknown.
+- `DELETE /parts/{uuid}` with `expectedRevision` — archive. Archived parts stay referenced by fitments, recorded part usage, and costs.
+- `GET /vendors`, `GET /vendors/{uuid}`, `POST /vendors` (`uuid`, `name`, optional `notes`), `PATCH /vendors/{uuid}` (`name`, `notes`), `DELETE /vendors/{uuid}` — same revision and archive semantics. Vendor names are not unique; vendors are identified by UUID.

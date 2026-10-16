@@ -51,6 +51,12 @@ final class AuditEventCatalog {
 		'profile.installed' => ['subjectType' => 'profile_installation', 'level' => 'info', 'detailKeys' => ['profileKey', 'profileVersion', 'contentHash']],
 		'fitment_pack.imported' => ['subjectType' => 'fitment_pack', 'level' => 'info', 'detailKeys' => ['packKey', 'packVersion', 'contentHash']],
 		'fitment_mapping.created' => ['subjectType' => 'fitment_mapping', 'level' => 'info', 'detailKeys' => ['targetKey', 'matchState']],
+		'part.created' => ['subjectType' => 'part', 'level' => 'info', 'detailKeys' => []],
+		'part.updated' => ['subjectType' => 'part', 'level' => 'info', 'detailKeys' => []],
+		'part.archived' => ['subjectType' => 'part', 'level' => 'info', 'detailKeys' => []],
+		'vendor.created' => ['subjectType' => 'vendor', 'level' => 'info', 'detailKeys' => []],
+		'vendor.updated' => ['subjectType' => 'vendor', 'level' => 'info', 'detailKeys' => []],
+		'vendor.archived' => ['subjectType' => 'vendor', 'level' => 'info', 'detailKeys' => []],
 		'workspace.member.added' => [
 			'subjectType' => 'workspace_member',
 			'level' => 'security',
