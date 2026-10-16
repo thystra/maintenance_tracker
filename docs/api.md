@@ -704,6 +704,19 @@ The ZIP contains `manifest.json` (format, CSV dialect `rfc4180`, UTF-8, `spreads
 
 Each export records audit event `workspace.exported` with `format`, `includeFiles` and the included section count.
 
+## Workspace restore (1.0 prep)
+
+### `POST /import` (multipart: `file`, optional `name`)
+
+Restores a complete v0.1.13 export (`format=json` or `zip`) into a **new** shared workspace owned by the caller. Returns `201` with `{workspace, restored: {section: rows}, notRestored: ["members","audit"], evidence: {restored, skipped: [{evidenceUuid, reason}]}}`.
+
+- Only exports made by an Owner (`manifest.role = owner`, `formatVersion = 1`) are accepted, because other roles' exports are filtered.
+- Limits: upload 640 MiB, `data.json` 64 MiB, 250 000 rows, 20 000 ZIP entries; ZIP paths are checked and evidence must match its recorded size and SHA-256.
+- Every column is checked against the live schema; unknown sections or columns, type mismatches and dangling references reject the whole file (`400`) and nothing is written.
+- All workspace, asset, record and other identity UUIDs are regenerated and numeric IDs remapped; references in text columns are rewritten. Content hashes and source documents stay verbatim.
+- Database rows are written in one transaction. Evidence files are written afterwards to `Maintenance Tracker imports/<name> <date>/` in the caller's Files and attached; failures there are reported in `evidence.skipped` and do not undo the restore.
+- Members, the audit trail and the change journal are not restored. The event `workspace.imported` is audited in the new workspace.
+
 ## Integrations (v0.1.12)
 
 These are the authenticated user's own preferences. They are not workspace-scoped and accept no user ID. Capabilities `activity-integration`, `notifications`, and `calendar-projection` are advertised.

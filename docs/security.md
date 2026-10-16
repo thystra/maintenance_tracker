@@ -264,6 +264,7 @@ CSV/ZIP is a projection into that same validator, not a second trust boundary. I
 
 ### Export boundary
 
+- `POST /import` only creates a new workspace owned by the caller; it never writes into an existing one. Input is bounded (640 MiB upload, 64 MiB data, 250 000 rows, 20 000 ZIP entries), parsed without trusting any ID or UUID from the file, checked column by column against the live schema, and written in a single transaction. Evidence bytes are hash-verified and stored only in the caller's own Files, outside the transaction.
 - `GET /export` is authorized by `workspace.export`, then filtered per section by that section's read capability, so export never shows a role more than the API already does. Audit and membership rows stay Owner-only.
 - Internal columns (`workspace_id`, `write_lock_token`) and internal bookkeeping tables (change journal, evidence folders/shares, transfer state, notification and calendar delivery logs) are never exported. While outside links are disabled, links are omitted and fitment offer URLs blanked.
 - Evidence is resolved through the caller's own Files after the database snapshot transaction. Unshared or missing files are reported without names; file bytes are added only for files the caller can open, within 100 MiB per file and 512 MiB per export. Session-bound Files URLs are removed.

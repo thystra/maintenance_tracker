@@ -425,6 +425,13 @@ private notes, costs, receipts, service history, and local preference state.
 Product/store URLs remain inert HTTPS metadata. No server-side arbitrary URL fetch
 is introduced by fitment import, validation, matching, or export.
 
+## Restore
+
+`ImportService` reads a bounded JSON or ZIP export, `ImportPolicy` validates it
+against the live schema and builds the UUID and ID maps, and all rows are
+inserted into a fresh workspace in one transaction. Evidence bytes are written
+to the caller's Files and attached through `EvidenceService` after commit.
+
 ## Export
 
 `GET /export` (v0.1.13) is a read-only projection. `ExportPolicy` maps sections to tables and to the read capability each needs, and lists every other workspace-scoped table as explicitly excluded; the project validator fails when a new workspace table is in neither list. `ExportService` reads the permitted tables inside `WorkspaceService::runLocked`, which serializes with every write, so the snapshot is consistent, and records `workspace.exported` in the same short transaction. After commit it resolves evidence through `EvidenceService::toApi` for the caller, optionally copies readable evidence files into temporary files, and builds the ZIP with `ZipArchive` in an `ITempManager` file that is streamed back. The same document shape is the planned input for a future import/restore; until then export is one-way.
