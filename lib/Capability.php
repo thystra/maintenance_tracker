@@ -48,6 +48,7 @@ final class Capability implements ICapability {
 					'vendors',
 					'cost-ledger',
 					'outside-links',
+					'evidence-files',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

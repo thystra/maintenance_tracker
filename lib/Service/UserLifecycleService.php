@@ -27,6 +27,10 @@ final class UserLifecycleService {
 		'maint_fit_revs',
 		'maint_fit_packs',
 		'maint_parts',
+		'maint_evidence_links',
+		'maint_evidence',
+		'maint_ev_shares',
+		'maint_ev_folders',
 		'maint_links',
 		'maint_costs',
 		'maint_cost_settings',
@@ -143,6 +147,16 @@ final class UserLifecycleService {
 				}
 				$this->deleteWorkspace($workspaceId);
 			}
+
+			// Nextcloud removes shares to a deleted account itself; drop the
+			// matching evidence-folder share bookkeeping in shared workspaces.
+			$query = $this->db->getQueryBuilder();
+			$query->delete('maint_ev_shares')
+				->where($query->expr()->eq(
+					'member_uid',
+					$query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR),
+				));
+			$query->executeStatement();
 
 			$query = $this->db->getQueryBuilder();
 			$query->delete('maint_members')

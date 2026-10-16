@@ -88,6 +88,8 @@ const migration1103 = await read('lib/Migration/Version1103Date20261016030000.ph
 const outsideLinkPolicy = await read('lib/Service/OutsideLinkPolicy.php')
 const linkService = await read('lib/Service/LinkService.php')
 const adminSettingsController = await read('lib/Controller/AdminSettingsController.php')
+const evidenceService = await read('lib/Service/EvidenceService.php')
+const evidenceFolderService = await read('lib/Service/EvidenceFolderService.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
 const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
@@ -217,6 +219,10 @@ expect(outsideLinkPolicy.includes("strncmp($url, 'https://', 8)") && outsideLink
 expect(linkService.includes('$this->settings->assertEnabled()') && linkService.includes("['enabled' => false, 'items' => []]"), 'Disabled outside links must refuse writes and hide existing links.')
 expect(profileValidator.includes('OutsideLinkPolicy::validate') && fitmentPackValidator.includes('OutsideLinkPolicy::validate'), 'Profile and fitment offer URLs must use the shared outside-link policy.')
 expect(!adminSettingsController.includes('NoAdminRequired') && !adminSettingsController.includes('NoCSRFRequired'), 'The outside-link admin switch must stay admin-only and CSRF-protected.')
+expect(!/fopen\(\s*'[wax]/.test(evidenceService) && !evidenceService.includes('->putContent(') && !evidenceService.includes('->delete('), 'Evidence records must reference Files without writing, copying, or deleting file bytes.')
+expect(evidenceService.includes('$this->rootFolder->getUserFolder($viewerUid)') && evidenceService.includes("'availability' => $stillExists ? 'not_shared' : 'missing', 'file' => null"), "Evidence reads must resolve files in the viewer's own Files view and disclose nothing about files they cannot open.")
+expect(!evidenceFolderService.includes('PERMISSION_SHARE |') && !evidenceFolderService.includes('PERMISSION_ALL') && evidenceFolderService.includes('getNonExistingName'), 'Evidence folder shares must not grant reshare, and the app must never adopt an existing folder it did not create.')
+expect(ownerMatch !== null && contributorMatch !== null && viewerMatch !== null && contributorMatch[1].includes('EVIDENCE_CREATE') && !contributorMatch[1].includes('EVIDENCE_MANAGE') && !viewerMatch[1].includes('EVIDENCE_CREATE'), 'Contributors attach evidence; only Owner/Manager manage others\' evidence; Viewers read only.')
 const outsideLinksVue = await read('src/components/OutsideLinks.vue')
 expect(outsideLinksVue.includes('target="_blank" rel="noopener noreferrer"') && outsideLinksVue.includes("url.startsWith('https://')"), 'Outside links must render https-only with rel="noopener noreferrer" target="_blank".')
 
@@ -234,7 +240,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger', 'outside-links']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger', 'outside-links', 'evidence-files']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -406,7 +412,7 @@ for (const table of [...workspaceTables].sort()) {
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_links', 'maint_costs', 'maint_cost_settings', 'maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_evidence_links', 'maint_evidence', 'maint_ev_shares', 'maint_ev_folders', 'maint_links', 'maint_costs', 'maint_cost_settings', 'maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 

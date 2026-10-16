@@ -78,6 +78,14 @@ final class AssetService {
 		}
 	}
 
+	public function findById(WorkspaceContext $context, int $id): Asset {
+		try {
+			return $this->assetMapper->findById($context->workspace()->getId(), $id);
+		} catch (DoesNotExistException) {
+			throw new NotFoundException('Asset not found');
+		}
+	}
+
 	/**
 	 * @param array<string, mixed> $input
 	 */
