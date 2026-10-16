@@ -90,6 +90,24 @@ data even though the app is not a medical product.
   user's original file.
 - Log IDs and result codes, never file contents or receipt OCR text.
 
+### v0.1.11 evidence sharing and permissions
+
+- `evidence.read` is granted to every role. `evidence.create` (attach, upload, link, unlink, and
+  changing your own evidence) goes to Contributors and up. `evidence.manage` (change or archive anyone's
+  evidence) is Owner/Manager only.
+- A file is attached only after it resolves as a readable file in the actor's own Files view. A path or
+  ID for another user's unshared file is rejected as not found, and the existence of private
+  files is not disclosed.
+- Reads re-resolve through the viewer's Files every time. Members never get another user's file
+  name, path, file ID, or hash without a Nextcloud share.
+- The workspace folder shares grant at most read/create/update/delete, never reshare. Removing a member
+  revokes their share in the same request.
+- MIME must fit the kind (photo → image, video → video, receipt/invoice → image, PDF, or plain text).
+  Directories are never evidence. SHA-256 is computed for files up to 64 MiB and is used only for
+  change detection.
+- Audit events (`evidence.created/updated/archived/linked/unlinked`) carry UUIDs and target types only:
+  no titles, file names, paths, notes, or contents. Warnings log the exception class and workspace UUID only.
+
 ## Mobile credentials
 
 - Use Login Flow v2 and its unique revocable app password.

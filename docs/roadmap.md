@@ -61,7 +61,7 @@ Planned sequence:
 8. [x] v0.1.8 occurrence materialization and forecasting/reminder policy using the derived due-state projection; qualified in PR #10, merged at `383fdbe69c30d38aa66ba6d575787c459aec80d6`, with mainline CI #22 green;
 9. [x] v0.1.9 validated local profile installation into real domain records, including immutable revision provenance, source bindings, authorization/audit/lifecycle integration, and desktop preview/install workflow; qualified in PR #11 with CI #23, merged at `79fc23158c29240c63ad315bcfd0100881f98608`, with mainline CI #24 green;
 10. [x] v0.1.10 canonical parts plus portable fitment packs and compatibility matrix import/export: JSON plus bounded CSV/ZIP validation/import/export, standardized service-position persistence, equipment matching/manual mapping, source export, privacy-minimized community export, profile-v2 part materialization, activity part usage, vendor management, safe store/vendor links with an administrator switch, and the central cost ledger (integer minor units, optional tax lines and multi-currency without conversion); Nextcloud 33–35 qualified;
-11. first-class evidence in Nextcloud Files (photo/video/receipt/invoice/document/other);
+11. [x] v0.1.11 first-class evidence in Nextcloud Files (photo/video/receipt/invoice/document/other): file-ID references with many-to-many links to assets, activities, and costs; an app-managed per-workspace folder in the owner's Files, shared with members by role and reconciled on membership changes; a WebDAV upload and Files picker UI; viewer-scoped visibility; previews; audit and account-deletion cleanup;
 12. Nextcloud Activity, notifications, and writable-calendar projection;
 13. JSON/CSV export and UI/accessibility hardening.
 

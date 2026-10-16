@@ -194,6 +194,14 @@ work items, and one activity can have multiple photos, a video, receipt, invoice
 and other documents. Link rows are explicit rather than overloading a single
 `document_id` field.
 
+Implemented in v0.1.11: `maint_evidence` (kind, title, file ID, attaching user,
+`storage` = `workspace` folder or `linked`, MIME, size, optional SHA-256,
+last-known path, notes, revision, archive state), many-to-many
+`maint_evidence_links` to assets, activities, and costs, and the tracked
+workspace folders and member shares (`maint_ev_folders`, `maint_ev_shares`).
+The same file can be active evidence only once per workspace; link that
+evidence to more targets instead.
+
 Blob retention is independent from activity/evidence-record retention. A policy
 may prune a large media blob while retaining, when permitted, evidence identity,
 original filename/type, original size, checksum, uploader/provenance, linked
