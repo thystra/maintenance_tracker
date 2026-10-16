@@ -33,6 +33,8 @@ use OCP\DB\Types;
  * @method void setUpdatedAt(int $updatedAt)
  * @method int|null getDeletedAt()
  * @method void setDeletedAt(?int $deletedAt)
+ * @method int|null getOrphanedAt()
+ * @method void setOrphanedAt(?int $orphanedAt)
  */
 final class Workspace extends Entity {
 	protected string $uuid = '';
@@ -45,6 +47,7 @@ final class Workspace extends Entity {
 	protected int $createdAt = 0;
 	protected int $updatedAt = 0;
 	protected ?int $deletedAt = null;
+	protected ?int $orphanedAt = null;
 
 	public function __construct() {
 		$this->addType('uuid', Types::STRING);
@@ -57,6 +60,7 @@ final class Workspace extends Entity {
 		$this->addType('createdAt', Types::BIGINT);
 		$this->addType('updatedAt', Types::BIGINT);
 		$this->addType('deletedAt', Types::BIGINT);
+		$this->addType('orphanedAt', Types::BIGINT);
 	}
 
 	/**
@@ -64,6 +68,8 @@ final class Workspace extends Entity {
 	 *     uuid: string,
 	 *     name: string,
 	 *     kind: string,
+ *     ownerUid: string,
+ *     orphaned: bool,
 	 *     role: string,
 	 *     revision: int,
 	 *     createdAt: string,
@@ -75,11 +81,17 @@ final class Workspace extends Entity {
 			'uuid' => $this->getUuid(),
 			'name' => $this->getName(),
 			'kind' => $this->getKind(),
+			'ownerUid' => $this->getOwnerUid(),
+			'orphaned' => $this->getOrphanedAt() !== null,
 			'role' => $role,
 			'revision' => $this->getRevision(),
 			'createdAt' => self::formatTimestamp($this->getCreatedAt()),
 			'updatedAt' => self::formatTimestamp($this->getUpdatedAt()),
 		];
+	}
+
+	public function isOrphaned(): bool {
+		return $this->getOrphanedAt() !== null;
 	}
 
 	private static function formatTimestamp(int $timestamp): string {
