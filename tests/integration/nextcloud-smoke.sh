@@ -7,7 +7,7 @@ set -Eeuo pipefail
 
 database="${NC_SMOKE_DATABASE:-sqlite}"
 case "$database" in
-	sqlite|pgsql)
+	sqlite|pgsql|mysql)
 		;;
 	*)
 		echo "Unsupported NC_SMOKE_DATABASE: $database" >&2
@@ -22,6 +22,19 @@ container="${NC_SMOKE_CONTAINER:-maintenance-tracker-nc${nc_label%%.*}-${databas
 network="${NC_SMOKE_NETWORK:-${container}-network}"
 db_container="${NC_SMOKE_DB_CONTAINER:-${container}-db}"
 postgres_image="${NC_SMOKE_POSTGRES_IMAGE:-postgres:17-alpine}"
+mariadb_image="${NC_SMOKE_MARIADB_IMAGE:-mariadb:11.4}"
+# network: a user-defined bridge with container DNS (default).
+# bridge: the default Docker bridge, addressing the database by container IP,
+# for hosts whose firewall drops traffic on user-defined bridges.
+network_mode="${NC_SMOKE_NETWORK_MODE:-network}"
+case "$network_mode" in
+	network|bridge)
+		;;
+	*)
+		echo "Unsupported NC_SMOKE_NETWORK_MODE: $network_mode" >&2
+		exit 2
+		;;
+esac
 admin_user="integration_admin"
 admin_password="integration-test-only"
 cleanup_user="cleanup_test"
@@ -118,39 +131,73 @@ run_args=(
 if [ "$database" = 'sqlite' ]; then
 	run_args+=(--env SQLITE_DATABASE=nextcloud)
 else
-	docker network create "$network" >/dev/null
-	created_network=1
+	db_run_args=(--rm --detach --name "$db_container")
+	if [ "$network_mode" = 'network' ]; then
+		docker network create "$network" >/dev/null
+		created_network=1
+		db_run_args+=(--network "$network")
+		run_args+=(--network "$network")
+	fi
 
-	docker run --rm --detach \
-		--name "$db_container" \
-		--network "$network" \
-		--env "POSTGRES_DB=$postgres_database" \
-		--env "POSTGRES_USER=$postgres_user" \
-		--env "POSTGRES_PASSWORD=$postgres_password" \
-		"$postgres_image" >/dev/null
+	if [ "$database" = 'pgsql' ]; then
+		docker run "${db_run_args[@]}" \
+			--env "POSTGRES_DB=$postgres_database" \
+			--env "POSTGRES_USER=$postgres_user" \
+			--env "POSTGRES_PASSWORD=$postgres_password" \
+			"$postgres_image" >/dev/null
+	else
+		# Nextcloud requires READ-COMMITTED isolation and row-based binlogs.
+		docker run "${db_run_args[@]}" \
+			--env "MARIADB_DATABASE=$postgres_database" \
+			--env "MARIADB_USER=$postgres_user" \
+			--env "MARIADB_PASSWORD=$postgres_password" \
+			--env "MARIADB_ROOT_PASSWORD=$postgres_password-root" \
+			"$mariadb_image" \
+			--transaction-isolation=READ-COMMITTED --binlog-format=ROW \
+			--character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci >/dev/null
+	fi
 	started_database=1
 
 	db_ready=0
-	for _attempt in $(seq 1 60); do
-		if docker exec "$db_container" \
-			pg_isready --quiet --username "$postgres_user" --dbname "$postgres_database"; then
+	for _attempt in $(seq 1 90); do
+		if [ "$database" = 'pgsql' ]; then
+			if docker exec "$db_container" \
+				pg_isready --quiet --username "$postgres_user" --dbname "$postgres_database"; then
+				db_ready=1
+				break
+			fi
+		elif docker exec "$db_container" \
+			mariadb --user="$postgres_user" --password="$postgres_password" --execute='SELECT 1' "$postgres_database" >/dev/null 2>&1; then
 			db_ready=1
 			break
 		fi
 		sleep 1
 	done
 	if [ "$db_ready" -ne 1 ]; then
-		echo 'PostgreSQL did not become ready within 60 seconds.' >&2
+		echo "${database} did not become ready within 90 seconds." >&2
 		exit 1
 	fi
 
-	run_args+=(
-		--network "$network"
-		--env "POSTGRES_DB=$postgres_database"
-		--env "POSTGRES_USER=$postgres_user"
-		--env "POSTGRES_PASSWORD=$postgres_password"
-		--env "POSTGRES_HOST=$db_container"
-	)
+	if [ "$network_mode" = 'network' ]; then
+		db_host="$db_container"
+	else
+		db_host=$(docker inspect --format '{{.NetworkSettings.IPAddress}}' "$db_container")
+	fi
+	if [ "$database" = 'pgsql' ]; then
+		run_args+=(
+			--env "POSTGRES_DB=$postgres_database"
+			--env "POSTGRES_USER=$postgres_user"
+			--env "POSTGRES_PASSWORD=$postgres_password"
+			--env "POSTGRES_HOST=$db_host"
+		)
+	else
+		run_args+=(
+			--env "MYSQL_DATABASE=$postgres_database"
+			--env "MYSQL_USER=$postgres_user"
+			--env "MYSQL_PASSWORD=$postgres_password"
+			--env "MYSQL_HOST=$db_host"
+		)
+	fi
 fi
 
 docker run "${run_args[@]}" "$image" >/dev/null
