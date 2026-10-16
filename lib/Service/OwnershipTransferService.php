@@ -642,6 +642,34 @@ final class OwnershipTransferService {
 		return $this->toApi($this->require($uuid), $uid);
 	}
 
+	/**
+	 * Background expiry of pending offers past their deadline (the
+	 * ExpireOwnershipTransfers job). Each expiry and its audit row commit
+	 * together; the guarded status update makes a concurrent accept,
+	 * decline, cancel or lazy expiry win cleanly. Database only: no Files.
+	 *
+	 * @return int number of offers expired
+	 */
+	public function expireDue(int $limit = 200): int {
+		$now = $this->timeFactory->getTime();
+		$expired = 0;
+		foreach ($this->transfers->findExpiredPending($now, $limit) as $row) {
+			$this->db->beginTransaction();
+			try {
+				$before = $this->transfers->findByUuid((string)$row['uuid']);
+				if ($before !== null && OwnershipTransferPolicy::isExpired($before, $now)) {
+					$this->expire($before, $now);
+					++$expired;
+				}
+				$this->db->commit();
+			} catch (Throwable $exception) {
+				$this->db->rollBack();
+				throw $exception;
+			}
+		}
+		return $expired;
+	}
+
 	/** @param array<string,mixed> $row */
 	private function expire(array $row, int $now): void {
 		if ($this->transfers->advance((int)$row['id'], OwnershipTransferPolicy::STATUS_PENDING, 'offered', [

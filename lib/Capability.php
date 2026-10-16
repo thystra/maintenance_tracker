@@ -50,6 +50,8 @@ final class Capability implements ICapability {
 					'outside-links',
 					'evidence-files',
 					'workspace-ownership-transfer',
+					'activity-integration',
+					'notifications',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

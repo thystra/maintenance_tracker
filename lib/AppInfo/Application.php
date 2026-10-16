@@ -11,6 +11,7 @@ namespace OCA\MaintenanceTracker\AppInfo;
 
 use OCA\MaintenanceTracker\Capability;
 use OCA\MaintenanceTracker\Listener\UserLifecycleListener;
+use OCA\MaintenanceTracker\Notification\Notifier;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -32,6 +33,7 @@ final class Application extends App implements IBootstrap {
 
 	public function register(IRegistrationContext $context): void {
 		$context->registerCapability(Capability::class);
+		$context->registerNotifierService(Notifier::class);
 		$context->registerEventListener(
 			BeforeUserDeletedEvent::class,
 			UserLifecycleListener::class,
