@@ -7,6 +7,7 @@
 import type { OwnershipTransfer, WorkspaceMemberSummary, WorkspaceSummary } from '../workspaceTypes.ts'
 
 import { computed, onMounted, reactive, ref } from 'vue'
+import ExportPanel from './ExportPanel.vue'
 import { currentWorkspace, selectWorkspace } from '../services/api.ts'
 import { listMembers, listTransfers, listWorkspaces, ocsMessage, offerTransfer, transferAction } from '../services/workspaceApi.ts'
 
@@ -15,6 +16,7 @@ const members = ref<WorkspaceMemberSummary[]>([])
 const outgoing = ref<OwnershipTransfer[]>([])
 const selected = ref<string>('')
 const open = ref(false)
+const exportOpen = ref(false)
 const busy = ref(false)
 const error = ref('')
 const draft = reactive({ toUid: '', leaveAfter: false, expiresInDays: 7 })
@@ -80,18 +82,31 @@ defineExpose({ load })
 					</option>
 				</select>
 			</label>
-			<button v-if="active?.role === 'owner'" type="button" @click="open = !open">
+			<button
+				v-if="active?.role === 'owner'"
+				type="button"
+				aria-controls="workspace-settings"
+				:aria-expanded="open ? 'true' : 'false'"
+				@click="open = !open">
 				{{ open ? 'Hide workspace settings' : 'Workspace settings' }}
 			</button>
+			<button
+				v-if="active !== null"
+				type="button"
+				aria-controls="workspace-export"
+				:aria-expanded="exportOpen ? 'true' : 'false'"
+				@click="exportOpen = !exportOpen">
+				{{ exportOpen ? 'Hide export' : 'Export data' }}
+			</button>
 		</div>
-		<p v-if="active?.orphaned" class="notice notice--error">
+		<p v-if="active?.orphaned" class="notice notice--error" role="status">
 			This workspace has no owner because the owner's account was deleted. A Nextcloud administrator can assign one with
 			<code>occ maintenance_tracker:workspace:assign-owner</code>.
 		</p>
 		<p v-if="error" class="notice notice--error" role="alert">
 			{{ error }}
 		</p>
-		<div v-if="open && active?.role === 'owner'" class="workspace-settings">
+		<div v-if="open && active?.role === 'owner'" id="workspace-settings" class="workspace-settings">
 			<h2>Transfer ownership</h2>
 			<template v-if="pending.length > 0">
 				<div v-for="transfer in pending" :key="transfer.uuid" class="transfer-status">
@@ -149,6 +164,11 @@ defineExpose({ load })
 				</button>
 			</form>
 		</div>
+		<ExportPanel
+			v-if="exportOpen && active !== null"
+			id="workspace-export"
+			:workspace="active.uuid"
+			:role="active.role" />
 	</section>
 </template>
 

@@ -49,3 +49,43 @@ export async function transferAction(uuid: string, action: 'decline' | 'resume' 
 		: await axios.post<OcsEnvelope<OwnershipTransfer>>(url, {}, requestOptions)
 	return data(response)
 }
+
+export type ExportFormat = 'json' | 'zip'
+
+export interface ExportDownload {
+	blob: Blob
+	fileName: string
+}
+
+/**
+ * Fetch a role-filtered workspace export. Errors arrive as a Blob because of
+ * the binary response type, so the OCS message is decoded before rethrowing.
+ *
+ * @param workspace Workspace UUID.
+ * @param format JSON document or ZIP with CSV tables.
+ * @param includeFiles Add evidence files the user can open (ZIP only).
+ */
+export async function downloadExport(workspace: string, format: ExportFormat, includeFiles: boolean): Promise<ExportDownload> {
+	try {
+		const response = await axios.get<Blob>(endpoint('/export'), {
+			...requestOptions,
+			params: { workspace, format, includeFiles: includeFiles ? 1 : 0 },
+			responseType: 'blob',
+		})
+		const disposition = String(response.headers['content-disposition'] ?? '')
+		const match = /filename="([^"]+)"/.exec(disposition)
+		return { blob: response.data, fileName: match?.[1] ?? `maintenance-tracker-export.${format}` }
+	} catch (reason) {
+		const body = (reason as { response?: { data?: unknown } })?.response?.data
+		if (body instanceof Blob) {
+			let message: string
+			try {
+				message = (JSON.parse(await body.text()) as OcsEnvelope<unknown>).ocs?.meta?.message ?? ''
+			} catch {
+				message = ''
+			}
+			throw new Error(message !== '' ? message : 'The export could not be created.', { cause: reason })
+		}
+		throw reason
+	}
+}
