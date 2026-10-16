@@ -504,6 +504,13 @@ const ciWorkflow = await read('.forgejo/workflows/ci.yml')
 expect(packageJson.scripts?.['check:a11y'] === 'node scripts/check-a11y.mjs' && ciWorkflow.includes('npm run check:a11y') && a11yScript.includes('control-label'), 'Accessibility static checks must be wired into npm and CI.')
 expect(roadmap.includes('13. [x] v0.1.13') && changelog.includes('workspace export'), 'Roadmap/CHANGELOG must record the v0.1.13 export and accessibility increment.')
 
+// 1.0 prep: database matrix and upgrade migrations.
+const smokeHarness = await read('tests/integration/nextcloud-smoke.sh')
+const upgradeHarness = await read('tests/integration/upgrade-smoke.sh')
+expect(/database:\n\s+- sqlite\n\s+- pgsql\n\s+- mysql/.test(forgejoCi), 'CI must run the Nextcloud suite on SQLite, PostgreSQL, and MariaDB.')
+expect(smokeHarness.includes('sqlite|pgsql|mysql') && smokeHarness.includes('--transaction-isolation=READ-COMMITTED') && smokeHarness.includes('NC_SMOKE_NETWORK_MODE'), 'Smoke harness must support MariaDB with READ-COMMITTED isolation and the bridge network mode.')
+expect(forgejoCi.includes('tests/integration/upgrade-smoke.sh') && forgejoCi.includes('fetch-depth: 0') && upgradeHarness.includes('occ upgrade') && upgradeHarness.includes('expected_migrations'), 'CI must run the upgrade-migration test, which must verify every shipped migration ran.')
+
 try {
 	await access('.github/workflows/ci.yml')
 	failures.push('GitHub mirror must not retain a competing automatic CI workflow.')

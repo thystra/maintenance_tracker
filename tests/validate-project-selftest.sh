@@ -44,6 +44,7 @@ fixture_paths=(
 	lib/Service/FitmentPackValidator.php lib/Service/FitmentCsvBundleService.php lib/Service/FitmentZipBundleService.php lib/Service/FitmentRepository.php lib/Service/AssetFitmentDescriptorService.php lib/Service/FitmentService.php
 	lib/Migration/Version1120Date20261016160000.php lib/Service/IntegrationProjector.php lib/Service/ReminderService.php lib/Service/IntegrationSettingsService.php lib/Service/CalendarEventBuilder.php lib/Service/IntegrationEventMap.php
 	lib/Service/ExportPolicy.php lib/Service/ExportService.php scripts/check-a11y.mjs
+	tests/integration/nextcloud-smoke.sh tests/integration/upgrade-smoke.sh
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 )
 
