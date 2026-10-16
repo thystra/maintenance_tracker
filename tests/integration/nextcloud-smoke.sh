@@ -2349,6 +2349,80 @@ assert_contains "$(ocs_as "$na" GET "/ownership-transfers/${ntf_expiring_uuid}")
 assert_contains "$(notifications_of "$na")" 'expired' 'offerer told about expiry'
 assert_not_contains "$(notifications_of "$nb")" 'offered you ownership' 'expired offer notification withdrawn'
 
+# Workspace export: role-filtered sections, viewer-scoped evidence privacy,
+# ZIP layout with CSV formula escaping, optional evidence bytes from the
+# caller's own Files, and the export audit event. Data is synthetic.
+tmp_export_dir="${staging_root}/export"; mkdir -p "$tmp_export_dir"
+export_as() {
+	docker exec "$container" curl --silent --show-error --user "$1" --header 'OCS-APIRequest: true' \
+		--output "/tmp/$3" --write-out '%{http_code} %{content_type}' \
+		"http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/export?$2"
+}
+assert_contains "$(docker exec "$container" curl -s --user "$na" -H 'OCS-APIRequest: true' -H 'Accept: application/json' 'http://127.0.0.1/ocs/v2.php/cloud/capabilities?format=json')" '"workspace-export"' 'export capability'
+exp_formula_uuid='a1b2c3d4-0000-4000-8000-00000000e001'
+assert_contains "$(ocs_as "$na" POST "/assets?${nws}" "{\"asset\":{\"uuid\":\"${exp_formula_uuid}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"=HYPERLINK(\\\"x\\\")\"}}")" '"statuscode":201' 'export formula-named asset'
+assert_contains "$(export_as "$na" "${nws}&format=json" exp-owner.json)" '200 application/json' 'owner JSON export'
+exp_owner_json=$(docker exec "$container" cat /tmp/exp-owner.json)
+assert_contains "$exp_owner_json" '"format": "maintenance-tracker-export"' 'export format marker'
+assert_contains "$exp_owner_json" '"audit": [' 'owner export includes audit'
+assert_contains "$exp_owner_json" '"members": [' 'owner export includes members'
+assert_contains "$exp_owner_json" 'Reminder test van' 'owner export includes assets'
+assert_not_contains "$exp_owner_json" 'workspace_id' 'export drops internal workspace ids'
+assert_not_contains "$exp_owner_json" 'write_lock_token' 'export drops lock tokens'
+assert_contains "$(export_as "$nb" "${nws}&format=json" exp-member.json)" '200 application/json' 'contributor JSON export'
+exp_member_json=$(docker exec "$container" cat /tmp/exp-member.json)
+assert_contains "$exp_member_json" '"reason": "not_permitted_for_role"' 'contributor export reports omitted sections'
+assert_not_contains "$exp_member_json" '"audit": [' 'contributor export omits audit'
+assert_not_contains "$exp_member_json" '"user_uid"' 'contributor export omits members'
+assert_contains "$(export_as "$na" "${nws}&format=csv" exp-bad.json)" '400' 'unknown export format rejected'
+assert_contains "$(export_as "$na" "${nws}&format=json&includeFiles=1" exp-bad.json)" '400' 'files require ZIP'
+docker exec --env OC_PASS=exp_x-test-only --user www-data "$container" php occ user:add --password-from-env exp_x >/dev/null
+assert_contains "$(export_as "exp_x:exp_x-test-only" "${nws}&format=json" exp-bad.json)" '403' 'non-member cannot export'
+assert_contains "$(ocs_as "$na" GET "/audit?${nws}&limit=5")" 'workspace.exported' 'export is audited'
+
+# Evidence privacy: a viewer's export never names the owner's private file.
+docker exec "$container" sh -c "echo '${v0111_png}' | base64 -d > /tmp/exp.png"
+assert_contains "$(dav_as "$na" PUT /export-private.png --upload-file /tmp/exp.png)" '201' 'export private file upload'
+assert_contains "$(ocs_as "$na" POST "/evidence?${nws}" "{\"evidence\":{\"uuid\":\"a1b2c3d4-0000-4000-8000-00000000e002\",\"kind\":\"photo\",\"path\":\"/export-private.png\",\"links\":[{\"targetType\":\"asset\",\"targetUuid\":\"${ntf_asset}\"}]}}")" '"statuscode":201' 'export private evidence'
+assert_contains "$(ocs_as "$na" PATCH "/workspaces/${ntf_ws}/members/ntf_b" '{"member":{"role":"viewer"}}')" '"statuscode":200' 'export viewer role'
+assert_contains "$(export_as "$nb" "${nws}&format=zip&includeFiles=1" exp-viewer.zip)" '200 application/zip' 'viewer ZIP export'
+assert_contains "$(export_as "$na" "${nws}&format=zip&includeFiles=1" exp-owner.zip)" '200 application/zip' 'owner ZIP export'
+docker cp "$container:/tmp/exp-viewer.zip" "$tmp_export_dir/viewer.zip" >/dev/null
+docker cp "$container:/tmp/exp-owner.zip" "$tmp_export_dir/owner.zip" >/dev/null
+exp_zip_report=$(python3 - "$tmp_export_dir" <<'PY'
+import csv, io, json, sys, zipfile
+base = sys.argv[1]
+formula = "'" + '=HYPERLINK("x")'
+out = []
+for who in ("owner", "viewer"):
+    z = zipfile.ZipFile(f"{base}/{who}.zip")
+    names = z.namelist()
+    manifest = json.loads(z.read("manifest.json"))
+    data = json.loads(z.read("data.json"))
+    assets = list(csv.DictReader(io.StringIO(z.read("csv/assets.csv").decode())))
+    evidence = z.read("csv/evidence.csv").decode()
+    out.append(f"{who}:files={sum(n.startswith('files/') for n in names)}")
+    out.append(f"{who}:escape={manifest['csv']['spreadsheetEscape']}")
+    out.append(f"{who}:formula={'ok' if any(a['name'] == formula for a in assets) else 'bad'}")
+    out.append(f"{who}:named={'yes' if 'export-private' in evidence or 'export-private' in json.dumps(data) else 'no'}")
+    out.append(f"{who}:audit={'yes' if 'csv/audit.csv' in names else 'no'}")
+    out.append(f"{who}:urls={'yes' if 'downloadUrl' in json.dumps(data) else 'no'}")
+    out.append(f"{who}:unsafe={'yes' if any(n.startswith('/') or '..' in n for n in names) else 'no'}")
+print(" ".join(out))
+PY
+)
+assert_contains "$exp_zip_report" 'owner:files=1' 'owner ZIP carries the readable evidence file'
+assert_contains "$exp_zip_report" 'owner:named=yes' 'owner export names own evidence file'
+assert_contains "$exp_zip_report" 'owner:audit=yes' 'owner ZIP carries audit CSV'
+assert_contains "$exp_zip_report" 'owner:formula=ok' 'CSV formula cell escaped'
+assert_contains "$exp_zip_report" 'owner:escape=leading-apostrophe-v1' 'manifest declares escaping'
+assert_contains "$exp_zip_report" 'viewer:files=0' 'viewer ZIP carries no unshared files'
+assert_contains "$exp_zip_report" 'viewer:named=no' 'viewer export never names unshared files'
+assert_contains "$exp_zip_report" 'viewer:audit=no' 'viewer ZIP omits audit'
+assert_contains "$exp_zip_report" 'owner:urls=no' 'export carries no session URLs'
+assert_contains "$exp_zip_report" 'owner:unsafe=no' 'ZIP entry names are safe'
+docker exec "$container" rm -f /tmp/exp-owner.json /tmp/exp-member.json /tmp/exp-bad.json /tmp/exp-viewer.zip /tmp/exp-owner.zip /tmp/exp.png
+
 # @@V0111_NEXT@@
 
 page_status=$(docker exec "$container" curl --silent --show-error \
