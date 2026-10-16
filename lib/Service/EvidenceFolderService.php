@@ -18,6 +18,8 @@ use OCP\Constants;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
+use OCP\IUserManager;
+use OCP\IUserSession;
 use OCP\Share\IManager as IShareManager;
 use OCP\Share\IShare;
 use Psr\Log\LoggerInterface;
@@ -50,10 +52,13 @@ final class EvidenceFolderService {
 		private IRootFolder $rootFolder,
 		private IShareManager $shareManager,
 		private EvidenceRepository $repository,
+		private TransferRepository $transfers,
 		private WorkspaceMemberMapper $members,
 		private AuthorizationCatalog $authorization,
 		private ITimeFactory $timeFactory,
 		private LoggerInterface $logger,
+		private IUserSession $userSession,
+		private IUserManager $userManager,
 	) {
 	}
 
@@ -81,15 +86,71 @@ final class EvidenceFolderService {
 	 * share events (activity, auto-accept) assume the sharer is the session user.
 	 */
 	public function ensureRoot(Workspace $workspace, string $actorUid): Folder {
+		if ($workspace->isOrphaned()) {
+			throw new ValidationException('This workspace has no owner; a Nextcloud administrator must assign one before evidence can be uploaded');
+		}
+		$open = $this->transfers->findOpenForWorkspace($workspace->getId());
+		if ($open !== null && $open['status'] === OwnershipTransferPolicy::STATUS_IN_PROGRESS) {
+			throw new ValidationException('The workspace is being transferred to a new owner; try again when the transfer has finished');
+		}
 		$folder = $this->trackedFolder($workspace, self::ROOT_SCOPE);
 		if ($folder === null) {
-			$owner = $this->rootFolder->getUserFolder($workspace->getOwnerUid());
-			$app = $this->childFolder($owner, self::APP_FOLDER);
+			$app = $this->appFolderFor($workspace->getOwnerUid());
 			$folder = $app->newFolder($app->getNonExistingName(self::segment($workspace->getName(), 'Workspace')));
 			$this->repository->saveFolder($workspace->getId(), self::ROOT_SCOPE, $workspace->getOwnerUid(), (int)$folder->getId(), $this->timeFactory->getTime());
 		}
 		$this->syncShares($workspace, $actorUid, $folder);
 		return $folder;
+	}
+
+	/** The `Maintenance Tracker` container folder in a user's Files, created on demand. */
+	public function appFolderFor(string $uid): Folder {
+		return $this->childFolder($this->rootFolder->getUserFolder($uid), self::APP_FOLDER);
+	}
+
+	/**
+	 * Run share operations with $uid as the request's active user (restored
+	 * afterwards). Nextcloud share events (activity, notifications,
+	 * auto-accept) resolve paths relative to the session user, so share
+	 * changes the app makes on an owner's behalf during an ownership transfer,
+	 * from the CLI, or during account deletion must run as that owner. Only
+	 * used for the app's own folder shares.
+	 *
+	 * @template T
+	 * @param callable(): T $operation
+	 * @return T
+	 */
+	public function asUser(string $uid, callable $operation): mixed {
+		$user = $this->userManager->get($uid);
+		$previous = $this->userSession->getUser();
+		if ($user === null || $previous?->getUID() === $uid) {
+			return $operation();
+		}
+		$this->userSession->setVolatileActiveUser($user);
+		try {
+			return $operation();
+		} finally {
+			$this->userSession->setVolatileActiveUser($previous);
+		}
+	}
+
+	/**
+	 * Revoke every tracked member share of the workspace folder (ownership
+	 * transfer), acting as $ownerUid. Missing shares are ignored; bookkeeping
+	 * is always cleared.
+	 */
+	public function revokeAllShares(Workspace $workspace, string $ownerUid): void {
+		$this->asUser($ownerUid, fn () => $this->revokeAllSharesUnlocked($workspace));
+	}
+
+	private function revokeAllSharesUnlocked(Workspace $workspace): void {
+		foreach ($this->repository->shares($workspace->getId()) as $row) {
+			$share = $this->share((string)$row['share_id']);
+			if ($share !== null) {
+				$this->attempt(fn () => $this->shareManager->deleteShare($share), $workspace, 'revoke');
+			}
+		}
+		$this->repository->deleteAllShares($workspace->getId());
 	}
 
 	/** Membership hook: set up the folder and shares, never blocking the membership change. */
@@ -150,6 +211,11 @@ final class EvidenceFolderService {
 	 * the owner; they never block the membership change itself.
 	 */
 	public function syncShares(Workspace $workspace, string $actorUid, ?Folder $root = null): void {
+		$open = $this->transfers->findOpenForWorkspace($workspace->getId());
+		if ($open !== null && $open['status'] === OwnershipTransferPolicy::STATUS_IN_PROGRESS) {
+			// The transfer re-creates every share from the new owner when it finishes.
+			return;
+		}
 		$root ??= $this->findRoot($workspace);
 		if ($root === null) {
 			return;
@@ -235,6 +301,10 @@ final class EvidenceFolderService {
 	}
 
 	private function trackedFolder(Workspace $workspace, string $scope): ?Folder {
+		if ($workspace->isOrphaned()) {
+			// The owner account is gone; never resolve a reused UID's Files.
+			return null;
+		}
 		$row = $this->repository->findFolder($workspace->getId(), $scope);
 		if ($row === null || $row['owner_uid'] !== $workspace->getOwnerUid()) {
 			return null;
