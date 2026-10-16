@@ -192,28 +192,74 @@ calendar units; they are not approximated as seconds. Condition-driven rules
 remain a future extension. Unscheduled definitions cover failures and ad-hoc
 work such as a turbocharger or transmission repair.
 
-A future periodic Nextcloud `TimedJob` will reconcile indexed due projections,
-calendar events, and notifications. The design avoids one background job per
-work definition. Production requires system cron.
+Periodic Nextcloud `TimedJob`s deliver reminders and calendar projection
+(v0.1.12, see “Activity, notifications, and calendar”). The design avoids one
+background job per work definition. Production requires system cron.
 
-## Calendar integration
+## Activity, notifications, and calendar
 
-Maintenance schedules are authoritative. Calendar events are an idempotent
-projection and contain a stable task/occurrence UID.
+Activity, notifications, and calendar events are projections. The maintenance
+data and its append-only audit trail stay authoritative; nothing in v0.1.12
+writes back into domain tables or stores a due date or due state.
 
-Nextcloud 34's public calendar API can list a user's calendars and create an
-event in calendars implementing `ICreateFromString`. It does not expose a clear
-public server API for creating a persistent CalDAV calendar or a complete
-update/delete lifecycle. Therefore the MVP will:
+Three background jobs (system cron) do the work, never inside an app database
+transaction, so a rolled-back write never produces an activity or
+notification, and core Activity, Notifications, or CalDAV storage never runs
+inside our transaction (which PostgreSQL would abort on a caught core error).
+`occ maintenance_tracker:integrations:run` runs the same work immediately.
 
-1. ask the user to select an existing writable calendar;
-2. explain how to create a “Maintenance” calendar when needed;
-3. remain fully functional when Calendar/DAV is disabled;
-4. integration-test event reconciliation on Nextcloud 34;
-5. avoid private `OCA\DAV` classes.
+- `ProjectAuditTrail` (5 minutes) reads `maint_audit` after a persisted cursor
+  (`audit_projection_cursor` app config, initialized to the end of the trail at
+  upgrade so history is not replayed) and publishes Nextcloud Activity events.
+  An exclusive lock stops two runners from publishing the same rows; the
+  cursor makes delivery at most once per audit row. Activity types (each a
+  user-configurable Activity setting under “Maintenance Tracker”):
+  - maintenance: activity records and maintenance tasks created/updated/archived;
+  - evidence: evidence added, archived, linked, unlinked;
+  - membership: member added, role changed, removed (the removed user is told);
+  - ownership: transfer offered/cancelled/declined/expired/aborted (offerer and
+    recipient only), transferred, owner assigned, orphaned (all members).
+  Events carry only identifiers and reviewed detail keys (role, target type,
+  reason). Names are rendered when the stream is read, and the workspace name
+  only while the viewer is still a member. The same projection sends the
+  ownership-offer notification to the recipient, withdraws it once the offer is
+  accepted, declined, cancelled, expired, or aborted, and tells the offerer about
+  declines and expiry.
+- `ExpireOwnershipTransfers` (15 minutes) expires pending offers past their
+  deadline. Each expiry and its audit row commit together; the guarded status
+  update lets a concurrent accept/decline/cancel win.
+- `SendMaintenanceReminders` (hourly) enumerates owned workspaces and asks
+  `MaintenanceForecastService` (the v0.1.8 policy layer over the v0.1.7 status)
+  for each asset. Members with reminders enabled (the default) get one
+  notification per (task, completion baseline, level), where level is
+  `due_soon`, `due`, or `overdue`. A higher level replaces the earlier one, and
+  a new completion or a task leaving the attention window withdraws it.
+  `maint_notify_log` records only what was delivered.
 
-Calendar titles default to neutral text such as “Maintenance due,” because a
-shared calendar could otherwise expose health-equipment details.
+### Calendar projection
+
+The public `OCP\Calendar` API lists a user's calendars and writes events to
+calendars implementing `ICreateFromString`. It does not offer a public way to
+create a calendar or to update or delete an event. The app therefore:
+
+1. lets each user pick one of their own writable calendars (not a calendar
+   shared with them, which people outside the workspace may see), or none;
+2. never creates a calendar (the UI suggests creating a “Maintenance” calendar
+   in the Calendar app);
+3. stays fully functional when Calendar/DAV is disabled;
+4. writes one all-day, transparent event per (task, completion baseline) for
+   the earliest calendar or business-day due date within 30 days back to
+   400 days ahead. Meter-only tasks have no date and are not projected;
+5. derives the event UID from workspace, user, calendar, task, and baseline,
+   checks `maint_cal_events` and a calendar search by UID before writing, and
+   records the write, so repeated runs never duplicate an event;
+6. avoids private `OCA\DAV` classes.
+
+Events are titled “Maintenance due” with no description, because a calendar
+can be shared or synced elsewhere and could otherwise expose health-equipment
+details. Because the public API cannot update or delete events, an event stays
+after the work is done (the next due date gets a new event), and a changed
+schedule does not move an event already written. Both are documented gaps.
 
 ## Files and evidence
 

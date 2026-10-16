@@ -686,3 +686,17 @@ All endpoints take `?workspace=<uuid>`. Capability `evidence-files` is advertise
 - `POST /evidence/{uuid}/links` with `{"targetType","targetUuid"}`, and `DELETE /evidence/{uuid}/links/{targetType}/{targetUuid}`. The last link cannot be removed; archive instead.
 
 Each item has `availability`: `available` (with `file.{fileId,name,path,currentSize,changed,filesUrl,downloadUrl,previewUrl}`), `not_shared`, or `missing` (`file: null`, `sha256: null`).
+
+## Integrations (v0.1.12)
+
+These are the authenticated user's own preferences. They are not workspace-scoped and accept no user ID. Capabilities `activity-integration`, `notifications`, and `calendar-projection` are advertised.
+
+- `GET /integrations/settings` returns `{"reminders": bool, "calendarUri": string|null, "calendarAvailable": bool}`. `reminders` defaults to `true`.
+- `PUT /integrations/settings` with `{"settings":{"reminders"?: bool, "calendarUri"?: string|null}}`. `calendarUri` must name one of your own writable calendars from the list below, otherwise 400. `null` or `""` stops calendar projection. Events already written stay.
+- `GET /integrations/calendars` returns `{"items":[{"uri","displayName","color"}]}`: your own enabled, writable, non-deleted calendars, excluding calendars shared with you.
+
+Delivery happens in background jobs (`occ maintenance_tracker:integrations:run` runs them immediately):
+
+- Nextcloud Activity (filter “Maintenance”, types `maintenance_tracker_maintenance`, `maintenance_tracker_evidence`, `maintenance_tracker_membership`, `maintenance_tracker_ownership`).
+- Notifications: `transfer_offered` (object `ownership_transfer`), `transfer_declined` and `transfer_expired` (object `ownership_transfer_result`), and `maintenance_due_soon`, `maintenance_due`, `maintenance_overdue` (object `work_definition`, id = definition UUID).
+- Calendar: all-day `Maintenance due` events with UID `maintenance-tracker-<sha256>@maintenance-tracker`.

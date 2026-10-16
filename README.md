@@ -165,6 +165,10 @@ Owners can hand a workspace and its evidence folder to another member, who must 
 When an owner's account is deleted, a Manager inherits the workspace. Without a Manager it
 is kept as orphaned for an administrator to reassign with occ. See `docs/architecture.md`.
 
+### v0.1.12 Activity, notifications, and calendar
+
+Workspace changes (maintenance records and tasks, evidence, membership, ownership transfers) appear in the Nextcloud Activity app under “Maintenance”. Members get Nextcloud notifications when a task becomes due soon, due, or overdue (they can switch this off under “Reminders and calendar”), and ownership offers notify the recipient. Unanswered offers expire automatically. Each user can choose one of their own writable calendars to receive all-day “Maintenance due” entries for dated tasks. Delivery runs from Nextcloud background jobs, so configure system cron.
+
 ### v0.1.11 evidence in Nextcloud Files
 
 Attach photos, receipts, invoices, documents, and video to assets, activities, and costs. "Upload" stores the file in the workspace folder `Maintenance Tracker/<Workspace>/<Asset>/` in the workspace owner's Files. That folder is shared with every member, read-only for Viewers and writable for Contributors and Managers, so everyone can browse it in Files. "Attach from Files" links any file you already have. Evidence follows renames and moves made in Files. Members only see files Nextcloud lets them open, and uploads count against the workspace owner's quota.
