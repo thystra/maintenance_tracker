@@ -7,6 +7,7 @@
 import type { CostCategory, CostEntry, CostLineType, CostSettings, CostTotal } from '../catalogTypes.ts'
 
 import { onMounted, reactive, ref } from 'vue'
+import EvidencePanel from './EvidencePanel.vue'
 import { archiveCost, createCost, getAssetCosts, updateCostSettings } from '../services/catalogApi.ts'
 
 const props = defineProps<{ assetUuid: string }>()
@@ -103,6 +104,7 @@ onMounted(load)
 						:disabled="saving"
 						@click="mutate(() => archiveCost(entry.uuid, entry.revision))">Archive</button>
 				</span>
+				<EvidencePanel compact targetType="cost" :targetUuid="entry.uuid" />
 			</li>
 		</ul>
 		<form class="cost-form" @submit.prevent="submitCost">
@@ -156,7 +158,7 @@ onMounted(load)
 
 .cost-totals, .cost-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 
-.cost-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cost-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 
 .cost-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; align-items: end; }
 

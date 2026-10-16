@@ -226,6 +226,74 @@ sharing, previews, and WebDAV access.
 
 Mobile clients will upload bytes through Nextcloud Files/WebDAV and associate the verified file through OCS. Ordinary images use streaming `PUT`; large/resumable uploads can use Nextcloud's chunk upload v2.
 
+### v0.1.11 evidence implementation
+
+Evidence is a workspace record (`maint_evidence`) that references one Nextcloud
+file by file ID and links to one to 20 assets, activities, or costs
+(`maint_evidence_links`). The app never stores, copies, rewrites, or deletes
+file bytes; archiving evidence leaves the file untouched.
+
+**Workspace evidence folder.** Each workspace gets one app-managed folder in
+the *workspace owner's* Files: `Maintenance Tracker/<Workspace>/<Asset>/`.
+The app tracks the workspace and asset folders by file ID
+(`maint_ev_folders`), so renaming or moving them in Files is followed. A
+deleted (trashed) folder is never re-adopted by name; a fresh folder is created
+with a non-colliding name on the next upload. Asset folders are only followed
+while they stay inside the workspace folder, because only that folder is
+shared.
+
+The workspace folder is shared with every non-owner member as an ordinary
+Nextcloud user share (`maint_ev_shares`), so members browse it in Files as
+"shared with me". Share permissions follow the role: Viewer read; Contributor
+read/create/update; Manager additionally delete. Reshare is never granted. The
+owner needs no share. Shares are reconciled after every membership add, role
+change, and removal (removal revokes the share). Share creation only runs while
+the owner is the acting user, because Nextcloud's share events (activity,
+auto-accept) assume the sharer is the session user. Membership changes are
+owner-only, and the owner's first upload in an older workspace also creates the
+shares. A sharing failure (for example sharing disabled by the administrator)
+is logged as a warning with the workspace UUID and exception class only. It
+never blocks the membership change, and members then see an explanatory
+reason instead of a path.
+
+Uploads from the app UI ask `POST /evidence-folder/upload-target` for the
+destination in the caller's own Files view and a collision-resistant name
+(`YYYY-MM-DD-<random>-<name>`). The browser then `PUT`s the bytes through
+WebDAV with `If-None-Match: *`, so Nextcloud enforces share permissions,
+quota, antivirus, and storage backends. The client then attaches the file by
+path. Existing files anywhere in the user's own Files (or shared with them) can
+still be linked through the Nextcloud file picker.
+
+**Transactions.** Nextcloud Files and sharing calls never run inside the app's
+database transaction. Core code (for example the user mount cache) catches
+unique-constraint violations as normal control flow, and on PostgreSQL any failed
+statement aborts the whole surrounding transaction. Membership changes therefore
+queue folder and share reconciliation with `UserLifecycleService::afterCommit()`,
+which runs it after commit (best effort and idempotent; the next membership change
+or owner upload reconciles again). Evidence endpoints authorize first, do their
+Files work outside any transaction, and wrap only their database writes in a
+short `WorkspaceService::runLocked()` transaction.
+
+**Visibility.** File metadata is resolved through the *viewing* user's own
+Files at read time. A member sees name, path, preview, and download links only
+for files they can open themselves. Otherwise the record reports
+`not_shared` (or `missing` once the file is gone) with no name, path, file ID,
+or hash. A privately linked file's default title is the kind label, not its
+file name.
+
+**Trade-offs (and alternatives rejected).**
+
+- Uploads count against the workspace owner's quota; the UI checks the
+  reported free space first, and WebDAV rejects over-quota uploads (507).
+- Owner account deletion removes the owner's Files and shares, matching the
+  existing rule that deleting the owner purges the whole workspace.
+- Files a removed member already downloaded or copied remain theirs.
+- Instances with sharing disabled, restricted to groups, or requiring share
+  acceptance degrade to "not shared yet / awaiting acceptance".
+- Group Folders were rejected as a hard requirement: they are an optional
+  admin-installed app with their own ACL model. App data storage was rejected
+  because it is not browsable in Files and bypasses user quota and versions.
+
 ## Audit trail
 
 `maint_audit` is an append-only workspace event stream distinct from the sync

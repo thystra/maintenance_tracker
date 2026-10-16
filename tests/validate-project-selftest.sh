@@ -29,6 +29,7 @@ fixture_paths=(
 	lib/Migration/Version1102Date20261016020000.php
 	lib/Migration/Version1103Date20261016030000.php lib/Service/CostPolicy.php lib/Service/CostService.php
 	lib/Migration/Version1104Date20261016040000.php lib/Service/OutsideLinkPolicy.php lib/Service/LinkService.php lib/Controller/AdminSettingsController.php src/components/OutsideLinks.vue
+	lib/Migration/Version1110Date20261016100000.php lib/Service/EvidenceService.php lib/Service/EvidenceFolderService.php lib/Controller/EvidenceController.php lib/Service/MembershipService.php
 	lib/Service/ActivityPartRepository.php lib/Service/ActivityPartService.php
 	lib/Service/UserLifecycleService.php lib/Service/WorkspaceService.php
 	lib/Service/AuthorizationCatalog.php lib/Service/AuditService.php

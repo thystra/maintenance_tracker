@@ -43,6 +43,9 @@ final class AuthorizationCatalog {
 	public const COST_CREATE = 'cost.create';
 	public const COST_MANAGE = 'cost.manage';
 	public const WORKSPACE_SETTINGS_MANAGE = 'workspace.settings.manage';
+	public const EVIDENCE_READ = 'evidence.read';
+	public const EVIDENCE_CREATE = 'evidence.create';
+	public const EVIDENCE_MANAGE = 'evidence.manage';
 
 	/**
 	 * Reserved vocabulary is deliberately present before its subsystem exists.
@@ -84,6 +87,9 @@ final class AuthorizationCatalog {
 		self::COST_CREATE => ['implemented' => true, 'write' => true],
 		self::COST_MANAGE => ['implemented' => true, 'write' => true],
 		self::WORKSPACE_SETTINGS_MANAGE => ['implemented' => true, 'write' => true],
+		self::EVIDENCE_READ => ['implemented' => true, 'write' => false],
+		self::EVIDENCE_CREATE => ['implemented' => true, 'write' => true],
+		self::EVIDENCE_MANAGE => ['implemented' => true, 'write' => true],
 
 		'maintenance_definition.*' => ['implemented' => false, 'write' => false],
 		'activity.*' => ['implemented' => false, 'write' => false],
@@ -138,6 +144,9 @@ final class AuthorizationCatalog {
 			self::COST_CREATE,
 			self::COST_MANAGE,
 			self::WORKSPACE_SETTINGS_MANAGE,
+			self::EVIDENCE_READ,
+			self::EVIDENCE_CREATE,
+			self::EVIDENCE_MANAGE,
 		],
 		'manager' => [
 			self::WORKSPACE_READ,
@@ -171,6 +180,9 @@ final class AuthorizationCatalog {
 			self::COST_READ,
 			self::COST_CREATE,
 			self::COST_MANAGE,
+			self::EVIDENCE_READ,
+			self::EVIDENCE_CREATE,
+			self::EVIDENCE_MANAGE,
 		],
 		'contributor' => [
 			self::WORKSPACE_READ,
@@ -189,6 +201,8 @@ final class AuthorizationCatalog {
 			self::VENDOR_READ,
 			self::COST_READ,
 			self::COST_CREATE,
+			self::EVIDENCE_READ,
+			self::EVIDENCE_CREATE,
 		],
 		'viewer' => [
 			self::WORKSPACE_READ,
@@ -204,6 +218,7 @@ final class AuthorizationCatalog {
 			self::PART_READ,
 			self::VENDOR_READ,
 			self::COST_READ,
+			self::EVIDENCE_READ,
 		],
 	];
 

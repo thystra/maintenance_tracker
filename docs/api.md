@@ -654,3 +654,16 @@ Links are https URLs attached to a canonical part or a vendor. Reading follows `
 URL rules: must begin with the literal lowercase `https://`; printable ASCII only (no whitespace or backslashes); ASCII domain or IPv4 host with optional port; no `user:password@`; at most 2048 characters. Anything else, including `javascript:`, `data:`, `http:`, and `//host` URLs, is a 400 validation error. Clients must render links with `target="_blank"` and `rel="noopener noreferrer"`.
 
 Administrator switch: Administration settings → Maintenance Tracker → "Allow store and vendor links" (default on). When off, `GET` returns `enabled: false` with no items, `POST` fails with "Outside links are disabled by the Nextcloud administrator", profile offers and fitment-pack offers become import conflicts, and fitment source exports omit offers. Existing rows are kept and reappear when re-enabled.
+
+## Evidence endpoints (v0.1.11)
+
+All endpoints take `?workspace=<uuid>`. Capability `evidence-files` is advertised.
+
+- `GET /evidence-folder`: the workspace folder as seen by you: `available`, `path`, `writable`, `ownerUid`, `freeBytes`, `quotaLimited`, `reason`. It never creates anything.
+- `POST /evidence-folder/upload-target` with `{"target":{"targetType","targetUuid","fileName"}}` (Contributor+): ensures the workspace and asset folders and returns the fields above plus `fileName` (collision-resistant) and `uploadPath`. `PUT` the bytes to `remote.php/dav/files/<you><uploadPath>` with `If-None-Match: *`, then attach.
+- `GET /evidence?targetType=asset|activity|cost&targetUuid=<uuid>`: active evidence for a target.
+- `POST /evidence` with `{"evidence":{"uuid","kind","title?","path"|"fileId","notes?","links":[{"targetType","targetUuid"}]}}` (Contributor+): 201, idempotent by UUID. A file that is already active evidence in the workspace returns 412.
+- `GET /evidence/{uuid}`, `PATCH /evidence/{uuid}` with `{"expectedRevision","evidence":{"kind?","title?","notes?"}}`, and `DELETE /evidence/{uuid}?expectedRevision=` (archive). Editing and archiving are allowed for the attaching Contributor, or for Owner/Manager.
+- `POST /evidence/{uuid}/links` with `{"targetType","targetUuid"}`, and `DELETE /evidence/{uuid}/links/{targetType}/{targetUuid}`. The last link cannot be removed; archive instead.
+
+Each item has `availability`: `available` (with `file.{fileId,name,path,currentSize,changed,filesUrl,downloadUrl,previewUrl}`), `not_shared`, or `missing` (`file: null`, `sha256: null`).

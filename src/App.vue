@@ -37,6 +37,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import AssetCostsPanel from './components/AssetCostsPanel.vue'
+import EvidencePanel from './components/EvidencePanel.vue'
 import PartsCatalogPanel from './components/PartsCatalogPanel.vue'
 import {
 	createActivity,
@@ -1057,6 +1058,7 @@ onMounted(load)
 									</template>
 								</section>
 								<AssetCostsPanel :assetUuid="asset.uuid" />
+								<EvidencePanel targetType="asset" :targetUuid="asset.uuid" />
 								<section>
 									<h4>Components</h4><ul class="compact-list">
 										<li v-for="component in components[asset.uuid] ?? []" :key="component.uuid">
@@ -1325,6 +1327,7 @@ onMounted(load)
 											<span>{{ new Date(activity.performedAt).toLocaleString() }}</span>
 											<span v-if="activity.items[0]?.componentName">{{ activity.items[0]?.componentName }}</span>
 											<span v-for="used in activity.parts ?? []" :key="used.uuid">{{ used.quantity }} {{ used.unit }} × {{ used.manufacturer }} {{ used.partNumber }}<template v-if="used.vendorName"> ({{ used.vendorName }})</template></span>
+											<EvidencePanel compact targetType="activity" :targetUuid="activity.uuid" />
 										</li>
 									</ul>
 									<form class="activity-form" @submit.prevent="submitActivity(asset)">
