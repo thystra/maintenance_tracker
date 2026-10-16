@@ -19,11 +19,11 @@ and reminders while keeping the data in your Nextcloud.
 	<repository>https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud</repository>
 	<dependencies>
 		<php min-version="8.2" max-version="8.5" min-int-size="64"/>
-		<lib>zip</lib>
-		<nextcloud min-version="33" max-version="35"/>
 		<database>pgsql</database>
 		<database>mysql</database>
 		<database>sqlite</database>
+		<lib>zip</lib>
+		<nextcloud min-version="33" max-version="35"/>
 	</dependencies>
 	<background-jobs>
 		<job>OCA\MaintenanceTracker\BackgroundJob\ProjectAuditTrail</job>

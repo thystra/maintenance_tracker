@@ -10,6 +10,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Documentation no longer claims Activity delivery is at most once per audit row: a crash while one row is being projected re-projects that row and can duplicate its activities.
+- `appinfo/info.xml` elements are reordered so the file validates against Nextcloud's `info.xsd` (33–35).
 
 ### Added
 
