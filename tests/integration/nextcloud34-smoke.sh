@@ -1975,6 +1975,51 @@ assert_contains "$v0110_compat" '"partNumber":"PP-7"' 'profile-created canonical
 v0110_parts_after_profile=$(owner_ocs GET "/parts?${ws}")
 assert_contains "$v0110_parts_after_profile" '"description":"Smoke oil filter, long life"' 'profile does not overwrite canonical part description'
 
+assert_contains "$capabilities" '"cost-ledger"' 'cost ledger capability'
+v0110_cost_settings=$(contributor_ocs GET "/cost-settings?${ws}")
+assert_contains "$v0110_cost_settings" '"taxEnabled":false' 'cost settings default no tax'
+assert_contains "$v0110_cost_settings" '"multiCurrency":false' 'cost settings default single currency'
+v0110_cost_uuid='7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f80'
+v0110_cost_body="{\"cost\":{\"uuid\":\"${v0110_cost_uuid}\",\"incurredOn\":\"2026-10-01\",\"description\":\"Oil filter\",\"amount\":\"12.50\",\"category\":\"parts\",\"vendorUuid\":\"${v0110_vendor_uuid}\"}}"
+v0110_cost=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" "$v0110_cost_body")
+assert_contains "$v0110_cost" '"statuscode":201' 'contributor adds cost'
+assert_contains "$v0110_cost" '"amountMinor":1250' 'cost stored in minor units'
+assert_contains "$v0110_cost" '"currency":"USD"' 'cost default currency'
+v0110_cost_retry=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" "$v0110_cost_body")
+assert_contains "$v0110_cost_retry" '"revision":1' 'cost create idempotent retry'
+v0110_cost_float=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f81","incurredOn":"2026-10-01","description":"Float","amount":12.5}}')
+assert_contains "$v0110_cost_float" '"statuscode":400' 'cost float amount rejected'
+v0110_cost_eur=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f82","incurredOn":"2026-10-01","description":"Euro","amount":"5","currency":"EUR"}}')
+assert_contains "$v0110_cost_eur" '"statuscode":400' 'single-currency workspace rejects EUR'
+v0110_cost_tax=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f83","incurredOn":"2026-10-01","description":"Tax","amount":"1","lineType":"tax"}}')
+assert_contains "$v0110_cost_tax" '"statuscode":400' 'tax line rejected while disabled'
+v0110_settings_denied=$(contributor_ocs PATCH "/cost-settings?${ws}" '{"expectedRevision":0,"settings":{"taxEnabled":true}}')
+assert_contains "$v0110_settings_denied" '"statuscode":403' 'contributor cannot change cost settings'
+v0110_cost_archive_denied=$(contributor_ocs DELETE "/costs/${v0110_cost_uuid}?${ws}" '{"expectedRevision":1}')
+assert_contains "$v0110_cost_archive_denied" '"statuscode":403' 'contributor cannot archive cost'
+v0110_settings=$(owner_ocs PATCH "/cost-settings?${ws}" '{"expectedRevision":0,"settings":{"taxEnabled":true,"multiCurrency":true}}')
+assert_contains "$v0110_settings" '"statuscode":200' 'owner enables tax and multi-currency'
+assert_contains "$v0110_settings" '"revision":1' 'cost settings revision'
+v0110_cost_eur=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f82","incurredOn":"2026-10-02","description":"Euro","amount":"5","currency":"EUR"}}')
+assert_contains "$v0110_cost_eur" '"statuscode":201' 'multi-currency EUR entry'
+v0110_cost_tax=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/costs?${ws}" '{"cost":{"uuid":"7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f83","incurredOn":"2026-10-01","description":"Sales tax","amount":"1.00","lineType":"tax"}}')
+assert_contains "$v0110_cost_tax" '"category":"tax"' 'tax line accepted when enabled'
+v0110_costs=$(contributor_ocs GET "/assets/${v0110_asset_uuid}/costs?${ws}")
+assert_contains "$v0110_costs" '"currency":"EUR","exponent":2,"chargesMinor":500' 'EUR total kept separate'
+assert_contains "$v0110_costs" '"currency":"USD","exponent":2,"chargesMinor":1250,"taxMinor":100,"totalMinor":1350' 'USD total with tax'
+v0110_single_denied=$(owner_ocs PATCH "/cost-settings?${ws}" '{"expectedRevision":1,"settings":{"multiCurrency":false}}')
+assert_contains "$v0110_single_denied" '"statuscode":400' 'cannot return to single currency while EUR entries exist'
+v0110_cost_fix=$(owner_ocs PATCH "/costs/${v0110_cost_uuid}?${ws}" '{"expectedRevision":1,"cost":{"amount":"13.00"}}')
+assert_contains "$v0110_cost_fix" '"amountMinor":1300' 'owner corrects cost'
+v0110_cost_archive=$(owner_ocs DELETE "/costs/7d2e4f6a-8b9c-4dae-8f01-3b4c5d6e7f82?${ws}" '{"expectedRevision":1}')
+assert_contains "$v0110_cost_archive" '"statuscode":200' 'owner archives cost'
+v0110_cost_totals=$(contributor_ocs GET "/costs/totals?${ws}")
+assert_contains "$v0110_cost_totals" '"totalMinor":1400' 'workspace totals'
+assert_not_contains "$v0110_cost_totals" '"EUR"' 'archived EUR entry excluded from totals'
+v0110_cost_audit=$(owner_ocs GET "/audit?${ws}&limit=100")
+assert_contains "$v0110_cost_audit" 'cost_settings.updated' 'cost settings audited'
+assert_contains "$v0110_cost_audit" 'cost.archived' 'cost archive audited'
+
 # @@V0110_NEXT@@
 
 page_status=$(docker exec "$container" curl --silent --show-error \

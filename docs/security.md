@@ -185,6 +185,13 @@ Forecast reads use dedicated read capabilities and never mutate due state. Remin
 
 Occurrences are intentionally non-authoritative projections. They cannot be client-created with arbitrary due claims and their table has no fields for due dates, due state, remaining meter values, or thresholds. The unique open marker prevents duplicate active work items under concurrent reconciliation, while current status is always re-derived before presentation.
 
+### Cost ledger integrity and visibility
+
+- Amounts are integer minor units in a signed 64-bit column; floats are rejected at the API boundary and the project validator forbids float/decimal cost columns and float casts in cost code. Totals overflow fails closed.
+- Currencies are never converted. Totals are grouped per ISO 4217 code, so no exchange-rate source, network call, or rounding policy is involved.
+- Every workspace member can read costs (`cost.read`). Contributors can add entries (`cost.create`) but only Owner/Manager can correct or archive (`cost.manage`); only the Owner can change currency/tax settings (`workspace.settings.manage`). Members who should not see spending belong in a separate workspace.
+- Cost creates, corrections, archives, and settings changes are journaled and audited; audit details for settings are limited to the three resulting setting values. Cost rows and settings are purged with a deleted account's personal workspace.
+
 ### Fitment runtime authorization and privacy
 
 The v0.1.10 fitment runtime keeps validation/read access separate from writes: all workspace roles may use `fitment.read`, while only Owner/Manager receive `fitment.import` and `fitment.map`. Import does not automatically attach a generalized target to a local asset. `conflict` and `insufficient` matches require explicit confirmation. Source/store URLs are metadata and are never fetched server-side. Community export is rebuilt from reviewed generalized descriptors and canonical fitment facts and excludes local unit UUIDs/nicknames, VIN/serial identity, notes, costs, receipts, and maintenance history. Offers are omitted from community export until a reviewed selection policy exists.

@@ -4,7 +4,11 @@
  */
 
 import type {
+	AssetCostList,
 	CompatiblePartList,
+	CostEntry,
+	CostSettings,
+	CreateCost,
 	CreatePart,
 	CreateVendor,
 	Part,
@@ -43,4 +47,24 @@ export async function archiveVendor(uuid: string, expectedRevision: number): Pro
 
 export async function getCompatibleParts(assetUuid: string): Promise<CompatiblePartList> {
 	return data(await axios.get<OcsEnvelope<CompatiblePartList>>(endpoint(`/assets/${encodeURIComponent(assetUuid)}/compatible-parts`), requestOptions))
+}
+
+export async function getAssetCosts(assetUuid: string): Promise<AssetCostList> {
+	return data(await axios.get<OcsEnvelope<AssetCostList>>(endpoint(`/assets/${encodeURIComponent(assetUuid)}/costs`), requestOptions))
+}
+
+export async function createCost(assetUuid: string, cost: CreateCost): Promise<CostEntry> {
+	return data(await axios.post<OcsEnvelope<CostEntry>>(endpoint(`/assets/${encodeURIComponent(assetUuid)}/costs`), { cost }, requestOptions))
+}
+
+export async function archiveCost(uuid: string, expectedRevision: number): Promise<CostEntry> {
+	return data(await axios.delete<OcsEnvelope<CostEntry>>(endpoint(`/costs/${encodeURIComponent(uuid)}`), { ...requestOptions, data: { expectedRevision } }))
+}
+
+export async function getCostSettings(): Promise<CostSettings> {
+	return data(await axios.get<OcsEnvelope<CostSettings>>(endpoint('/cost-settings'), requestOptions))
+}
+
+export async function updateCostSettings(expectedRevision: number, settings: Pick<CostSettings, 'defaultCurrency' | 'taxEnabled' | 'multiCurrency'>): Promise<CostSettings> {
+	return data(await axios.patch<OcsEnvelope<CostSettings>>(endpoint('/cost-settings'), { expectedRevision, settings }, requestOptions))
 }

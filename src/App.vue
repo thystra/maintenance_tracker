@@ -36,6 +36,7 @@ import type {
 import { computed, onMounted, reactive, ref } from 'vue'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
+import AssetCostsPanel from './components/AssetCostsPanel.vue'
 import PartsCatalogPanel from './components/PartsCatalogPanel.vue'
 import {
 	createActivity,
@@ -1055,6 +1056,7 @@ onMounted(load)
 										</div>
 									</template>
 								</section>
+								<AssetCostsPanel :assetUuid="asset.uuid" />
 								<section>
 									<h4>Components</h4><ul class="compact-list">
 										<li v-for="component in components[asset.uuid] ?? []" :key="component.uuid">

@@ -609,3 +609,35 @@ Parts and vendors are workspace records. Every member may read them (`part.read`
 Each entry requires a client `uuid`, a `partUuid` referencing an active canonical part, a `quantity`, and a `unit`; `vendorUuid` (active vendor) and `notes` are optional. `quantity` must be a positive decimal **string** (or integer) with at most three fractional digits, such as `"5.5"`. JSON floating-point numbers are rejected so binary rounding can never enter the ledger; the value is stored as an exact integer in thousandths. `unit` is one of `each`, `pair`, `set`, `kit`, `ml`, `l`, `fl_oz`, `qt`, `gal`, `g`, `kg`, `oz`, `lb`, `mm`, `cm`, `m`, `in`, `ft`.
 
 Parts-used rows are immutable activity children. The part's manufacturer, part number, and description and the vendor name are snapshotted at capture so later catalog corrections or archival never rewrite history. Activity responses include `parts` with `uuid`, `partUuid`, `manufacturer`, `partNumber`, `description`, `quantity` (normalized decimal string), `unit`, `vendorUuid`, `vendorName`, and `notes`. Idempotent activity retries compare the parts payload too; reusing an activity UUID with different parts is a precondition conflict.
+
+## Cost ledger — v0.1.10
+
+Costs are workspace ledger entries attached to an asset and optionally linked to an activity on that asset, a vendor, and a canonical part.
+
+Role visibility:
+
+| Capability | Owner | Manager | Contributor | Viewer |
+| --- | --- | --- | --- | --- |
+| `cost.read` — list entries, totals, settings | yes | yes | yes | yes |
+| `cost.create` — add an entry | yes | yes | yes | no |
+| `cost.manage` — correct or archive an entry | yes | yes | no | no |
+| `workspace.settings.manage` — change cost settings | yes | no | no | no |
+
+Every member who can see an asset can see what was spent on it; this is deliberate for shared household/fleet workspaces. Contributors may record what they paid but cannot rewrite or remove history; corrections are Owner/Manager actions and are audited.
+
+Amounts are exact. `amount` is a positive decimal **string** (or integer) with no more fractional digits than the currency's ISO 4217 minor unit (2 for USD/EUR, 0 for JPY, 3 for BHD/KWD, …); JSON floating-point numbers are rejected. Values are stored as signed 64-bit integer minor units (`amountMinor`) and rendered back as an exact decimal string (`amount`).
+
+Workspace cost settings (defaults shown) are `defaultCurrency: "USD"`, `taxEnabled: false`, `multiCurrency: false`:
+
+- With `multiCurrency: false` every entry uses `defaultCurrency`; any other `currency` is rejected. Multi-currency cannot be turned off, and the default currency cannot be changed, while active entries exist in another currency.
+- With `multiCurrency: true` each entry stores its own active ISO 4217 code. There is **no exchange-rate conversion**: totals are always reported per currency and never summed across currencies.
+- With `taxEnabled: false` entries are `lineType: "charge"` only. Enabling tax allows `lineType: "tax"` lines (category is always `tax`), reported separately as `tax` in totals. Disabling tax again keeps existing tax lines visible, correctable, and counted.
+
+Endpoints:
+
+- `GET /cost-settings` — current settings plus `source` (`default` until first saved) and `currenciesInUse`.
+- `PATCH /cost-settings` with `expectedRevision` (0 before the first save) and `{"settings": {"defaultCurrency"?, "taxEnabled"?, "multiCurrency"?}}` — Owner only; audited as `cost_settings.updated` with the three resulting values.
+- `GET /assets/{assetUuid}/costs` — active entries, per-currency `totals` (`chargesMinor`, `taxMinor`, `totalMinor`, their decimal strings, `count`), and settings.
+- `POST /assets/{assetUuid}/costs` with `{"cost": {"uuid", "incurredOn" (YYYY-MM-DD), "description", "amount", "currency"?, "lineType"?, "category"?, "activityUuid"?, "vendorUuid"?, "partUuid"?, "notes"?}}` — categories are `parts`, `labor`, `fluids`, `service`, `fees`, `other` (default). Retrying the same UUID with identical facts returns the existing entry; different facts are a precondition conflict.
+- `GET /costs/{uuid}`, `PATCH /costs/{uuid}` with `expectedRevision` and any of `incurredOn`, `category`, `description`, `amount`, `currency`, `vendorUuid`, `partUuid`, `notes` (changing `currency` requires restating `amount`), `DELETE /costs/{uuid}` with `expectedRevision` — archive.
+- `GET /costs/totals` — workspace-wide per-currency totals over active entries.

@@ -57,3 +57,71 @@ export interface CompatiblePartList {
 	assetUuid: string
 	items: CompatiblePart[]
 }
+
+export type CostLineType = 'charge' | 'tax'
+export type CostCategory = 'parts' | 'labor' | 'fluids' | 'service' | 'fees' | 'tax' | 'other'
+
+export interface CostSettings {
+	defaultCurrency: string
+	taxEnabled: boolean
+	multiCurrency: boolean
+	revision: number
+	source?: 'default' | 'workspace'
+	currenciesInUse?: string[]
+}
+
+export interface CostEntry {
+	uuid: string
+	assetUuid: string
+	activityUuid: string | null
+	vendorUuid: string | null
+	vendorName: string | null
+	partUuid: string | null
+	lineType: CostLineType
+	category: CostCategory
+	description: string
+	/** Exact integer amount in the currency's minor units. */
+	amountMinor: number
+	/** Exact decimal string rendered from amountMinor; never parsed as a float. */
+	amount: string
+	currency: string
+	exponent: number
+	incurredOn: string
+	notes: string | null
+	revision: number
+	createdAt: string
+	updatedAt: string
+	deletedAt: string | null
+}
+
+export interface CostTotal {
+	currency: string
+	exponent: number
+	chargesMinor: number
+	taxMinor: number
+	totalMinor: number
+	charges: string
+	tax: string
+	total: string
+	count: number
+}
+
+export interface AssetCostList {
+	assetUuid: string
+	items: CostEntry[]
+	totals: CostTotal[]
+	settings: CostSettings
+}
+
+export interface CreateCost {
+	uuid: string
+	incurredOn: string
+	description: string
+	/** Decimal string such as "12.50"; numbers are rejected by the server. */
+	amount: string
+	currency?: string
+	lineType?: CostLineType
+	category?: CostCategory
+	vendorUuid?: string | null
+	notes?: string | null
+}

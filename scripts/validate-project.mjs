@@ -82,6 +82,9 @@ const fitmentService = await read('lib/Service/FitmentService.php')
 const fitmentController = await read('lib/Controller/FitmentController.php')
 const activityPartRepository = await read('lib/Service/ActivityPartRepository.php')
 const activityPartService = await read('lib/Service/ActivityPartService.php')
+const costPolicy = await read('lib/Service/CostPolicy.php')
+const costService = await read('lib/Service/CostService.php')
+const migration1103 = await read('lib/Migration/Version1103Date20261016030000.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
 const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
@@ -173,6 +176,7 @@ expect(!allControllers.includes('runWithAccess('), 'Controllers must authorize t
 expect(!/runWithCapability\([\s\S]{0,500}?'(?:viewer|editor|owner|manager|contributor)'/.test(allControllers), 'Controller capability calls must not pass workspace role names.')
 expect(authorizationCatalog.includes("if ($role === 'editor')") && authorizationCatalog.includes("return 'manager';"), 'Legacy editor role compatibility must normalize to manager.')
 
+const ownerMatch = authorizationCatalog.match(/'owner'\s*=>\s*\[([\s\S]*?)\n\s*\],\n\s*'manager'/)
 const managerMatch = authorizationCatalog.match(/'manager'\s*=>\s*\[([\s\S]*?)\n\s*\],\n\s*'contributor'/)
 expect(managerMatch !== null, 'Authorization catalog must define an explicit Manager capability bundle.')
 expect(managerMatch !== null && !managerMatch[1].includes('WORKSPACE_MEMBERS_MANAGE'), 'Manager must not receive workspace.members.manage.')
@@ -200,6 +204,12 @@ expect(viewerMatch !== null && viewerMatch[1].includes('FITMENT_READ') && !viewe
 expect(managerMatch !== null && managerMatch[1].includes('PART_MANAGE') && managerMatch[1].includes('VENDOR_MANAGE'), 'Manager must explicitly receive part and vendor management.')
 expect(contributorMatch !== null && contributorMatch[1].includes('PART_READ') && contributorMatch[1].includes('VENDOR_READ') && !contributorMatch[1].includes('PART_MANAGE') && !contributorMatch[1].includes('VENDOR_MANAGE'), 'Contributor must read but not manage parts/vendors.')
 expect(viewerMatch !== null && viewerMatch[1].includes('PART_READ') && viewerMatch[1].includes('VENDOR_READ') && !viewerMatch[1].includes('PART_MANAGE') && !viewerMatch[1].includes('VENDOR_MANAGE'), 'Viewer must remain read-only for parts/vendors.')
+expect(ownerMatch !== null && ownerMatch[1].includes('WORKSPACE_SETTINGS_MANAGE') && managerMatch !== null && !managerMatch[1].includes('WORKSPACE_SETTINGS_MANAGE'), 'Workspace settings (cost currency/tax) are Owner-only; Manager must not gain them implicitly.')
+expect(managerMatch !== null && managerMatch[1].includes('COST_MANAGE') && contributorMatch !== null && contributorMatch[1].includes('COST_CREATE') && !contributorMatch[1].includes('COST_MANAGE'), 'Contributors may add but not correct/archive cost entries.')
+expect(viewerMatch !== null && viewerMatch[1].includes('COST_READ') && !viewerMatch[1].includes('COST_CREATE'), 'Viewers may read costs but not add them.')
+expect(!/Types::(FLOAT|DECIMAL)/.test(migration1103) && migration1103.includes("addColumn('amount_minor', Types::BIGINT"), 'Cost amounts must be stored as integer minor units, never float/decimal columns.')
+expect(!costPolicy.includes('(float)') && !costPolicy.includes('floatval') && !costService.includes('(float)'), 'Cost ledger code must not use floating point.')
+expect(costService.includes('Single-currency mode requires every active cost entry') && costPolicy.includes('enable multi-currency'), 'Single-currency mode must reject foreign currencies rather than convert them.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -211,12 +221,11 @@ for (const capability of [
 	'report.share.revoke',
 	'external_submission.read',
 	'external_submission.review',
-	'workspace.settings.manage',
 	'workspace.delete',
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -388,7 +397,7 @@ for (const table of [...workspaceTables].sort()) {
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_costs', 'maint_cost_settings', 'maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 

@@ -26,6 +26,10 @@ final class PartsCostsAuthorizationTest extends TestCase {
 			'part.manage' => ['owner' => true, 'manager' => true, 'contributor' => false, 'viewer' => false],
 			'vendor.read' => ['owner' => true, 'manager' => true, 'contributor' => true, 'viewer' => true],
 			'vendor.manage' => ['owner' => true, 'manager' => true, 'contributor' => false, 'viewer' => false],
+			'cost.read' => ['owner' => true, 'manager' => true, 'contributor' => true, 'viewer' => true],
+			'cost.create' => ['owner' => true, 'manager' => true, 'contributor' => true, 'viewer' => false],
+			'cost.manage' => ['owner' => true, 'manager' => true, 'contributor' => false, 'viewer' => false],
+			'workspace.settings.manage' => ['owner' => true, 'manager' => false, 'contributor' => false, 'viewer' => false],
 		];
 		$cases = [];
 		foreach ($grants as $capability => $roles) {
@@ -43,21 +47,25 @@ final class PartsCostsAuthorizationTest extends TestCase {
 
 	public function testReadCapabilitiesAreNotWrites(): void {
 		$catalog = new AuthorizationCatalog();
-		foreach (['part.read', 'vendor.read'] as $capability) {
+		foreach (['part.read', 'vendor.read', 'cost.read'] as $capability) {
 			self::assertFalse($catalog->isWrite($capability));
 		}
-		foreach (['part.manage', 'vendor.manage'] as $capability) {
+		foreach (['part.manage', 'vendor.manage', 'cost.create', 'cost.manage', 'workspace.settings.manage'] as $capability) {
 			self::assertTrue($catalog->isWrite($capability));
 		}
 	}
 
 	public function testAuditVocabularyCoversCatalogMutations(): void {
 		$catalog = new AuditEventCatalog();
-		foreach (['part', 'vendor'] as $entity) {
+		foreach (['part', 'vendor', 'cost'] as $entity) {
 			self::assertSame("{$entity}.created", $catalog->eventForChange($entity, 'upsert', 1));
 			self::assertSame("{$entity}.updated", $catalog->eventForChange($entity, 'upsert', 2));
 			self::assertSame("{$entity}.archived", $catalog->eventForChange($entity, 'delete', 3));
 			self::assertSame([], $catalog->definition("{$entity}.created")['detailKeys']);
 		}
+	}
+
+	public function testCostSettingsAuditDetailsAreBounded(): void {
+		self::assertSame(['defaultCurrency', 'taxEnabled', 'multiCurrency'], (new AuditEventCatalog())->definition('cost_settings.updated')['detailKeys']);
 	}
 }
