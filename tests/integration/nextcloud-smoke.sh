@@ -2099,7 +2099,88 @@ assert_contains "$v0110_links_on" 'sf-100?ref=mt' 'links reappear when re-enable
 v0110_link_audit=$(owner_ocs GET "/audit?${ws}&limit=100")
 assert_contains "$v0110_link_audit" 'link.created' 'link creation audited'
 
-# @@V0110_NEXT@@
+# v0.1.11 evidence files: references into Nextcloud Files plus the
+# owner-owned workspace evidence folder shared with members by role. Test files
+# are synthetic placeholders; no real receipts or notes enter fixtures or logs.
+json_field() { python3 -c 'import json,sys
+d=json.load(sys.stdin)["ocs"]["data"]
+for k in sys.argv[1].split("."): d=d[k] if d is not None else None
+print("" if d is None else d)' "$1"; }
+dav_as() {
+	local credentials=$1 method=$2 path; shift 2
+	path=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$1"); shift
+	docker exec "$container" curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+		--user "$credentials" --request "$method" "$@" "http://127.0.0.1/remote.php/dav/files/${credentials%%:*}${path}"
+}
+v0111_png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+docker exec "$container" sh -c "echo '${v0111_png}' | base64 -d > /tmp/v0111.png"
+v0111_put=$(dav_as "${admin_user}:${admin_password}" PUT /v0111-private-receipt.png --upload-file /tmp/v0111.png)
+assert_contains "$v0111_put" '201' 'owner private file upload'
+assert_contains "$(docker exec "$container" curl -s --user "${admin_user}:${admin_password}" -H 'OCS-APIRequest: true' -H 'Accept: application/json' 'http://127.0.0.1/ocs/v2.php/cloud/capabilities?format=json')" '"evidence-files"' 'evidence capability'
+
+v0111_private_uuid='8a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+v0111_private=$(owner_ocs POST "/evidence?${ws}" "{\"evidence\":{\"uuid\":\"${v0111_private_uuid}\",\"kind\":\"receipt\",\"path\":\"/v0111-private-receipt.png\",\"links\":[{\"targetType\":\"asset\",\"targetUuid\":\"${v0110_asset_uuid}\"},{\"targetType\":\"activity\",\"targetUuid\":\"${v0110_activity_uuid}\"},{\"targetType\":\"cost\",\"targetUuid\":\"${v0110_cost_uuid}\"}]}}")
+assert_contains "$v0111_private" '"statuscode":201' 'owner links existing file as evidence'
+assert_contains "$v0111_private" '"availability":"available"' 'owner sees linked file'
+assert_contains "$v0111_private" '"previewUrl":"' 'preview URL for image evidence'
+v0111_retry=$(owner_ocs POST "/evidence?${ws}" "{\"evidence\":{\"uuid\":\"${v0111_private_uuid}\",\"kind\":\"receipt\",\"path\":\"/v0111-private-receipt.png\",\"links\":[{\"targetType\":\"asset\",\"targetUuid\":\"${v0110_asset_uuid}\"}]}}")
+assert_contains "$v0111_retry" '"statuscode":20' 'evidence create is idempotent by UUID'
+v0111_dup=$(owner_ocs POST "/evidence?${ws}" "{\"evidence\":{\"uuid\":\"9b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e\",\"kind\":\"receipt\",\"path\":\"/v0111-private-receipt.png\",\"links\":[{\"targetType\":\"asset\",\"targetUuid\":\"${v0110_asset_uuid}\"}]}}")
+assert_contains "$v0111_dup" '"statuscode":412' 'same file twice is a conflict'
+v0111_kind=$(owner_ocs POST "/evidence?${ws}" "{\"evidence\":{\"uuid\":\"ac3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f\",\"kind\":\"video\",\"path\":\"/v0111-private-receipt.png\",\"links\":[{\"targetType\":\"asset\",\"targetUuid\":\"${v0110_asset_uuid}\"}]}}")
+assert_contains "$v0111_kind" '"statuscode":400' 'kind/MIME mismatch rejected'
+v0111_contrib_view=$(contributor_ocs GET "/evidence?${ws}&targetType=cost&targetUuid=${v0110_cost_uuid}")
+assert_contains "$v0111_contrib_view" '"availability":"not_shared"' 'member never sees an unshared private file'
+assert_not_contains "$v0111_contrib_view" 'v0111-private-receipt' 'unshared file path is not disclosed'
+assert_contains "$v0111_contrib_view" '"file":null' 'unshared file metadata withheld'
+v0111_steal=$(contributor_ocs POST "/evidence?${ws}" "{\"evidence\":{\"uuid\":\"bd4e5f6a-7b8c-4d9e-8f0a-2b3c4d5e6f7a\",\"kind\":\"receipt\",\"path\":\"/v0111-private-receipt.png\",\"links\":[{\"targetType\":\"asset\",\"targetUuid\":\"${v0110_asset_uuid}\"}]}}")
+assert_contains "$v0111_steal" '"statuscode":404' 'member cannot attach another user file by path'
+
+v0111_target=$(contributor_ocs POST "/evidence-folder/upload-target?${ws}" "{\"target\":{\"targetType\":\"cost\",\"targetUuid\":\"${v0110_cost_uuid}\",\"fileName\":\"receipt.png\"}}")
+assert_contains "$v0111_target" '"statuscode":200' 'upload target for contributor'
+assert_contains "$v0111_target" '"writable":true' 'contributor share is writable'
+v0111_upload_path=$(printf '%s' "$v0111_target" | json_field uploadPath)
+if [ -z "$v0111_upload_path" ]; then echo 'upload target: missing uploadPath' >&2; exit 1; fi
+v0111_contrib_put=$(dav_as "${v0110_user}:${v0110_password}" PUT "$v0111_upload_path" --header 'If-None-Match: *' --upload-file /tmp/v0111.png)
+assert_contains "$v0111_contrib_put" '201' 'contributor uploads into shared workspace folder'
+v0111_shared_uuid='ce5f6a7b-8c9d-4e0f-9a1b-3c4d5e6f7a8b'
+v0111_shared=$(contributor_ocs POST "/evidence?${ws}" "{\"evidence\":{\"uuid\":\"${v0111_shared_uuid}\",\"kind\":\"receipt\",\"path\":\"${v0111_upload_path}\",\"links\":[{\"targetType\":\"cost\",\"targetUuid\":\"${v0110_cost_uuid}\"}]}}")
+assert_contains "$v0111_shared" '"statuscode":201' 'contributor attaches uploaded evidence'
+assert_contains "$v0111_shared" '"storage":"workspace"' 'upload stored in workspace folder'
+v0111_owner_sees=$(owner_ocs GET "/evidence/${v0111_shared_uuid}?${ws}")
+assert_contains "$v0111_owner_sees" '"availability":"available"' 'owner sees member upload in own folder'
+assert_contains "$v0111_owner_sees" 'Maintenance Tracker' 'owner path is under app folder'
+
+v0111_owner_path=$(printf '%s' "$v0111_owner_sees" | json_field file.path)
+v0111_moved="$(dirname "$v0111_owner_path")/renamed-receipt.png"
+v0111_move=$(dav_as "${admin_user}:${admin_password}" MOVE "$v0111_owner_path" --header "Destination: http://127.0.0.1/remote.php/dav/files/${admin_user}$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$v0111_moved")")
+assert_contains "$v0111_move" '201' 'rename in Files'
+v0111_after_move=$(contributor_ocs GET "/evidence/${v0111_shared_uuid}?${ws}")
+assert_contains "$v0111_after_move" 'renamed-receipt.png' 'evidence follows rename by file id'
+assert_contains "$v0111_after_move" '"availability":"available"' 'renamed evidence still available'
+
+v0111_viewer=$(owner_ocs PATCH "/workspaces/${admin_workspace_uuid}/members/${v0110_user}" '{"member":{"role":"viewer"}}')
+assert_contains "$v0111_viewer" '"statuscode":200' 'demote member to viewer'
+v0111_viewer_folder=$(contributor_ocs GET "/evidence-folder?${ws}")
+assert_contains "$v0111_viewer_folder" '"writable":false' 'viewer share is read-only'
+v0111_viewer_attach=$(contributor_ocs POST "/evidence?${ws}" "{\"evidence\":{\"uuid\":\"df6a7b8c-9d0e-4f1a-8b2c-4d5e6f7a8b9c\",\"kind\":\"photo\",\"path\":\"/x.png\",\"links\":[{\"targetType\":\"asset\",\"targetUuid\":\"${v0110_asset_uuid}\"}]}}")
+assert_contains "$v0111_viewer_attach" '"statuscode":403' 'viewer cannot attach evidence'
+
+v0111_delete=$(dav_as "${admin_user}:${admin_password}" DELETE /v0111-private-receipt.png)
+assert_contains "$v0111_delete" '204' 'delete linked file in Files'
+v0111_missing=$(owner_ocs GET "/evidence/${v0111_private_uuid}?${ws}")
+assert_contains "$v0111_missing" '"availability":"missing"' 'deleted file reported missing'
+
+v0111_audit=$(owner_ocs GET "/audit?${ws}&limit=100")
+assert_contains "$v0111_audit" 'evidence.created' 'evidence creation audited'
+assert_not_contains "$v0111_audit" 'renamed-receipt' 'audit carries no file names'
+
+v0111_remove=$(owner_ocs DELETE "/workspaces/${admin_workspace_uuid}/members/${v0110_user}")
+assert_contains "$v0111_remove" '"statuscode":200' 'remove evidence member'
+v0111_revoked=$(dav_as "${v0110_user}:${v0110_password}" PROPFIND "$(dirname "$v0111_upload_path")" --header 'Depth: 0')
+assert_contains "$v0111_revoked" '404' 'membership removal revokes folder share'
+
+# @@V0111_NEXT@@
 
 page_status=$(docker exec "$container" curl --silent --show-error \
 	--user "${admin_user}:${admin_password}" \
