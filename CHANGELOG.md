@@ -14,6 +14,8 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Localization readiness: every UI string in the Vue app and the admin settings page goes through Nextcloud l10n (`@nextcloud/l10n` via `src/l10n.ts`, `IL10N` in PHP), with sentence-level placeholders and plurals. `npm run l10n:check` (also in CI) rejects untranslated template text, attributes and script strings; `npm run l10n:extract` writes a `.pot` template; `.l10nignore` and `l10n/` follow Nextcloud's Transifex workflow. See `docs/localization.md`.
+
 - MariaDB is part of the qualification matrix: the smoke harness accepts `NC_SMOKE_DATABASE=mysql` (MariaDB 11.4 with READ-COMMITTED isolation and row binlogs) and CI runs it on Nextcloud 33–35. No code change was needed.
 - New `tests/integration/upgrade-smoke.sh` installs the v0.1.10 app state, creates data, upgrades to the working tree with `occ upgrade`, and checks that exactly the shipped migrations ran, old data survived, and later features work on it. CI runs it on Nextcloud 33–35 with SQLite, PostgreSQL, and MariaDB.
 - The harnesses accept `NC_SMOKE_NETWORK_MODE=bridge` to reach the database container by IP on the default Docker bridge, for hosts whose firewall drops traffic on user-defined bridges.

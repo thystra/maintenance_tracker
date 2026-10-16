@@ -155,6 +155,7 @@ not this public application repository.
 - [Profile format](docs/profile-format.md)
 - [Security and privacy](docs/security.md)
 - [Accessibility](docs/accessibility.md)
+- [Localization](docs/localization.md)
 - [Nextcloud app engineering guidance](docs/NEXTCLOUD-DEVELOPMENT-GUIDANCE.md)
 - [Licensing and distribution](docs/licensing.md)
 - [Roadmap](docs/roadmap.md)
