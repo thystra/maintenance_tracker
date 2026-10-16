@@ -38,7 +38,9 @@ import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import AssetCostsPanel from './components/AssetCostsPanel.vue'
 import EvidencePanel from './components/EvidencePanel.vue'
+import OwnershipBanner from './components/OwnershipBanner.vue'
 import PartsCatalogPanel from './components/PartsCatalogPanel.vue'
+import WorkspacePanel from './components/WorkspacePanel.vue'
 import {
 	createActivity,
 	createAsset,
@@ -809,6 +811,12 @@ async function submitAssignment(): Promise<void> {
 }
 
 onMounted(load)
+
+const workspacePanel = ref<{ load: () => Promise<void> } | null>(null)
+
+function reloadAfterTransfer(): void {
+	void workspacePanel.value?.load()
+}
 </script>
 
 <template>
@@ -827,6 +835,9 @@ onMounted(load)
 					</div>
 					<span v-if="capabilities" class="pill">{{ capabilities.appVersion }}</span>
 				</header>
+
+				<OwnershipBanner @changed="reloadAfterTransfer" />
+				<WorkspacePanel ref="workspacePanel" />
 
 				<p v-if="error" class="notice notice--error" role="alert">
 					{{ error }}

@@ -92,6 +92,8 @@ const evidenceService = await read('lib/Service/EvidenceService.php')
 const evidenceFolderService = await read('lib/Service/EvidenceFolderService.php')
 const evidenceController = await read('lib/Controller/EvidenceController.php')
 const membershipService = await read('lib/Service/MembershipService.php')
+const ownershipService = await read('lib/Service/OwnershipTransferService.php')
+const lifecycleService = await read('lib/Service/UserLifecycleService.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
 const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
@@ -225,6 +227,8 @@ expect(!/fopen\(\s*'[wax]/.test(evidenceService) && !evidenceService.includes('-
 expect(evidenceService.includes('$this->rootFolder->getUserFolder($viewerUid)') && evidenceService.includes("'availability' => $stillExists ? 'not_shared' : 'missing', 'file' => null"), "Evidence reads must resolve files in the viewer's own Files view and disclose nothing about files they cannot open.")
 expect(!evidenceFolderService.includes('PERMISSION_SHARE |') && !evidenceFolderService.includes('PERMISSION_ALL') && evidenceFolderService.includes('getNonExistingName'), 'Evidence folder shares must not grant reshare, and the app must never adopt an existing folder it did not create.')
 expect(!evidenceController.includes('$this->run(') && evidenceController.includes('runOutsideTransaction(') && !/\$this->evidenceFolders->(syncShares|prepareForMembers)\([^)]*\);/.test(membershipService.replace(/afterCommit\(fn \(\) => \$this->evidenceFolders->[^;]*;/g, '')), 'Nextcloud Files and sharing calls must run outside the app database transaction (PostgreSQL aborts the whole transaction on a caught core error); defer them with afterCommit or runOutsideTransaction.')
+expect(ownershipService.includes("'swap' => $this->swap(") && ownershipService.includes('->move($target)') && ownershipService.indexOf('private function snapshot(') < ownershipService.indexOf('private function swap('), 'Ownership transfer must move files and re-point references before roles swap, through the persisted step machine.')
+expect(lifecycleService.includes('$this->orphanWorkspace($workspaceId, $userUid)') && lifecycleService.includes('hasOtherMembers'), 'Owner account deletion must never silently purge a workspace that other members still use.')
 expect(ownerMatch !== null && contributorMatch !== null && viewerMatch !== null && contributorMatch[1].includes('EVIDENCE_CREATE') && !contributorMatch[1].includes('EVIDENCE_MANAGE') && !viewerMatch[1].includes('EVIDENCE_CREATE'), 'Contributors attach evidence; only Owner/Manager manage others\' evidence; Viewers read only.')
 const outsideLinksVue = await read('src/components/OutsideLinks.vue')
 expect(outsideLinksVue.includes('target="_blank" rel="noopener noreferrer"') && outsideLinksVue.includes("url.startsWith('https://')"), 'Outside links must render https-only with rel="noopener noreferrer" target="_blank".')
@@ -243,7 +247,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger', 'outside-links', 'evidence-files']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger', 'outside-links', 'evidence-files', 'workspace-ownership-transfer']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 

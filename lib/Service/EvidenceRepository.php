@@ -175,6 +175,60 @@ final class EvidenceRepository {
 			->executeStatement();
 	}
 
+	/** @return list<array<string,mixed>> */
+	public function folders(int $workspaceId): array {
+		$q = $this->db->getQueryBuilder();
+		$q->select('*')->from('maint_ev_folders')
+			->where($q->expr()->eq('workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id');
+		return $this->many($q);
+	}
+
+	public function repointFolder(int $folderRowId, string $ownerUid, int $folderId): void {
+		$q = $this->db->getQueryBuilder();
+		$q->update('maint_ev_folders')
+			->set('owner_uid', $q->createNamedParameter($ownerUid))
+			->set('folder_id', $q->createNamedParameter($folderId, IQueryBuilder::PARAM_INT))
+			->where($q->expr()->eq('id', $q->createNamedParameter($folderRowId, IQueryBuilder::PARAM_INT)))
+			->executeStatement();
+	}
+
+	/** @return list<array<string,mixed>> */
+	public function activeEvidence(int $workspaceId): array {
+		$q = $this->db->getQueryBuilder();
+		$q->select('id', 'file_id')->from('maint_evidence')
+			->where($q->expr()->eq('workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->andWhere($q->expr()->isNull('deleted_at'))
+			->orderBy('id');
+		return $this->many($q);
+	}
+
+	/** Re-point an evidence reference after its file moved to another storage. */
+	public function repointEvidence(int $evidenceId, int $fileId, string $path, int $now): void {
+		$q = $this->db->getQueryBuilder();
+		$q->update('maint_evidence')
+			->set('file_id', $q->createNamedParameter($fileId, IQueryBuilder::PARAM_INT))
+			->set('last_known_path', $q->createNamedParameter($path))
+			->set('storage', $q->createNamedParameter('workspace'))
+			->set('updated_at', $q->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($q->expr()->eq('id', $q->createNamedParameter($evidenceId, IQueryBuilder::PARAM_INT)))
+			->executeStatement();
+	}
+
+	public function deleteAllShares(int $workspaceId): void {
+		$q = $this->db->getQueryBuilder();
+		$q->delete('maint_ev_shares')
+			->where($q->expr()->eq('workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->executeStatement();
+	}
+
+	public function deleteAllFolders(int $workspaceId): void {
+		$q = $this->db->getQueryBuilder();
+		$q->delete('maint_ev_folders')
+			->where($q->expr()->eq('workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->executeStatement();
+	}
+
 	/** Account deletion: drop share bookkeeping for a deleted member everywhere. */
 	public function deleteSharesForMember(string $memberUid): void {
 		$q = $this->db->getQueryBuilder();

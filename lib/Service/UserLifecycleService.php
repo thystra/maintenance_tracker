@@ -72,6 +72,7 @@ final class UserLifecycleService {
 		private IDBConnection $db,
 		private ITimeFactory $timeFactory,
 		private LoggerInterface $logger,
+		private AuditService $audit,
 	) {
 	}
 
@@ -194,13 +195,16 @@ final class UserLifecycleService {
 		$this->beginLockedState($userUid, 'deleted');
 		try {
 			$this->setState($userUid, 'deleted');
-			$workspaceIds = $this->findPersonalWorkspaceIds($userUid);
-			foreach ($workspaceIds as $workspaceId) {
-				$this->serializeWorkspacePurge($workspaceId);
-				foreach (self::WORKSPACE_PURGE_ORDER as $table) {
-					$this->deleteByWorkspace($table, $workspaceId);
+			$this->closePendingTransfers($userUid);
+			foreach ($this->findOwnedWorkspaceIds($userUid) as $workspaceId) {
+				if ($this->hasOtherMembers($workspaceId, $userUid)) {
+					// Never silently purge a workspace other people use. If the
+					// pre-deletion transfer to a Manager did not happen, keep it
+					// orphaned for an administrator (occ maintenance_tracker:workspace:assign-owner).
+					$this->orphanWorkspace($workspaceId, $userUid);
+					continue;
 				}
-				$this->deleteWorkspace($workspaceId);
+				$this->purgeWorkspace($workspaceId);
 			}
 
 			// Nextcloud removes shares to a deleted account itself; drop the
@@ -220,10 +224,121 @@ final class UserLifecycleService {
 					$query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR),
 				));
 			$query->executeStatement();
+
+			// An orphaned workspace whose last member is gone has nobody left
+			// to assign it to; purge it like any unused workspace.
+			foreach ($this->findMemberlessOrphans() as $workspaceId) {
+				$this->purgeWorkspace($workspaceId);
+			}
 			$this->db->commit();
 		} catch (Throwable $exception) {
 			$this->rollback();
 			throw $exception;
+		}
+	}
+
+	private function purgeWorkspace(int $workspaceId): void {
+		$this->serializeWorkspacePurge($workspaceId);
+		foreach (self::WORKSPACE_PURGE_ORDER as $table) {
+			$this->deleteByWorkspace($table, $workspaceId);
+		}
+		$this->deleteTransfers($workspaceId);
+		$this->deleteWorkspace($workspaceId);
+	}
+
+	private function orphanWorkspace(int $workspaceId, string $formerOwnerUid): void {
+		$this->serializeWorkspacePurge($workspaceId);
+		$now = $this->timeFactory->getTime();
+		$query = $this->db->getQueryBuilder();
+		$query->update('maint_spaces')
+			->set('orphaned_at', $query->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->set('personal_owner_uid', $query->createNamedParameter(null, IQueryBuilder::PARAM_NULL))
+			->set('kind', $query->createNamedParameter('shared'))
+			->set('updated_at', $query->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($query->expr()->eq('id', $query->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->executeStatement();
+		// The owner's Files and shares are deleted with the account.
+		$this->deleteByWorkspace('maint_ev_shares', $workspaceId);
+		$query = $this->db->getQueryBuilder();
+		$query->delete('maint_ev_folders')
+			->where($query->expr()->eq('workspace_id', $query->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->andWhere($query->expr()->eq('owner_uid', $query->createNamedParameter($formerOwnerUid)))
+			->executeStatement();
+		$this->audit->record($workspaceId, 'workspace.orphaned', $formerOwnerUid, $this->workspaceUuid($workspaceId), null, ['formerOwnerUid' => $formerOwnerUid]);
+	}
+
+	private function closePendingTransfers(string $userUid): void {
+		$now = $this->timeFactory->getTime();
+		$query = $this->db->getQueryBuilder();
+		$query->update('maint_ws_transfers')
+			->set('status', $query->createNamedParameter('cancelled'))
+			->set('finished_at', $query->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->set('updated_at', $query->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($query->expr()->eq('status', $query->createNamedParameter('pending')))
+			->andWhere($query->expr()->orX(
+				$query->expr()->eq('from_uid', $query->createNamedParameter($userUid)),
+				$query->expr()->eq('to_uid', $query->createNamedParameter($userUid)),
+			))
+			->executeStatement();
+	}
+
+	private function deleteTransfers(int $workspaceId): void {
+		$query = $this->db->getQueryBuilder();
+		$query->select('id')->from('maint_ws_transfers')
+			->where($query->expr()->eq('workspace_id', $query->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)));
+		$result = $query->executeQuery();
+		try {
+			$ids = array_map('intval', $result->fetchFirstColumn());
+		} finally {
+			$result->closeCursor();
+		}
+		foreach (array_chunk($ids, 500) as $chunk) {
+			$query = $this->db->getQueryBuilder();
+			$query->delete('maint_ws_xfer_items')
+				->where($query->expr()->in('transfer_id', $query->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))
+				->executeStatement();
+		}
+		$this->deleteByWorkspace('maint_ws_transfers', $workspaceId);
+	}
+
+	private function hasOtherMembers(int $workspaceId, string $userUid): bool {
+		$query = $this->db->getQueryBuilder();
+		$query->select('id')->from('maint_members')
+			->where($query->expr()->eq('workspace_id', $query->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->andWhere($query->expr()->neq('user_uid', $query->createNamedParameter($userUid)))
+			->setMaxResults(1);
+		$result = $query->executeQuery();
+		try {
+			return $result->fetchOne() !== false;
+		} finally {
+			$result->closeCursor();
+		}
+	}
+
+	/** @return list<int> */
+	private function findMemberlessOrphans(): array {
+		$query = $this->db->getQueryBuilder();
+		$query->select('s.id')->from('maint_spaces', 's')
+			->leftJoin('s', 'maint_members', 'm', $query->expr()->eq('m.workspace_id', 's.id'))
+			->where($query->expr()->isNotNull('s.orphaned_at'))
+			->andWhere($query->expr()->isNull('m.id'));
+		$result = $query->executeQuery();
+		try {
+			return array_map('intval', $result->fetchFirstColumn());
+		} finally {
+			$result->closeCursor();
+		}
+	}
+
+	private function workspaceUuid(int $workspaceId): string {
+		$query = $this->db->getQueryBuilder();
+		$query->select('uuid')->from('maint_spaces')
+			->where($query->expr()->eq('id', $query->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)));
+		$result = $query->executeQuery();
+		try {
+			return (string)$result->fetchOne();
+		} finally {
+			$result->closeCursor();
 		}
 	}
 
@@ -241,14 +356,15 @@ final class UserLifecycleService {
 	/**
 	 * @return list<int>
 	 */
-	private function findPersonalWorkspaceIds(string $userUid): array {
+	private function findOwnedWorkspaceIds(string $userUid): array {
 		$query = $this->db->getQueryBuilder();
 		$query->select('id')
 			->from('maint_spaces')
-			->where($query->expr()->eq(
-				'personal_owner_uid',
-				$query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR),
-			));
+			->where($query->expr()->orX(
+				$query->expr()->eq('personal_owner_uid', $query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR)),
+				$query->expr()->eq('owner_uid', $query->createNamedParameter($userUid, IQueryBuilder::PARAM_STR)),
+			))
+			->andWhere($query->expr()->isNull('orphaned_at'));
 		$result = $query->executeQuery();
 		try {
 			return array_map(

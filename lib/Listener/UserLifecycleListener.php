@@ -9,9 +9,11 @@ declare(strict_types=1);
 
 namespace OCA\MaintenanceTracker\Listener;
 
+use OCA\MaintenanceTracker\Service\OwnershipTransferService;
 use OCA\MaintenanceTracker\Service\UserLifecycleService;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
+use OCP\User\Events\BeforeUserDeletedEvent;
 use OCP\User\Events\UserCreatedEvent;
 use OCP\User\Events\UserDeletedEvent;
 use OCP\User\Events\UserIdAssignedEvent;
@@ -23,10 +25,19 @@ use OCP\User\Events\UserIdUnassignedEvent;
 final class UserLifecycleListener implements IEventListener {
 	public function __construct(
 		private UserLifecycleService $userLifecycleService,
+		private OwnershipTransferService $ownershipTransfers,
 	) {
 	}
 
 	public function handle(Event $event): void {
+		if ($event instanceof BeforeUserDeletedEvent) {
+			// The owner's Files still exist here: move shared workspaces to
+			// their successor before Nextcloud deletes the account's storage.
+			$this->ownershipTransfers->handleOwnerDeletion($event->getUser()->getUID());
+
+			return;
+		}
+
 		if ($event instanceof UserDeletedEvent) {
 			$this->userLifecycleService->purgeUser($event->getUid());
 

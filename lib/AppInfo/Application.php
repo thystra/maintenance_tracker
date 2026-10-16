@@ -15,6 +15,7 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\User\Events\BeforeUserDeletedEvent;
 use OCP\User\Events\UserCreatedEvent;
 use OCP\User\Events\UserDeletedEvent;
 use OCP\User\Events\UserIdAssignedEvent;
@@ -31,6 +32,10 @@ final class Application extends App implements IBootstrap {
 
 	public function register(IRegistrationContext $context): void {
 		$context->registerCapability(Capability::class);
+		$context->registerEventListener(
+			BeforeUserDeletedEvent::class,
+			UserLifecycleListener::class,
+		);
 		$context->registerEventListener(
 			UserDeletedEvent::class,
 			UserLifecycleListener::class,

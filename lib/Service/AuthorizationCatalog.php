@@ -46,6 +46,7 @@ final class AuthorizationCatalog {
 	public const EVIDENCE_READ = 'evidence.read';
 	public const EVIDENCE_CREATE = 'evidence.create';
 	public const EVIDENCE_MANAGE = 'evidence.manage';
+	public const WORKSPACE_OWNERSHIP_TRANSFER = 'workspace.ownership.transfer';
 
 	/**
 	 * Reserved vocabulary is deliberately present before its subsystem exists.
@@ -90,6 +91,7 @@ final class AuthorizationCatalog {
 		self::EVIDENCE_READ => ['implemented' => true, 'write' => false],
 		self::EVIDENCE_CREATE => ['implemented' => true, 'write' => true],
 		self::EVIDENCE_MANAGE => ['implemented' => true, 'write' => true],
+		self::WORKSPACE_OWNERSHIP_TRANSFER => ['implemented' => true, 'write' => true],
 
 		'maintenance_definition.*' => ['implemented' => false, 'write' => false],
 		'activity.*' => ['implemented' => false, 'write' => false],
@@ -147,6 +149,7 @@ final class AuthorizationCatalog {
 			self::EVIDENCE_READ,
 			self::EVIDENCE_CREATE,
 			self::EVIDENCE_MANAGE,
+			self::WORKSPACE_OWNERSHIP_TRANSFER,
 		],
 		'manager' => [
 			self::WORKSPACE_READ,

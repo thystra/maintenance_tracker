@@ -38,6 +38,14 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
   This is descriptive/configuration data; calculation-critical facts should gain
   explicit validated semantics as the relevant subsystem is implemented.
 
+### Ownership transfers
+
+- `maint_ws_transfers`: uuid, workspace, from/to uid, reason `offer|deletion|admin`,
+  status `pending|in_progress|completed|cancelled|declined|expired|aborted`, step,
+  leave_after, expires_at, target_path, error code, timestamps.
+- `maint_ws_xfer_items`: snapshot of evidence and folder file ids and relative paths.
+- `maint_spaces.orphaned_at`: marks a workspace whose owner was deleted with no successor.
+
 ## Versioned profiles
 
 > Implementation status: v0.1.9 materializes the profile identity/revision/install/binding tables below.

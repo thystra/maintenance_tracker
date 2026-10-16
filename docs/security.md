@@ -108,6 +108,17 @@ data even though the app is not a medical product.
 - Audit events (`evidence.created/updated/archived/linked/unlinked`) carry UUIDs and target types only:
   no titles, file names, paths, notes, or contents. Warnings log the exception class and workspace UUID only.
 
+## Ownership transfer
+
+- Only the owner can offer. Only the named recipient (an existing member) can accept or
+  decline, and only participants can resume or abort. Everyone else gets 404.
+- Recipient free space is shown only to the recipient. Audit events carry UUIDs, user
+  ids, steps, and reasons, never paths or file names.
+- Volatile active-user switching is limited to the app's own folder share calls during a
+  transfer and is restored in `finally`.
+- Owner deletion never silently purges data other members still use. Evidence files that
+  existed only in the deleted account's Files are lost with it. Metadata stays.
+
 ## Mobile credentials
 
 - Use Login Flow v2 and its unique revocable app password.

@@ -159,6 +159,12 @@ license and must declare its provenance.
 
 v0.1.10 implements portable fitment compatibility packs through canonical JSON and a bounded normalized CSV/ZIP spreadsheet projection: standardized service-position slots, canonical parts, immutable import provenance, reasoned equipment matching with explicit Owner/Manager mapping, source export, and privacy-minimized community export. It also adds a part and vendor catalog, parts used per activity, profile-v2 part installation, https-only store/vendor links that a Nextcloud administrator can switch off (Administration settings → Maintenance Tracker), and a central cost ledger. Costs default to one currency (USD) without tax lines; a workspace Owner can enable tax lines and multiple currencies. Amounts are exact integer minor units, and totals are per currency with no exchange-rate conversion. Every member can view costs, Contributors can add them, and Owners/Managers correct or archive them.
 
+### Workspace ownership transfer
+
+Owners can hand a workspace and its evidence folder to another member, who must accept.
+When an owner's account is deleted, a Manager inherits the workspace. Without a Manager it
+is kept as orphaned for an administrator to reassign with occ. See `docs/architecture.md`.
+
 ### v0.1.11 evidence in Nextcloud Files
 
 Attach photos, receipts, invoices, documents, and video to assets, activities, and costs. "Upload" stores the file in the workspace folder `Maintenance Tracker/<Workspace>/<Asset>/` in the workspace owner's Files. That folder is shared with every member, read-only for Viewers and writable for Contributors and Managers, so everyone can browse it in Files. "Attach from Files" links any file you already have. Evidence follows renames and moves made in Files. Members only see files Nextcloud lets them open, and uploads count against the workspace owner's quota.
