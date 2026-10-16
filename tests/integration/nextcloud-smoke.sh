@@ -2180,6 +2180,90 @@ assert_contains "$v0111_remove" '"statuscode":200' 'remove evidence member'
 v0111_revoked=$(dav_as "${v0110_user}:${v0110_password}" PROPFIND "$(dirname "$v0111_upload_path")" --header 'Depth: 0')
 assert_contains "$v0111_revoked" '404' 'membership removal revokes folder share'
 
+# Workspace ownership transfer: offer/accept with quota acknowledgement, the
+# evidence folder moving to the new owner with references re-pointed and member
+# shares re-created, decline/cancel, auto-transfer to the longest-standing
+# Manager on owner account deletion, and orphaning plus admin assignment when
+# no Manager remains. Users and files are synthetic placeholders.
+for xfer_user in xfer_a xfer_b xfer_c xfer_d; do
+	docker exec --env OC_PASS="${xfer_user}-test-only" --user www-data "$container" \
+		php occ user:add --password-from-env "$xfer_user" >/dev/null
+done
+xa="xfer_a:xfer_a-test-only"; xb="xfer_b:xfer_b-test-only"; xc="xfer_c:xfer_c-test-only"; xd="xfer_d:xfer_d-test-only"
+xfer_ws_list=$(ocs_as "$xa" GET /workspaces)
+xfer_ws=$(printf '%s' "$xfer_ws_list" | python3 -c 'import json,sys;print(json.load(sys.stdin)["ocs"]["data"]["items"][0]["uuid"])')
+xws="workspace=${xfer_ws}"
+xfer_asset_uuid='a1b2c3d4-0000-4000-8000-00000000a001'
+xfer_asset=$(ocs_as "$xa" POST "/assets?${xws}" "{\"asset\":{\"uuid\":\"${xfer_asset_uuid}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Transfer test truck\"}}")
+assert_contains "$xfer_asset" '"statuscode":201' 'transfer workspace asset'
+assert_contains "$(ocs_as "$xa" POST "/workspaces/${xfer_ws}/members" '{"member":{"userUid":"xfer_b","role":"manager"}}')" '"statuscode":201' 'transfer manager member'
+assert_contains "$(ocs_as "$xa" POST "/workspaces/${xfer_ws}/members" '{"member":{"userUid":"xfer_c","role":"contributor"}}')" '"statuscode":201' 'transfer contributor member'
+xfer_target=$(ocs_as "$xa" POST "/evidence-folder/upload-target?${xws}" "{\"target\":{\"targetType\":\"asset\",\"targetUuid\":\"${xfer_asset_uuid}\",\"fileName\":\"photo.png\"}}")
+xfer_path=$(printf '%s' "$xfer_target" | json_field uploadPath)
+assert_contains "$(dav_as "$xa" PUT "$xfer_path" --header 'If-None-Match: *' --upload-file /tmp/v0111.png)" '201' 'owner upload before transfer'
+xfer_ev_uuid='a1b2c3d4-0000-4000-8000-00000000e001'
+assert_contains "$(ocs_as "$xa" POST "/evidence?${xws}" "{\"evidence\":{\"uuid\":\"${xfer_ev_uuid}\",\"kind\":\"photo\",\"path\":\"${xfer_path}\",\"links\":[{\"targetType\":\"asset\",\"targetUuid\":\"${xfer_asset_uuid}\"}]}}")" '"statuscode":201' 'evidence before transfer'
+assert_contains "$(ocs_as "$xc" GET "/evidence/${xfer_ev_uuid}?${xws}")" '"availability":"available"' 'member sees evidence before transfer'
+
+assert_contains "$(ocs_as "$xb" POST "/workspaces/${xfer_ws}/ownership-transfers" '{"transfer":{"toUid":"xfer_c"}}')" '"statuscode":403' 'non-owner cannot offer ownership'
+assert_contains "$(ocs_as "$xa" POST "/workspaces/${xfer_ws}/ownership-transfers" '{"transfer":{"toUid":"xfer_d"}}')" '"statuscode":400' 'ownership only to existing members'
+xfer_offer=$(ocs_as "$xa" POST "/workspaces/${xfer_ws}/ownership-transfers" '{"transfer":{"toUid":"xfer_b","expiresInDays":7}}')
+assert_contains "$xfer_offer" '"statuscode":201' 'owner offers ownership'
+assert_contains "$xfer_offer" '"status":"pending"' 'offer is pending'
+assert_contains "$xfer_offer" '"folderBytes":' 'offer shows folder size'
+assert_not_contains "$xfer_offer" 'recipientFreeBytes' 'offerer never sees recipient quota'
+xfer_uuid=$(printf '%s' "$xfer_offer" | json_field uuid)
+assert_contains "$(ocs_as "$xa" POST "/workspaces/${xfer_ws}/ownership-transfers" '{"transfer":{"toUid":"xfer_c"}}')" '"statuscode":412' 'one open transfer per workspace'
+xfer_incoming=$(ocs_as "$xb" GET /ownership-transfers)
+assert_contains "$xfer_incoming" "\"uuid\":\"${xfer_uuid}\"" 'recipient sees incoming offer'
+assert_contains "$xfer_incoming" '"recipientFreeBytes"' 'recipient sees own quota'
+assert_not_contains "$(ocs_as "$xc" GET /ownership-transfers)" "$xfer_uuid" 'other members do not see the offer'
+assert_contains "$(ocs_as "$xc" POST "/ownership-transfers/${xfer_uuid}/accept" '{"acknowledgeQuota":true}')" '"statuscode":404' 'only the recipient can accept'
+assert_contains "$(ocs_as "$xb" POST "/ownership-transfers/${xfer_uuid}/accept" '{"acknowledgeQuota":false}')" 'acknowledgeQuota' 'acceptance requires quota acknowledgement'
+xfer_accept=$(ocs_as "$xb" POST "/ownership-transfers/${xfer_uuid}/accept" '{"acknowledgeQuota":true}')
+assert_contains "$xfer_accept" '"statuscode":200' 'recipient accepts'
+assert_contains "$xfer_accept" '"status":"completed"' 'transfer completes'
+xfer_b_ws=$(ocs_as "$xb" GET /workspaces)
+assert_contains "$xfer_b_ws" "\"uuid\":\"${xfer_ws}\",\"name\":\"Personal maintenance\",\"kind\":\"shared\",\"ownerUid\":\"xfer_b\"" 'workspace now owned by recipient'
+assert_contains "$(ocs_as "$xa" GET /workspaces)" '"role":"manager"' 'previous owner becomes Manager'
+xfer_b_ev=$(ocs_as "$xb" GET "/evidence/${xfer_ev_uuid}?${xws}")
+assert_contains "$xfer_b_ev" '"availability":"available"' 'new owner sees moved evidence'
+assert_contains "$xfer_b_ev" 'Maintenance Tracker' 'evidence now in new owner Files'
+xfer_b_folder=$(ocs_as "$xb" GET "/evidence-folder?${xws}")
+assert_contains "$xfer_b_folder" '"available":true' 'new owner has the folder'
+assert_contains "$(ocs_as "$xc" GET "/evidence/${xfer_ev_uuid}?${xws}")" '"availability":"available"' 'member share re-created from new owner'
+assert_contains "$(ocs_as "$xa" GET "/evidence-folder?${xws}")" '"writable":true' 'previous owner reaches folder as Manager'
+xfer_audit=$(ocs_as "$xb" GET "/audit?${xws}&limit=100")
+assert_contains "$xfer_audit" 'workspace.ownership.offered' 'offer audited'
+assert_contains "$xfer_audit" 'workspace.ownership.transferred' 'transfer audited'
+
+xfer_decline=$(ocs_as "$xb" POST "/workspaces/${xfer_ws}/ownership-transfers" '{"transfer":{"toUid":"xfer_c"}}')
+xfer_decline_uuid=$(printf '%s' "$xfer_decline" | json_field uuid)
+assert_contains "$(ocs_as "$xc" POST "/ownership-transfers/${xfer_decline_uuid}/decline")" '"status":"declined"' 'recipient declines'
+xfer_cancel=$(ocs_as "$xb" POST "/workspaces/${xfer_ws}/ownership-transfers" '{"transfer":{"toUid":"xfer_c"}}')
+xfer_cancel_uuid=$(printf '%s' "$xfer_cancel" | json_field uuid)
+assert_contains "$(ocs_as "$xb" DELETE "/ownership-transfers/${xfer_cancel_uuid}")" '"status":"cancelled"' 'owner cancels offer'
+
+# Owner account deletion with a Manager present: auto-transfer, files kept.
+docker exec --user www-data "$container" php occ user:delete xfer_b >/dev/null
+xfer_a_ws=$(ocs_as "$xa" GET /workspaces)
+assert_contains "$xfer_a_ws" "\"uuid\":\"${xfer_ws}\",\"name\":\"Personal maintenance\",\"kind\":\"shared\",\"ownerUid\":\"xfer_a\"" 'owner deletion transfers to longest-standing Manager'
+assert_contains "$(ocs_as "$xa" GET "/evidence/${xfer_ev_uuid}?${xws}")" '"availability":"available"' 'evidence survives owner deletion'
+assert_contains "$(ocs_as "$xc" GET "/evidence/${xfer_ev_uuid}?${xws}")" '"availability":"available"' 'member share restored after owner deletion'
+
+# Owner deletion without a Manager: orphaned for an administrator, not purged.
+xfer_d_ws=$(ocs_as "$xd" GET /workspaces | python3 -c 'import json,sys;print(json.load(sys.stdin)["ocs"]["data"]["items"][0]["uuid"])')
+assert_contains "$(ocs_as "$xd" POST "/workspaces/${xfer_d_ws}/members" '{"member":{"userUid":"xfer_c","role":"contributor"}}')" '"statuscode":201' 'orphan candidate member'
+docker exec --user www-data "$container" php occ user:delete xfer_d >/dev/null
+xfer_orphan=$(ocs_as "$xc" GET /workspaces)
+assert_contains "$xfer_orphan" "\"uuid\":\"${xfer_d_ws}\"" 'workspace kept after owner deletion'
+assert_contains "$xfer_orphan" '"orphaned":true' 'workspace marked orphaned'
+assert_contains "$(docker exec --user www-data "$container" php occ maintenance_tracker:workspace:list-orphaned)" "$xfer_d_ws" 'occ lists orphaned workspace'
+xfer_assign=$(docker exec --user www-data "$container" php occ maintenance_tracker:workspace:assign-owner "$xfer_d_ws" xfer_c)
+assert_contains "$xfer_assign" 'completed' 'occ assigns owner to orphaned workspace'
+assert_contains "$(ocs_as "$xc" GET /workspaces)" "\"uuid\":\"${xfer_d_ws}\",\"name\":\"Personal maintenance\",\"kind\":\"shared\",\"ownerUid\":\"xfer_c\",\"orphaned\":false,\"role\":\"owner\"" 'assigned owner holds the workspace'
+assert_contains "$(docker exec --user www-data "$container" php occ maintenance_tracker:workspace:list-orphaned)" 'No orphaned workspaces' 'no orphans remain'
+
 # @@V0111_NEXT@@
 
 page_status=$(docker exec "$container" curl --silent --show-error \
