@@ -152,8 +152,10 @@ revision content never becomes mutable domain truth after installation.
 
 A later profile revision produces an explicit user-approved diff. It never silently
 rewrites user-adjusted `schedule` policies or re-enables suppressed components.
-Multi-instance source references must be unambiguous, and profile-v2 parts fail
-installation until the canonical parts subsystem exists rather than being dropped.
+Multi-instance source references must be unambiguous. Profile-v2 parts materialize
+through the canonical part catalog (identity convergence, `part` source bindings, and
+`maint_part_compat` compatibility facts); profiles whose part facts cannot be
+preserved losslessly fail installation rather than being dropped.
 
 Profile provenance includes an ID, semantic version, data license, source URL,
 optional source revision, and content hash. Generic first-party profiles should use

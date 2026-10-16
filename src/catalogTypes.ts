@@ -46,3 +46,14 @@ export interface CreateVendor {
 	name: string
 	notes?: string | null
 }
+
+export interface CompatiblePart {
+	subjectType: 'component' | 'work_definition'
+	subjectUuid: string
+	part: { uuid: string, manufacturer: string, partNumber: string, description: string, archived: boolean }
+}
+
+export interface CompatiblePartList {
+	assetUuid: string
+	items: CompatiblePart[]
+}

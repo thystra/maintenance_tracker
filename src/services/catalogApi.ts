@@ -4,6 +4,7 @@
  */
 
 import type {
+	CompatiblePartList,
 	CreatePart,
 	CreateVendor,
 	Part,
@@ -38,4 +39,8 @@ export async function createVendor(vendor: CreateVendor): Promise<Vendor> {
 
 export async function archiveVendor(uuid: string, expectedRevision: number): Promise<Vendor> {
 	return data(await axios.delete<OcsEnvelope<Vendor>>(endpoint(`/vendors/${encodeURIComponent(uuid)}`), { ...requestOptions, data: { expectedRevision } }))
+}
+
+export async function getCompatibleParts(assetUuid: string): Promise<CompatiblePartList> {
+	return data(await axios.get<OcsEnvelope<CompatiblePartList>>(endpoint(`/assets/${encodeURIComponent(assetUuid)}/compatible-parts`), requestOptions))
 }

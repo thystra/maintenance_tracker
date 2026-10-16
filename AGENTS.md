@@ -230,8 +230,9 @@ and source type/key/ordinal bindings. Only exact bundled ID/version/hash matches
 are first-party. `profile.read` is read-only for all workspace roles;
 `profile.install` remains an Owner/Manager serialized write. Do not silently map
 profile v1, select one instance from a multi-instance source key, fetch arbitrary
-profile/source URLs, or ignore profile-v2 parts before the parts subsystem can
-materialize them. Upgrade handling must be an explicit user-approved diff/merge,
+profile/source URLs, or ignore profile-v2 parts: they materialize through the
+canonical part catalog, and installation fails closed when part facts (duplicate
+identities, or offers that cannot be stored) cannot be preserved. Upgrade handling must be an explicit user-approved diff/merge,
 not a reinstall that overwrites customized records.
 
 ## v0.1.10 fitment interoperability invariant

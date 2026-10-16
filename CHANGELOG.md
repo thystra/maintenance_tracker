@@ -9,6 +9,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v0.1.10 profile-v2 part installation: the deliberate part refusal is removed; profile parts converge on canonical parts by identity with `part` source bindings, and `compatiblePartKeys` become informational per-component/per-definition compatibility facts (`maint_part_compat`, `GET /assets/{assetUuid}/compatible-parts`). Duplicate part identities within one profile remain a fail-closed conflict.
 - v0.1.10 parts used per maintenance activity: optional immutable `parts` children on activity creation (Contributor-capable via `activity.create`) with exact decimal-string quantities stored as integer thousandths, a bounded unit vocabulary, optional vendor, part/vendor display snapshots, idempotent-retry comparison, account-deletion cleanup, and desktop capture/display.
 - v0.1.10 canonical part catalog API over the existing `maint_parts` identity (manual create/correct/archive with identity convergence and archived-identity restore) plus a workspace vendor catalog, with `part.read`/`vendor.read` for every role and Owner/Manager-only `part.manage`/`vendor.manage`, audit events, account-deletion cleanup, and a desktop parts/vendors panel.
 - v0.1.10 fitment runtime foundation with bounded fitment-pack-v1 validation/canonical SHA-256 identity, immutable pack revision/import provenance, canonical standardized slots/parts, source offers, and source-specific fitment assertions.

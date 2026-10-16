@@ -378,9 +378,13 @@ Body: `{ "profile": { ... } }`. Preview revalidates the document and reports
 `applicable`, `installable`, `conflicts`, `warnings`, and `materializes` counts without
 writing anything. Existing profile installation/profile metadata, meter/work-group/
 work-definition key collisions, and applicability mismatches are surfaced here.
-Profile-v2 part definitions remain valid profile vocabulary, but a non-empty `parts`
-array makes the v0.1.9 preview non-installable because the v0.1.10 parts subsystem is
-not yet available to preserve those facts losslessly.
+Since v0.1.10, profile-v2 `parts` materialize into the canonical workspace part catalog
+by manufacturer/part-number identity (an existing or archived identity is reused), each
+part key is recorded as a `part` source binding, and `compatiblePartKeys` on components
+and work definitions become informational compatibility facts (see
+`GET /assets/{assetUuid}/compatible-parts`). Preview reports a conflict, and installation
+fails closed, when two profile part keys resolve to the same canonical identity or when
+a part carries store offers that cannot be stored as links.
 
 ### `POST /assets/{assetUuid}/profiles/install`
 

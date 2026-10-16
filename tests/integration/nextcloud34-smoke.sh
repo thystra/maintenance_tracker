@@ -1937,6 +1937,44 @@ assert_contains "$v0110_activity_bad_part" '"statuscode":400' 'activity unknown 
 v0110_activity_float=$(contributor_ocs POST "/assets/${v0110_asset_uuid}/activities?${ws}" '{"activity":{"uuid":"c16fa04e-8cd3-4ef5-9a7b-9c0d1e2f3a4b","performedAt":"2026-10-01T12:00:00Z","items":[{"uuid":"d27ab15f-9de4-4f06-8b8c-0d1e2f3a4b5c","title":"x","kind":"maintenance"}],"parts":[{"uuid":"e38bc26a-aef5-4a17-9c9d-1e2f3a4b5c6d","partUuid":"0b4f8a2e-6c1d-4e3f-9a5b-7c8d9e0f1a2b","quantity":1.5,"unit":"each"}]}}')
 assert_contains "$v0110_activity_float" '"statuscode":400' 'activity float quantity rejected'
 
+v0110_profile_asset_uuid='5b0c2d4e-6f7a-4b8c-9d0e-1f2a3b4c5d6e'
+v0110_profile_asset=$(owner_ocs POST "/assets?${ws}" "{\"asset\":{\"uuid\":\"${v0110_profile_asset_uuid}\",\"category\":\"vehicle\",\"name\":\"v0.1.10 profile parts vehicle\"}}")
+assert_contains "$v0110_profile_asset" '"statuscode":201' 'v0.1.10 profile-parts asset'
+v0110_profile_php='$p=json_decode(file_get_contents("/var/www/html/custom_apps/maintenance_tracker/profiles/generic-car.json"),true);
+$p["id"]="org.argentwolf.maintenance.smoke-parts";
+$p["parts"]=[
+	["key"=>"cabin_filter_a","manufacturer"=>"SMOKE FILTERS","partNumber"=>"SF-100","description"=>"Profile-supplied description","offers"=>[]],
+	["key"=>"cabin_filter_b","manufacturer"=>"Profile Parts Co","partNumber"=>"PP-7","description"=>"Profile-only filter","offers"=>[]],
+];
+foreach($p["components"] as &$c){if($c["key"]==="cabin_filter"){$c["compatiblePartKeys"]=["cabin_filter_a","cabin_filter_b"];}}unset($c);
+foreach($p["workDefinitions"] as &$d){if($d["key"]==="replace_cabin_filter"){$d["compatiblePartKeys"]=["cabin_filter_b"];}}unset($d);
+$mode=getenv("MODE");
+if($mode==="duplicate"){$p["parts"][1]["manufacturer"]="smoke filters";$p["parts"][1]["partNumber"]="sf-100";}
+if($mode==="offers"){$p["parts"][1]["offers"]=[["label"=>"Store","url"=>"https://example.com/pp-7"]];}
+$out=["profile"=>$p];if($mode==="install"){$out["installationUuid"]="6c1d3e5f-7a8b-4c9d-8e0f-2a3b4c5d6e7f";}
+echo json_encode($out,JSON_UNESCAPED_SLASHES);'
+v0110_profile_payload() { docker exec --env MODE="$1" "$container" php -r "$v0110_profile_php"; }
+
+v0110_profile_dup=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload duplicate)")
+assert_contains "$v0110_profile_dup" '"installable":false' 'profile duplicate part identity fails closed'
+assert_contains "$v0110_profile_dup" 'resolve to the same canonical part identity' 'profile duplicate part identity reason'
+v0110_profile_offers=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload offers)")
+assert_contains "$v0110_profile_offers" '"installable":false' 'profile part offers fail closed before store links'
+v0110_profile_preview=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload preview)")
+assert_contains "$v0110_profile_preview" '"installable":true' 'profile with parts installable'
+assert_contains "$v0110_profile_preview" '"parts":2' 'profile preview part count'
+v0110_profile_install=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/install?${ws}" "$(v0110_profile_payload install)")
+assert_contains "$v0110_profile_install" '"statuscode":201' 'profile with parts install'
+assert_contains "$v0110_profile_install" '"sourceType":"part"' 'profile part source binding'
+assert_contains "$v0110_profile_install" "\"targetUuid\":\"${v0110_part_uuid}\"" 'profile part converges on existing canonical identity'
+v0110_compat=$(contributor_ocs GET "/assets/${v0110_profile_asset_uuid}/compatible-parts?${ws}")
+assert_contains "$v0110_compat" '"statuscode":200' 'compatible parts read'
+assert_contains "$v0110_compat" '"subjectType":"component"' 'component compatibility fact'
+assert_contains "$v0110_compat" '"subjectType":"work_definition"' 'work-definition compatibility fact'
+assert_contains "$v0110_compat" '"partNumber":"PP-7"' 'profile-created canonical part'
+v0110_parts_after_profile=$(owner_ocs GET "/parts?${ws}")
+assert_contains "$v0110_parts_after_profile" '"description":"Smoke oil filter, long life"' 'profile does not overwrite canonical part description'
+
 # @@V0110_NEXT@@
 
 page_status=$(docker exec "$container" curl --silent --show-error \

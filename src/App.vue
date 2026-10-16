@@ -4,7 +4,7 @@
 -->
 
 <script setup lang="ts">
-import type { Part } from './catalogTypes.ts'
+import type { CompatiblePart, Part } from './catalogTypes.ts'
 import type {
 	Activity,
 	Asset,
@@ -73,7 +73,7 @@ import {
 	updateReminderPolicy,
 	validateProfile,
 } from './services/api.ts'
-import { getParts } from './services/catalogApi.ts'
+import { getCompatibleParts, getParts } from './services/catalogApi.ts'
 
 const assets = ref<Asset[]>([])
 const categories = ref<Category[]>([])
@@ -140,6 +140,7 @@ const activityDraft = reactive({
 	partUnit: 'each',
 })
 const catalogParts = ref<Part[]>([])
+const compatibleParts = ref<Record<string, CompatiblePart[]>>({})
 const partUnits = ['each', 'pair', 'set', 'kit', 'ml', 'l', 'fl_oz', 'qt', 'gal', 'g', 'kg', 'oz', 'lb', 'mm', 'cm', 'm', 'in', 'ft']
 const relationshipDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'general', isDefault: false })
 const assignmentDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', type: 'tows', context: 'trip', isPrimary: true, effectiveFrom: '', effectiveUntil: '' })
@@ -400,6 +401,7 @@ async function toggleAsset(asset: Asset): Promise<void> {
 		maintenanceStatus.value[asset.uuid] = statusList.items
 		maintenanceOccurrences.value[asset.uuid] = occurrenceList.items
 		profileInstallations.value[asset.uuid] = profileInstallation.installation
+		compatibleParts.value[asset.uuid] = (await getCompatibleParts(asset.uuid)).items
 		await Promise.all(meterList.items.map(async (meter) => {
 			readings.value[meter.uuid] = (await getReadings(meter.uuid)).items
 		}))
@@ -999,6 +1001,12 @@ onMounted(load)
 										<strong>{{ profileInstallations[asset.uuid]?.profile.id }} {{ profileInstallations[asset.uuid]?.profile.version }}</strong>
 										<span>{{ profileInstallations[asset.uuid]?.profile.origin }} · {{ profileInstallations[asset.uuid]?.profile.trustState }} · {{ profileInstallations[asset.uuid]?.bindings.length }} source bindings</span>
 										<code>{{ profileInstallations[asset.uuid]?.profile.contentHash }}</code>
+										<ul v-if="(compatibleParts[asset.uuid] ?? []).length > 0" class="compact-list">
+											<li v-for="fact in compatibleParts[asset.uuid]" :key="`${fact.subjectUuid}-${fact.part.uuid}`">
+												<strong>{{ fact.part.manufacturer }} {{ fact.part.partNumber }}</strong>
+												<span>compatible {{ fact.subjectType === 'component' ? 'component' : 'work' }}<template v-if="fact.part.archived"> · archived</template></span>
+											</li>
+										</ul>
 									</div>
 									<template v-else>
 										<p class="panel-copy">

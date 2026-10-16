@@ -73,13 +73,12 @@ reference would silently choose one of several instances and is rejected. Parent
 cycles are also invalid. Asset-scoped work such as tire inspection/rotation is the
 appropriate representation when a task applies to a multi-instance set.
 
-Profile v2 already has a parts vocabulary, but the v0.1.9 installer intentionally
-fails closed when `parts` is non-empty. Part facts are not discarded or flattened
-into notes. v0.1.10 first defines a separate portable fitment-pack contract with
-standardized service-position keys and explicit equipment matching/mapping. Once
-canonical part/fitment persistence exists, profile-v2 `parts` and
-`compatiblePartKeys` must materialize through that same catalog rather than a
-profile-only parts table. See [fitment-pack-v1.md](fitment-pack-v1.md).
+Profile-v2 `parts` and `compatiblePartKeys` materialize (v0.1.10) through the same
+canonical part catalog used by fitment packs rather than a profile-only parts table.
+A profile part whose manufacturer/part number already exists in the workspace reuses
+that canonical record. Two part keys that normalize to the same identity are a
+preview conflict rather than a silent merge. Part facts are never discarded or
+flattened into notes. See [fitment-pack-v1.md](fitment-pack-v1.md).
 
 Materialized components, meters, groups, and work definitions are ordinary domain
 records and remain editable/suppressible by the user. The immutable source snapshot

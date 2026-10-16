@@ -69,10 +69,10 @@ definitions while retaining source bindings. It does not maintain shadow copies 
 those mutable domain records. Profile upgrades are user-approved diffs; suppressed
 or customized materialized records are never overwritten silently.
 
-Profile v2 part definitions remain validated input vocabulary, but v0.1.9 rejects
-part-bearing installation because the v0.1.10 parts subsystem has not yet provided
-canonical part records. Future parts tables should retain the same revision/binding
-provenance rather than resurrecting a parallel profile-only maintenance model.
+Profile v2 part definitions materialize (v0.1.10) into canonical `maint_parts` records
+by identity, keep `part` source bindings for provenance, and record `compatiblePartKeys`
+as informational `maint_part_compat` facts per component instance or work definition.
+There is no parallel profile-only parts model.
 
 ## Meters and readings
 

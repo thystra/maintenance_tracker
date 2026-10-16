@@ -49,6 +49,15 @@ final class PartController extends OCSController {
 	}
 
 	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/compatible-parts')]
+	public function compatibleParts(string $assetUuid, ?string $workspace = null): DataResponse {
+		return $this->run(AuthorizationCatalog::PART_READ, $workspace, fn ($c): DataResponse => new DataResponse([
+			'assetUuid' => $assetUuid,
+			'items' => $this->service->compatibilityForAsset($c, $assetUuid),
+		]));
+	}
+
+	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/parts')]
 	public function create(array $part, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::PART_MANAGE, $workspace, function ($c) use ($part): DataResponse {

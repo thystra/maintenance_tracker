@@ -23,11 +23,17 @@ use OCP\AppFramework\Utility\ITimeFactory;
 final class PartService {
 	public function __construct(
 		private PartCatalogRepository $repository,
+		private PartCompatibilityRepository $compatibility,
+		private AssetService $assets,
 		private FitmentPackValidator $identity,
 		private UuidGenerator $uuidGenerator,
 		private ChangeJournal $journal,
 		private ITimeFactory $timeFactory,
 	) {
+	}
+
+	public function identityHash(string $manufacturer, string $partNumber): string {
+		return $this->identity->partIdentityHash($manufacturer, $partNumber);
 	}
 
 	/** @return list<array<string,mixed>> */
@@ -116,6 +122,27 @@ final class PartService {
 		$row = $this->findRow($context, $uuid);
 		$this->assertRevision($row, $expectedRevision);
 		return $this->write($context, $row, $expectedRevision, (string)$row['description'], $this->timeFactory->getTime(), 'delete');
+	}
+
+	/**
+	 * Informational compatibility facts for an asset's components and work
+	 * definitions. Archived parts are still reported and flagged.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	public function compatibilityForAsset(WorkspaceContext $context, string $assetUuid): array {
+		$asset = $this->assets->find($context, $assetUuid);
+		return array_map(static fn (array $row): array => [
+			'subjectType' => (string)$row['subject_type'],
+			'subjectUuid' => (string)$row['subject_uuid'],
+			'part' => [
+				'uuid' => (string)$row['part_uuid'],
+				'manufacturer' => (string)$row['manufacturer'],
+				'partNumber' => (string)$row['part_number'],
+				'description' => (string)$row['description'],
+				'archived' => $row['part_deleted_at'] !== null,
+			],
+		], $this->compatibility->findForAsset($context->workspace()->getId(), $asset->getId()));
 	}
 
 	/** @param array<string,mixed> $row @return array<string,mixed> */

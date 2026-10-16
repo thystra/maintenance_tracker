@@ -336,7 +336,9 @@ expect(profileValidator.includes("hash('sha256', $canonicalJson)"), 'Profile rev
 expect(profileValidator.includes('$this->positiveDecimal(') && profileValidator.includes('$this->meterValues->toCanonical('), 'Profile revision canonicalization must normalize meter-interval decimals and validate them through the canonical meter converter.')
 expect(validateProfiles.includes('const displayUnits =') && validateProfiles.includes('const meterIntervalUnits =') && validateProfiles.includes("usage_count: new Set(['use', 'count'])"), 'Repository profile validation must distinguish usage-count display units from accepted schedule interval units.')
 expect(profileCatalog.includes("hash_equals($v['contentHash'], $contentHash)") && profileCatalog.includes("'trustState' => 'first_party'"), 'First-party profile trust must require an exact bundled content-hash match.')
-expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'v0.1.9 profile installation must fail closed for part definitions until canonical parts persistence exists.')
+expect(!profileInstallationService.includes('cannot be materialized until the parts subsystem is implemented') && profileInstallationService.includes('$this->parts->ensure('), 'Profile-v2 parts must materialize through the canonical part catalog, not a profile-only table.')
+expect(profileInstallationService.includes('resolve to the same canonical part identity'), 'Profile installation must fail closed rather than merge two profile part keys into one canonical identity.')
+expect(profileInstallationService.includes("'part', $t['key']") && profileInstallationService.includes('materializeCompatibility('), 'Profile part bindings and compatiblePartKeys must be preserved as provenance and compatibility facts.')
 for (const serviceCall of ['$this->components->create(', '$this->meters->create(', '$this->groups->create(', '$this->definitions->create(', '$this->assets->update(']) {
 	expect(profileInstallationService.includes(serviceCall), `Profile installation must materialize through canonical domain service call ${serviceCall}.`)
 }
@@ -379,7 +381,6 @@ expect(fitmentController.includes('DataDownloadResponse') && fitmentController.i
 expect(fitmentRepository.includes("insert('maint_fit_revs')") && fitmentRepository.includes("insert('maint_fit_bind')") && fitmentRepository.includes("insert('maint_fitments')"), 'Fitment repository must persist immutable revision provenance, source bindings, and source-specific fitment assertions.')
 expect(fitmentService.includes("'offers' => []") && fitmentService.includes("'omitted_pending_explicit_selection'"), 'Community fitment export must omit offers until an explicit reviewed offer-selection policy exists.')
 expect(fitmentService.includes('$v = $this->validator->validate($pack)') && fitmentService.includes('communityExport('), 'Community fitment export must be rebuilt through the same runtime validator/canonicalizer.')
-expect(profileInstallationService.includes('Profile contains part definitions that cannot be materialized until the parts subsystem is implemented'), 'This fitment checkpoint must keep profile-v2 part materialization fail-closed until the canonical profile-parts bridge is implemented.')
 
 for (const table of [...workspaceTables].sort()) {
 	expect(userLifecycle.includes(`'${table}'`), `Account deletion purge registry must cover workspace-scoped table ${table}.`)
@@ -387,7 +388,7 @@ for (const table of [...workspaceTables].sort()) {
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
