@@ -2,6 +2,15 @@
 
 The API is experimental until the offline/mobile synchronization contract is complete.
 
+The machine-readable contract is [`openapi.json`](../openapi.json), generated from the controller docblocks by Nextcloud's [openapi-extractor](https://github.com/nextcloud/openapi-extractor). After changing a route, its parameters, or its status codes, run:
+
+```sh
+composer openapi:install   # once
+composer openapi
+```
+
+and commit the result; CI fails when `openapi.json` is stale. Request bodies and parameters are fully described; response payloads are currently typed as generic objects (see the sections below for their fields).
+
 Base path:
 
 ```text

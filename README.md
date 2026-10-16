@@ -83,6 +83,7 @@ Run the deterministic local checks:
 ```bash
 composer validate --strict
 composer test
+composer openapi:install && composer openapi   # regenerate openapi.json after API changes
 npm run validate:project
 bash tests/validate-project-selftest.sh
 npm run validate:profiles

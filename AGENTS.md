@@ -130,6 +130,7 @@ Use the project's documented commands. Normal local deterministic checks are:
 ```bash
 composer validate --strict
 composer test
+composer openapi   # after composer openapi:install; commit openapi.json when routes change
 npm ci
 npm run validate:project
 bash tests/validate-project-selftest.sh
