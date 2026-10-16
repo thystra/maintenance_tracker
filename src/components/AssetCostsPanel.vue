@@ -8,6 +8,7 @@ import type { CostCategory, CostEntry, CostLineType, CostSettings, CostTotal } f
 
 import { onMounted, reactive, ref } from 'vue'
 import EvidencePanel from './EvidencePanel.vue'
+import { t } from '../l10n.ts'
 import { archiveCost, createCost, getAssetCosts, updateCostSettings } from '../services/catalogApi.ts'
 
 const props = defineProps<{ assetUuid: string }>()
@@ -23,7 +24,7 @@ const draft = reactive({ incurredOn: new Date().toISOString().slice(0, 10), desc
 const settingsDraft = reactive({ defaultCurrency: 'USD', taxEnabled: false, multiCurrency: false })
 
 function readableError(reason: unknown): string {
-	return reason instanceof Error && reason.message !== '' ? reason.message : 'The request could not be completed.'
+	return reason instanceof Error && reason.message !== '' ? reason.message : t('maintenance_tracker', 'The request could not be completed.')
 }
 
 async function load(): Promise<void> {
@@ -79,19 +80,19 @@ onMounted(load)
 
 <template>
 	<section class="cost-panel">
-		<h4>Costs</h4>
+		<h4>{{ t('maintenance_tracker', 'Costs') }}</h4>
 		<p v-if="error" class="cost-error" role="alert">
 			{{ error }}
 		</p>
 		<ul v-if="totals.length > 0" class="cost-totals">
 			<li v-for="total in totals" :key="total.currency">
 				<strong>{{ total.total }} {{ total.currency }}</strong>
-				<span v-if="total.taxMinor > 0"> ({{ total.charges }} + {{ total.tax }} tax)</span>
+				<span v-if="total.taxMinor > 0"> {{ t('maintenance_tracker', '({charges} + {tax} tax)', { charges: total.charges, tax: total.tax }) }}</span>
 				<span> · {{ total.count }} {{ total.count === 1 ? 'entry' : 'entries' }}</span>
 			</li>
 		</ul>
 		<p v-else class="cost-copy">
-			No costs recorded.
+			{{ t('maintenance_tracker', 'No costs recorded.') }}
 		</p>
 		<ul class="cost-list">
 			<li v-for="entry in items" :key="entry.uuid">
@@ -102,48 +103,48 @@ onMounted(load)
 						class="cost-secondary"
 						type="button"
 						:disabled="saving"
-						@click="mutate(() => archiveCost(entry.uuid, entry.revision))">Archive</button>
+						@click="mutate(() => archiveCost(entry.uuid, entry.revision))">{{ t('maintenance_tracker', 'Archive') }}</button>
 				</span>
 				<EvidencePanel compact targetType="cost" :targetUuid="entry.uuid" />
 			</li>
 		</ul>
 		<form class="cost-form" @submit.prevent="submitCost">
-			<label>Date <input v-model="draft.incurredOn" type="date" required></label>
-			<label>Description <input v-model="draft.description" required maxlength="255"></label>
-			<label>Amount <input
+			<label>{{ t('maintenance_tracker', 'Date') }} <input v-model="draft.incurredOn" type="date" required></label>
+			<label>{{ t('maintenance_tracker', 'Description') }} <input v-model="draft.description" required maxlength="255"></label>
+			<label>{{ t('maintenance_tracker', 'Amount') }} <input
 				v-model="draft.amount"
 				inputmode="decimal"
 				required
 				pattern="[0-9]+(\.[0-9]+)?"
 				:placeholder="settings?.defaultCurrency === 'JPY' ? '1200' : '12.50'"></label>
-			<label v-if="settings?.multiCurrency">Currency <input v-model="draft.currency" maxlength="3" :placeholder="settings.defaultCurrency"></label>
-			<label v-if="settings?.taxEnabled">Line
+			<label v-if="settings?.multiCurrency">{{ t('maintenance_tracker', 'Currency') }} <input v-model="draft.currency" maxlength="3" :placeholder="settings.defaultCurrency"></label>
+			<label v-if="settings?.taxEnabled">{{ t('maintenance_tracker', 'Line') }}
 				<select v-model="draft.lineType">
-					<option value="charge">Charge</option>
-					<option value="tax">Tax</option>
+					<option value="charge">{{ t('maintenance_tracker', 'Charge') }}</option>
+					<option value="tax">{{ t('maintenance_tracker', 'Tax') }}</option>
 				</select>
 			</label>
-			<label v-if="draft.lineType === 'charge'">Category
+			<label v-if="draft.lineType === 'charge'">{{ t('maintenance_tracker', 'Category') }}
 				<select v-model="draft.category">
 					<option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
 				</select>
 			</label>
 			<button type="submit" :disabled="saving">
-				Add cost
+				{{ t('maintenance_tracker', 'Add cost') }}
 			</button>
 		</form>
 		<button class="cost-secondary" type="button" @click="showSettings = !showSettings">
-			Cost settings
+			{{ t('maintenance_tracker', 'Cost settings') }}
 		</button>
 		<form v-if="showSettings" class="cost-form" @submit.prevent="submitSettings">
 			<p class="cost-copy">
-				Workspace owners choose the default currency and whether tax lines or multiple currencies are allowed. Currencies are never converted; totals are shown per currency.
+				{{ t('maintenance_tracker', 'Workspace owners choose the default currency and whether tax lines or multiple currencies are allowed. Currencies are never converted; totals are shown per currency.') }}
 			</p>
-			<label>Default currency <input v-model="settingsDraft.defaultCurrency" maxlength="3" required></label>
-			<label class="cost-check"><input v-model="settingsDraft.taxEnabled" type="checkbox"> Enable tax lines</label>
-			<label class="cost-check"><input v-model="settingsDraft.multiCurrency" type="checkbox"> Enable multiple currencies</label>
+			<label>{{ t('maintenance_tracker', 'Default currency') }} <input v-model="settingsDraft.defaultCurrency" maxlength="3" required></label>
+			<label class="cost-check"><input v-model="settingsDraft.taxEnabled" type="checkbox"> {{ t('maintenance_tracker', 'Enable tax lines') }}</label>
+			<label class="cost-check"><input v-model="settingsDraft.multiCurrency" type="checkbox"> {{ t('maintenance_tracker', 'Enable multiple currencies') }}</label>
 			<button type="submit" :disabled="saving">
-				Save settings
+				{{ t('maintenance_tracker', 'Save settings') }}
 			</button>
 		</form>
 	</section>

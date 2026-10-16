@@ -9,6 +9,7 @@ import type { OcsEnvelope } from './api.ts'
 import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
 import { generateRemoteUrl } from '@nextcloud/router'
+import { t } from '../l10n.ts'
 import { data, endpoint, requestOptions } from './api.ts'
 
 export async function listEvidence(targetType: EvidenceTargetType, targetUuid: string): Promise<Evidence[]> {
@@ -43,7 +44,7 @@ export async function getUploadTarget(targetType: EvidenceTargetType, targetUuid
 export async function uploadToFiles(path: string, file: File): Promise<string> {
 	const user = getCurrentUser()
 	if (user === null) {
-		throw new Error('Not signed in')
+		throw new Error(t('maintenance_tracker', 'Not signed in'))
 	}
 	const encoded = path.split('/').map(encodeURIComponent).join('/')
 	await axios.put(generateRemoteUrl(`dav/files/${encodeURIComponent(user.uid)}${encoded}`), file, {

@@ -42,6 +42,7 @@ import IntegrationsPanel from './components/IntegrationsPanel.vue'
 import OwnershipBanner from './components/OwnershipBanner.vue'
 import PartsCatalogPanel from './components/PartsCatalogPanel.vue'
 import WorkspacePanel from './components/WorkspacePanel.vue'
+import { n, t } from './l10n.ts'
 import {
 	createActivity,
 	createAsset,
@@ -114,7 +115,7 @@ watch(saving, async (now, before) => {
 	if (before && !now && error.value === '') {
 		announcement.value = ''
 		await nextTick()
-		announcement.value = 'Saved.'
+		announcement.value = t('maintenance_tracker', 'Saved.')
 	}
 })
 
@@ -162,13 +163,13 @@ const assignmentDraft = reactive({ sourceAssetUuid: '', targetAssetUuid: '', typ
 const reminderPolicyDraft = reactive({ calendarLeadDays: 14, meterLeadPercent: 10 })
 const empty = computed(() => !loading.value && assets.value.length === 0)
 const businessWeekdayOptions: Array<{ value: BusinessWeekday, label: string }> = [
-	{ value: 'sun', label: 'Sun' },
-	{ value: 'mon', label: 'Mon' },
-	{ value: 'tue', label: 'Tue' },
-	{ value: 'wed', label: 'Wed' },
-	{ value: 'thu', label: 'Thu' },
-	{ value: 'fri', label: 'Fri' },
-	{ value: 'sat', label: 'Sat' },
+	{ value: 'sun', label: t('maintenance_tracker', 'Sun') },
+	{ value: 'mon', label: t('maintenance_tracker', 'Mon') },
+	{ value: 'tue', label: t('maintenance_tracker', 'Tue') },
+	{ value: 'wed', label: t('maintenance_tracker', 'Wed') },
+	{ value: 'thu', label: t('maintenance_tracker', 'Thu') },
+	{ value: 'fri', label: t('maintenance_tracker', 'Fri') },
+	{ value: 'sat', label: t('maintenance_tracker', 'Sat') },
 ]
 
 function categoryLabel(key: string): string {
@@ -205,22 +206,22 @@ function syncWorkMeterUnit(assetUuid: string): void {
 
 function dueStateLabel(state: MaintenanceStatusItem['state']): string {
 	return ({
-		inactive: 'Inactive',
-		unscheduled: 'Unscheduled',
-		baseline_required: 'Baseline needed',
-		upcoming: 'Upcoming',
-		due: 'Due',
-		overdue: 'Overdue',
-		unknown: 'Needs data',
+		inactive: t('maintenance_tracker', 'Inactive'),
+		unscheduled: t('maintenance_tracker', 'Unscheduled'),
+		baseline_required: t('maintenance_tracker', 'Baseline needed'),
+		upcoming: t('maintenance_tracker', 'Upcoming'),
+		due: t('maintenance_tracker', 'Due'),
+		overdue: t('maintenance_tracker', 'Overdue'),
+		unknown: t('maintenance_tracker', 'Needs data'),
 	} satisfies Record<MaintenanceStatusItem['state'], string>)[state]
 }
 
 function maintenanceRuleLabel(item: MaintenanceStatusItem): string {
 	if (item.state === 'baseline_required') {
-		return 'Record the first completed activity to establish the schedule baseline.'
+		return t('maintenance_tracker', 'Record the first completed activity to establish the schedule baseline.')
 	}
 	if (item.state === 'unknown') {
-		return 'One or more schedule rules need meter history before status can be determined.'
+		return t('maintenance_tracker', 'One or more schedule rules need meter history before status can be determined.')
 	}
 	const trigger = item.rules.find((rule) => rule.position === item.triggerRulePosition) ?? item.rules[0]
 	if (!trigger) {
@@ -229,11 +230,11 @@ function maintenanceRuleLabel(item: MaintenanceStatusItem): string {
 	if (trigger.dueOn) {
 		const remaining = trigger.remainingDays ?? 0
 		if (remaining === 0) {
-			return `Due ${trigger.dueOn}`
+			return t('maintenance_tracker', 'Due {date}', { date: trigger.dueOn })
 		}
 		return remaining > 0
-			? `Due ${trigger.dueOn} · ${remaining} days remaining`
-			: `Due ${trigger.dueOn} · ${Math.abs(remaining)} days overdue`
+			? n('maintenance_tracker', 'Due {date} · %n day remaining', 'Due {date} · %n days remaining', remaining, { date: trigger.dueOn })
+			: n('maintenance_tracker', 'Due {date} · %n day overdue', 'Due {date} · %n days overdue', Math.abs(remaining), { date: trigger.dueOn })
 	}
 	if (trigger.meter && trigger.current) {
 		return `${trigger.meter.name}: ${trigger.current.originalValue} ${trigger.current.originalUnit} · ${workScheduleLabel(item.definition.schedule)}`
@@ -247,17 +248,17 @@ async function refreshMaintenanceStatus(assetUuid: string): Promise<void> {
 
 function workScheduleLabel(schedule: WorkSchedule): string {
 	if (schedule === 'none') {
-		return 'unscheduled'
+		return t('maintenance_tracker', 'unscheduled')
 	}
 	return schedule.rules.map((rule) => {
 		if (rule.type === 'calendar') {
-			return `every ${rule.interval.value} ${rule.interval.unit}`
+			return t('maintenance_tracker', 'every {value} {unit}', { value: rule.interval.value, unit: rule.interval.unit })
 		}
 		if (rule.type === 'business_days') {
-			return `every ${rule.interval.value} business days (${rule.weekdays.map((day) => day.slice(0, 1).toUpperCase() + day.slice(1)).join(', ')})`
+			return t('maintenance_tracker', 'every {value} business days ({days})', { value: rule.interval.value, days: rule.weekdays.map((day) => day.slice(0, 1).toUpperCase() + day.slice(1)).join(', ') })
 		}
-		return `every ${rule.interval.value} ${rule.interval.unit}`
-	}).join(' OR ')
+		return t('maintenance_tracker', 'every {value} {unit}', { value: rule.interval.value, unit: rule.interval.unit })
+	}).join(t('maintenance_tracker', ' OR '))
 }
 
 function buildWorkSchedule(): WorkSchedule {
@@ -311,7 +312,7 @@ function readableError(reason: unknown): string {
 	if (reason instanceof Error && reason.message !== '') {
 		return reason.message
 	}
-	return 'The request could not be completed.'
+	return t('maintenance_tracker', 'The request could not be completed.')
 }
 
 async function loadCatalogParts(): Promise<void> {
@@ -440,10 +441,10 @@ function parseProfileDraft(): ProfileDocument {
 	try {
 		parsed = JSON.parse(profileDraftText.value)
 	} catch {
-		throw new Error('Profile JSON is not valid JSON.')
+		throw new Error(t('maintenance_tracker', 'Profile JSON is not valid JSON.'))
 	}
 	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-		throw new Error('Profile JSON must contain an object at the root.')
+		throw new Error(t('maintenance_tracker', 'Profile JSON must contain an object at the root.'))
 	}
 	return parsed as ProfileDocument
 }
@@ -499,7 +500,7 @@ async function installProfileForAsset(asset: Asset): Promise<void> {
 	}
 	const attempt = profileInstallAttempts.value[asset.uuid]
 	if (!attempt || attempt.hash !== preview.profile.contentHash) {
-		throw new Error('Profile installation attempt identity is unavailable; preview the profile again.')
+		throw new Error(t('maintenance_tracker', 'Profile installation attempt identity is unavailable; preview the profile again.'))
 	}
 	saving.value = true
 	error.value = ''
@@ -658,11 +659,11 @@ async function submitWorkDefinition(asset: Asset): Promise<void> {
 		return
 	}
 	if ((workDefinitionDraft.scheduleMode === 'meter' || workDefinitionDraft.scheduleMode === 'meter_calendar') && workDefinitionDraft.meterUuid === '') {
-		error.value = 'Select a meter for the schedule.'
+		error.value = t('maintenance_tracker', 'Select a meter for the schedule.')
 		return
 	}
 	if (workDefinitionDraft.scheduleMode === 'business_days' && workDefinitionDraft.businessWeekdays.length === 0) {
-		error.value = 'Select at least one business day.'
+		error.value = t('maintenance_tracker', 'Select at least one business day.')
 		return
 	}
 	saving.value = true
@@ -692,7 +693,7 @@ async function submitActivity(asset: Asset): Promise<void> {
 		return
 	}
 	if (activityDraft.definitionUuid === '' && activityDraft.title.trim() === '') {
-		error.value = 'Choose a work definition or enter ad-hoc work.'
+		error.value = t('maintenance_tracker', 'Choose a work definition or enter ad-hoc work.')
 		return
 	}
 	saving.value = true
@@ -768,7 +769,7 @@ async function submitReminderPolicy(): Promise<void> {
 
 function forecastLabel(occurrence: MaintenanceOccurrence): string {
 	const state = occurrence.current?.forecast.state
-	return state === 'due_soon' ? 'Due soon' : state === 'due' ? 'Due' : state === 'overdue' ? 'Overdue' : state ?? 'Unavailable'
+	return state === 'due_soon' ? t('maintenance_tracker', 'Due soon') : state === 'due' ? t('maintenance_tracker', 'Due') : state === 'overdue' ? t('maintenance_tracker', 'Overdue') : state ?? t('maintenance_tracker', 'Unavailable')
 }
 
 async function submitRelationship(): Promise<void> {
@@ -837,11 +838,11 @@ function reloadAfterTransfer(): void {
 				<header class="page-header">
 					<div>
 						<p class="eyebrow">
-							Inventory and configuration
+							{{ t('maintenance_tracker', 'Inventory and configuration') }}
 						</p>
-						<h1>Maintenance Tracker</h1>
+						<h1>{{ t('maintenance_tracker', 'Maintenance Tracker') }}</h1>
 						<p class="intro">
-							Define maintained items, their components, specifications, relationships, and current assignments. Maintenance rules and work records build on this inventory.
+							{{ t('maintenance_tracker', 'Define maintained items, their components, specifications, relationships, and current assignments. Maintenance rules and work records build on this inventory.') }}
 						</p>
 					</div>
 					<span v-if="capabilities" class="pill">{{ capabilities.appVersion }}</span>
@@ -859,30 +860,30 @@ function reloadAfterTransfer(): void {
 				</p>
 
 				<section class="panel">
-					<h2>Add maintained item</h2>
+					<h2>{{ t('maintenance_tracker', 'Add maintained item') }}</h2>
 					<form class="form-grid" @submit.prevent="submitAsset">
-						<label><span>Name</span><input
+						<label><span>{{ t('maintenance_tracker', 'Name') }}</span><input
 							v-model="draft.name"
 							required
 							maxlength="255"
-							placeholder="2020 Ford F-350"></label>
-						<label><span>Category</span><select v-model="draft.category"><option v-for="category in categories" :key="category.key" :value="category.key">{{ category.name }}</option></select></label>
-						<label><span>Manufacturer</span><input v-model="draft.manufacturer" maxlength="255" placeholder="Optional"></label>
-						<label><span>Model</span><input v-model="draft.model" maxlength="255" placeholder="Optional"></label>
+							:placeholder="t('maintenance_tracker', '2020 Ford F-350')"></label>
+						<label><span>{{ t('maintenance_tracker', 'Category') }}</span><select v-model="draft.category"><option v-for="category in categories" :key="category.key" :value="category.key">{{ category.name }}</option></select></label>
+						<label><span>{{ t('maintenance_tracker', 'Manufacturer') }}</span><input v-model="draft.manufacturer" maxlength="255" :placeholder="t('maintenance_tracker', 'Optional')"></label>
+						<label><span>{{ t('maintenance_tracker', 'Model') }}</span><input v-model="draft.model" maxlength="255" :placeholder="t('maintenance_tracker', 'Optional')"></label>
 						<button type="submit" :disabled="saving">
-							Add item
+							{{ t('maintenance_tracker', 'Add item') }}
 						</button>
 					</form>
 				</section>
 
 				<section class="panel">
-					<h2>Custom categories</h2>
+					<h2>{{ t('maintenance_tracker', 'Custom categories') }}</h2>
 					<form class="form-grid form-grid--category" @submit.prevent="submitCategory">
-						<label><span>Key</span><input v-model="categoryDraft.key" pattern="[a-z0-9][a-z0-9_-]*" placeholder="marine"></label>
-						<label><span>Name</span><input v-model="categoryDraft.name" placeholder="Marine"></label>
-						<label><span>Default asset class</span><select v-model="categoryDraft.defaultAssetClass"><option v-for="value in ['vehicle', 'trailer', 'building', 'equipment', 'appliance', 'system', 'tool', 'medical_device', 'location', 'other']" :key="value" :value="value">{{ value }}</option></select></label>
+						<label><span>{{ t('maintenance_tracker', 'Key') }}</span><input v-model="categoryDraft.key" pattern="[a-z0-9][a-z0-9_-]*" :placeholder="t('maintenance_tracker', 'marine')"></label>
+						<label><span>{{ t('maintenance_tracker', 'Name') }}</span><input v-model="categoryDraft.name" :placeholder="t('maintenance_tracker', 'Marine')"></label>
+						<label><span>{{ t('maintenance_tracker', 'Default asset class') }}</span><select v-model="categoryDraft.defaultAssetClass"><option v-for="value in ['vehicle', 'trailer', 'building', 'equipment', 'appliance', 'system', 'tool', 'medical_device', 'location', 'other']" :key="value" :value="value">{{ value }}</option></select></label>
 						<button type="submit" :disabled="saving">
-							Add category
+							{{ t('maintenance_tracker', 'Add category') }}
 						</button>
 					</form>
 				</section>
@@ -890,186 +891,186 @@ function reloadAfterTransfer(): void {
 				<PartsCatalogPanel @changed="loadCatalogParts" />
 
 				<section class="panel">
-					<h2>Asset relationships</h2>
+					<h2>{{ t('maintenance_tracker', 'Asset relationships') }}</h2>
 					<p class="panel-copy">
-						Record compatibility and durable associations separately from what was actually used on a trip or work record.
+						{{ t('maintenance_tracker', 'Record compatibility and durable associations separately from what was actually used on a trip or work record.') }}
 					</p>
 					<ul class="compact-list relationship-list">
 						<li v-for="relationship in relationships" :key="relationship.uuid">
 							<strong>{{ relationship.sourceAsset.name }} {{ relationship.label.toLowerCase() }} {{ relationship.targetAsset.name }}</strong>
-							<span>{{ relationship.context || 'no context' }}<template v-if="relationship.isDefault"> · default</template></span>
+							<span>{{ relationship.context || 'no context' }}<template v-if="relationship.isDefault"> {{ t('maintenance_tracker', '· default') }}</template></span>
 						</li>
 					</ul>
 					<form class="relationship-form" @submit.prevent="submitRelationship">
-						<select v-model="relationshipDraft.sourceAssetUuid" aria-label="Source asset" required>
+						<select v-model="relationshipDraft.sourceAssetUuid" :aria-label="t('maintenance_tracker', 'Source asset')" required>
 							<option value="" disabled>
-								Source asset
+								{{ t('maintenance_tracker', 'Source asset') }}
 							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
 								{{ asset.name }}
 							</option>
 						</select>
-						<select v-model="relationshipDraft.type" aria-label="Relationship type">
+						<select v-model="relationshipDraft.type" :aria-label="t('maintenance_tracker', 'Relationship type')">
 							<option v-for="type in relationshipTypes" :key="type.key" :value="type.key">
 								{{ type.label }}
 							</option>
 						</select>
-						<select v-model="relationshipDraft.targetAssetUuid" aria-label="Target asset" required>
+						<select v-model="relationshipDraft.targetAssetUuid" :aria-label="t('maintenance_tracker', 'Target asset')" required>
 							<option value="" disabled>
-								Target asset
+								{{ t('maintenance_tracker', 'Target asset') }}
 							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
 								{{ asset.name }}
 							</option>
 						</select>
-						<input v-model="relationshipDraft.context" aria-label="Context (general, trip, fuel)" placeholder="context (general, trip, fuel)">
-						<label class="check-field"><input v-model="relationshipDraft.isDefault" type="checkbox"><span>Default for context</span></label>
+						<input v-model="relationshipDraft.context" :aria-label="t('maintenance_tracker', 'Context (general, trip, fuel)')" :placeholder="t('maintenance_tracker', 'context (general, trip, fuel)')">
+						<label class="check-field"><input v-model="relationshipDraft.isDefault" type="checkbox"><span>{{ t('maintenance_tracker', 'Default for context') }}</span></label>
 						<button type="submit" :disabled="saving || assets.length < 2">
-							Add relationship
+							{{ t('maintenance_tracker', 'Add relationship') }}
 						</button>
 					</form>
 				</section>
 
 				<section class="panel">
-					<h2>Operational assignments</h2>
+					<h2>{{ t('maintenance_tracker', 'Operational assignments') }}</h2>
 					<p class="panel-copy">
-						Assignments are effective-dated defaults. They do not rewrite historical activity and may be overridden by a later work or trip record.
+						{{ t('maintenance_tracker', 'Assignments are effective-dated defaults. They do not rewrite historical activity and may be overridden by a later work or trip record.') }}
 					</p>
 					<ul class="compact-list relationship-list">
 						<li v-for="assignment in assignments" :key="assignment.uuid">
 							<strong>{{ assignment.sourceAsset.name }} {{ assignment.label.toLowerCase() }} {{ assignment.targetAsset.name }}</strong>
-							<span>{{ assignment.effectiveFrom }} → {{ assignment.effectiveUntil || 'indefinite' }}<template v-if="assignment.isPrimary"> · primary</template></span>
+							<span>{{ assignment.effectiveFrom }} → {{ assignment.effectiveUntil || 'indefinite' }}<template v-if="assignment.isPrimary"> {{ t('maintenance_tracker', '· primary') }}</template></span>
 						</li>
 					</ul>
 					<form class="assignment-form" @submit.prevent="submitAssignment">
-						<select v-model="assignmentDraft.sourceAssetUuid" aria-label="Source asset" required>
+						<select v-model="assignmentDraft.sourceAssetUuid" :aria-label="t('maintenance_tracker', 'Source asset')" required>
 							<option value="" disabled>
-								Source asset
+								{{ t('maintenance_tracker', 'Source asset') }}
 							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
 								{{ asset.name }}
 							</option>
 						</select>
-						<select v-model="assignmentDraft.type" aria-label="Assignment type">
+						<select v-model="assignmentDraft.type" :aria-label="t('maintenance_tracker', 'Assignment type')">
 							<option v-for="type in relationshipTypes" :key="type.key" :value="type.key">
 								{{ type.label }}
 							</option>
 						</select>
-						<select v-model="assignmentDraft.targetAssetUuid" aria-label="Target asset" required>
+						<select v-model="assignmentDraft.targetAssetUuid" :aria-label="t('maintenance_tracker', 'Target asset')" required>
 							<option value="" disabled>
-								Target asset
+								{{ t('maintenance_tracker', 'Target asset') }}
 							</option><option v-for="asset in assets" :key="asset.uuid" :value="asset.uuid">
 								{{ asset.name }}
 							</option>
 						</select>
-						<input v-model="assignmentDraft.context" aria-label="Context (trip, fuel)" placeholder="context (trip, fuel)">
-						<label><span>Effective from</span><input v-model="assignmentDraft.effectiveFrom" type="date" required></label>
-						<label><span>Effective until</span><input v-model="assignmentDraft.effectiveUntil" type="date"></label>
-						<label class="check-field"><input v-model="assignmentDraft.isPrimary" type="checkbox"><span>Primary</span></label>
+						<input v-model="assignmentDraft.context" :aria-label="t('maintenance_tracker', 'Context (trip, fuel)')" :placeholder="t('maintenance_tracker', 'context (trip, fuel)')">
+						<label><span>{{ t('maintenance_tracker', 'Effective from') }}</span><input v-model="assignmentDraft.effectiveFrom" type="date" required></label>
+						<label><span>{{ t('maintenance_tracker', 'Effective until') }}</span><input v-model="assignmentDraft.effectiveUntil" type="date"></label>
+						<label class="check-field"><input v-model="assignmentDraft.isPrimary" type="checkbox"><span>{{ t('maintenance_tracker', 'Primary') }}</span></label>
 						<button type="submit" :disabled="saving || assets.length < 2">
-							Add assignment
+							{{ t('maintenance_tracker', 'Add assignment') }}
 						</button>
 					</form>
 				</section>
 
 				<section class="panel">
-					<h2>Maintenance forecast policy</h2>
+					<h2>{{ t('maintenance_tracker', 'Maintenance forecast policy') }}</h2>
 					<p class="panel-copy">
-						These lead values decide when upcoming maintenance enters the work queue. They do not change whether maintenance is actually due.
+						{{ t('maintenance_tracker', 'These lead values decide when upcoming maintenance enters the work queue. They do not change whether maintenance is actually due.') }}
 					</p>
 					<form v-if="reminderPolicy" class="reminder-policy-form" @submit.prevent="submitReminderPolicy">
-						<label><span>Calendar lead days</span><input
+						<label><span>{{ t('maintenance_tracker', 'Calendar lead days') }}</span><input
 							v-model.number="reminderPolicyDraft.calendarLeadDays"
 							type="number"
 							min="0"
 							max="3650"
 							required></label>
-						<label><span>Meter lead percent</span><input
+						<label><span>{{ t('maintenance_tracker', 'Meter lead percent') }}</span><input
 							v-model.number="reminderPolicyDraft.meterLeadPercent"
 							type="number"
 							min="0"
 							max="100"
 							required></label>
 						<button type="submit" :disabled="saving">
-							Save forecast policy
+							{{ t('maintenance_tracker', 'Save forecast policy') }}
 						</button>
-						<span class="policy-source">{{ reminderPolicy.source === 'default' ? 'Using application defaults' : `Workspace policy · revision ${reminderPolicy.revision}` }}</span>
+						<span class="policy-source">{{ reminderPolicy.source === 'default' ? t('maintenance_tracker', 'Using application defaults') : t('maintenance_tracker', 'Workspace policy · revision {revision}', { revision: reminderPolicy.revision }) }}</span>
 					</form>
 				</section>
 
 				<section class="panel">
 					<div class="section-heading">
 						<div>
-							<h2>Your items</h2><p v-if="!loading">
-								{{ assets.length }} tracked
+							<h2>{{ t('maintenance_tracker', 'Your items') }}</h2><p v-if="!loading">
+								{{ t('maintenance_tracker', '{count} tracked', { count: assets.length }) }}
 							</p>
 						</div><button
 							class="button--secondary"
 							type="button"
 							:disabled="loading"
 							@click="load">
-							Refresh
+							{{ t('maintenance_tracker', 'Refresh') }}
 						</button>
 					</div>
 					<p v-if="loading" class="empty-state">
-						Loading maintenance records…
+						{{ t('maintenance_tracker', 'Loading maintenance records…') }}
 					</p>
 					<div v-else-if="empty" class="empty-state">
-						<strong>No items yet.</strong><span>Add the first thing you want to maintain.</span>
+						<strong>{{ t('maintenance_tracker', 'No items yet.') }}</strong><span>{{ t('maintenance_tracker', 'Add the first thing you want to maintain.') }}</span>
 					</div>
 					<ul v-else class="asset-list">
 						<li v-for="asset in assets" :key="asset.uuid" class="asset-card">
 							<div class="asset-summary">
-								<div><span class="category">{{ categoryLabel(asset.category) }} · {{ asset.assetClass }}</span><h3>{{ asset.name }}</h3><p>{{ [asset.manufacturer, asset.model].filter(Boolean).join(' · ') || 'Details not added yet' }}</p></div>
+								<div><span class="category">{{ categoryLabel(asset.category) }} · {{ asset.assetClass }}</span><h3>{{ asset.name }}</h3><p>{{ [asset.manufacturer, asset.model].filter(Boolean).join(' · ') || t('maintenance_tracker', 'Details not added yet') }}</p></div>
 								<button class="button--secondary" type="button" @click="toggleAsset(asset)">
-									{{ expandedAsset === asset.uuid ? 'Close' : 'Details & meters' }}
+									{{ expandedAsset === asset.uuid ? t('maintenance_tracker', 'Close') : t('maintenance_tracker', 'Details & meters') }}
 								</button>
 							</div>
 							<div v-if="expandedAsset === asset.uuid" class="asset-details">
 								<section class="profile-section">
-									<h4>Maintenance profile</h4>
+									<h4>{{ t('maintenance_tracker', 'Maintenance profile') }}</h4>
 									<div v-if="profileInstallations[asset.uuid]" class="profile-installed">
 										<strong>{{ profileInstallations[asset.uuid]?.profile.id }} {{ profileInstallations[asset.uuid]?.profile.version }}</strong>
-										<span>{{ profileInstallations[asset.uuid]?.profile.origin }} · {{ profileInstallations[asset.uuid]?.profile.trustState }} · {{ profileInstallations[asset.uuid]?.bindings.length }} source bindings</span>
+										<span>{{ t('maintenance_tracker', '{origin} · {trustState} · {count} source bindings', { origin: profileInstallations[asset.uuid]?.profile.origin, trustState: profileInstallations[asset.uuid]?.profile.trustState, count: profileInstallations[asset.uuid]?.bindings.length }) }}</span>
 										<code>{{ profileInstallations[asset.uuid]?.profile.contentHash }}</code>
 										<ul v-if="(compatibleParts[asset.uuid] ?? []).length > 0" class="compact-list">
 											<li v-for="fact in compatibleParts[asset.uuid]" :key="`${fact.subjectUuid}-${fact.part.uuid}`">
 												<strong>{{ fact.part.manufacturer }} {{ fact.part.partNumber }}</strong>
-												<span>compatible {{ fact.subjectType === 'component' ? 'component' : 'work' }}<template v-if="fact.part.archived"> · archived</template></span>
+												<span>{{ t('maintenance_tracker', 'compatible') }} {{ fact.subjectType === 'component' ? 'component' : 'work' }}<template v-if="fact.part.archived"> {{ t('maintenance_tracker', '· archived') }}</template></span>
 											</li>
 										</ul>
 									</div>
 									<template v-else>
 										<p class="panel-copy">
-											Profiles are validated server-side, previewed against this asset, then materialized as ordinary editable components, meters, groups, and work definitions.
+											{{ t('maintenance_tracker', 'Profiles are validated server-side, previewed against this asset, then materialized as ordinary editable components, meters, groups, and work definitions.') }}
 										</p>
-										<label><span>Bundled profile</span><select :value="selectedProfileHash" @change="selectBundledProfile(($event.target as HTMLSelectElement).value)">
-											<option value="">Local JSON</option>
+										<label><span>{{ t('maintenance_tracker', 'Bundled profile') }}</span><select :value="selectedProfileHash" @change="selectBundledProfile(($event.target as HTMLSelectElement).value)">
+											<option value="">{{ t('maintenance_tracker', 'Local JSON') }}</option>
 											<option v-for="profile in profileCatalog" :key="profile.contentHash" :value="profile.contentHash">{{ profile.name }} · {{ profile.version }}</option>
 										</select></label>
-										<label><span>Profile JSON</span><textarea v-model="profileDraftText" rows="8" @input="selectedProfileHash = ''; profileValidationMessage = ''" /></label>
+										<label><span>{{ t('maintenance_tracker', 'Profile JSON') }}</span><textarea v-model="profileDraftText" rows="8" @input="selectedProfileHash = ''; profileValidationMessage = ''" /></label>
 										<div class="button-row">
 											<button
 												class="button--secondary"
 												type="button"
 												:disabled="saving || profileDraftText.trim() === ''"
 												@click="validateProfileDraft">
-												Validate
+												{{ t('maintenance_tracker', 'Validate') }}
 											</button>
 											<button
 												class="button--secondary"
 												type="button"
 												:disabled="saving || profileDraftText.trim() === ''"
 												@click="previewProfileForAsset(asset)">
-												Preview
+												{{ t('maintenance_tracker', 'Preview') }}
 											</button>
 											<button type="button" :disabled="saving || !(profilePreviews[asset.uuid]?.installable)" @click="installProfileForAsset(asset)">
-												Install profile
+												{{ t('maintenance_tracker', 'Install profile') }}
 											</button>
 										</div>
 										<p v-if="profileValidationMessage" class="profile-validation">
 											{{ profileValidationMessage }}
 										</p>
 										<div v-if="profilePreviews[asset.uuid]" class="profile-preview">
-											<strong>{{ profilePreviews[asset.uuid]?.installable ? 'Ready to install' : 'Cannot install yet' }}</strong>
-											<span>{{ profilePreviews[asset.uuid]?.materializes.components }} components · {{ profilePreviews[asset.uuid]?.materializes.meters }} meters · {{ profilePreviews[asset.uuid]?.materializes.workDefinitions }} work definitions</span>
+											<strong>{{ profilePreviews[asset.uuid]?.installable ? t('maintenance_tracker', 'Ready to install') : t('maintenance_tracker', 'Cannot install yet') }}</strong>
+											<span>{{ t('maintenance_tracker', '{components} components · {meters} meters · {workDefinitions} work definitions', { components: profilePreviews[asset.uuid]?.materializes.components, meters: profilePreviews[asset.uuid]?.materializes.meters, workDefinitions: profilePreviews[asset.uuid]?.materializes.workDefinitions }) }}</span>
 											<ul v-if="profilePreviews[asset.uuid]?.conflicts.length">
 												<li v-for="conflict in profilePreviews[asset.uuid]?.conflicts" :key="conflict">
 													{{ conflict }}
@@ -1086,29 +1087,29 @@ function reloadAfterTransfer(): void {
 								<AssetCostsPanel :assetUuid="asset.uuid" />
 								<EvidencePanel targetType="asset" :targetUuid="asset.uuid" />
 								<section>
-									<h4>Components</h4><ul class="compact-list">
+									<h4>{{ t('maintenance_tracker', 'Components') }}</h4><ul class="compact-list">
 										<li v-for="component in components[asset.uuid] ?? []" :key="component.uuid">
-											<strong>{{ component.name }}</strong><span>{{ component.type }}<template v-if="component.parentUuid"> · nested</template></span>
+											<strong>{{ component.name }}</strong><span>{{ component.type }}<template v-if="component.parentUuid"> {{ t('maintenance_tracker', '· nested') }}</template></span>
 										</li>
 									</ul>
 									<form class="inline-form" @submit.prevent="submitComponent(asset)">
 										<input
 											v-model="componentDraft.name"
-											aria-label="Component name"
-											placeholder="Component name"
-											required><input v-model="componentDraft.type" aria-label="Component type key" placeholder="type key"><select v-model="componentDraft.parentUuid" aria-label="Parent component">
+											:aria-label="t('maintenance_tracker', 'Component name')"
+											:placeholder="t('maintenance_tracker', 'Component name')"
+											required><input v-model="componentDraft.type" :aria-label="t('maintenance_tracker', 'Component type key')" :placeholder="t('maintenance_tracker', 'type key')"><select v-model="componentDraft.parentUuid" :aria-label="t('maintenance_tracker', 'Parent component')">
 												<option value="">
-													No parent
+													{{ t('maintenance_tracker', 'No parent') }}
 												</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
 													{{ component.name }}
 												</option>
 											</select><button type="submit">
-											Add component
+											{{ t('maintenance_tracker', 'Add component') }}
 										</button>
 									</form>
 								</section>
 								<section>
-									<h4>Specifications</h4><ul class="compact-list">
+									<h4>{{ t('maintenance_tracker', 'Specifications') }}</h4><ul class="compact-list">
 										<li v-for="spec in specifications[asset.uuid] ?? []" :key="spec.uuid">
 											<strong>{{ spec.label }}</strong><span>{{ String(spec.value) }}{{ spec.unit ? ` ${spec.unit}` : '' }}{{ spec.regime ? ` · ${spec.regime}` : '' }}</span>
 										</li>
@@ -1116,25 +1117,25 @@ function reloadAfterTransfer(): void {
 									<form class="spec-form" @submit.prevent="submitSpecification(asset)">
 										<input
 											v-model="specificationDraft.key"
-											aria-label="Specification key"
-											placeholder="engine.oil.capacity"
+											:aria-label="t('maintenance_tracker', 'Specification key')"
+											:placeholder="t('maintenance_tracker', 'engine.oil.capacity')"
 											required><input
 												v-model="specificationDraft.label"
-												aria-label="Specification label"
-												placeholder="Engine oil capacity"
-												required><input v-model="specificationDraft.value" aria-label="Value" placeholder="13"><input v-model="specificationDraft.unit" aria-label="Unit" placeholder="qt"><input v-model="specificationDraft.regime" aria-label="Regime (optional)" placeholder="regime (optional)"><select v-model="specificationDraft.componentUuid" aria-label="Component">
+												:aria-label="t('maintenance_tracker', 'Specification label')"
+												:placeholder="t('maintenance_tracker', 'Engine oil capacity')"
+												required><input v-model="specificationDraft.value" :aria-label="t('maintenance_tracker', 'Value')" placeholder="13"><input v-model="specificationDraft.unit" :aria-label="t('maintenance_tracker', 'Unit')" :placeholder="t('maintenance_tracker', 'qt')"><input v-model="specificationDraft.regime" :aria-label="t('maintenance_tracker', 'Regime (optional)')" :placeholder="t('maintenance_tracker', 'regime (optional)')"><select v-model="specificationDraft.componentUuid" :aria-label="t('maintenance_tracker', 'Component')">
 													<option value="">
-														Whole asset
+														{{ t('maintenance_tracker', 'Whole asset') }}
 													</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
 														{{ component.name }}
 													</option>
 												</select><button type="submit">
-											Add specification
+											{{ t('maintenance_tracker', 'Add specification') }}
 										</button>
 									</form>
 								</section>
 								<section class="meter-section">
-									<h4>Meters & readings</h4>
+									<h4>{{ t('maintenance_tracker', 'Meters & readings') }}</h4>
 									<ul class="compact-list">
 										<li v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid">
 											<strong>{{ meter.name }}</strong>
@@ -1144,78 +1145,78 @@ function reloadAfterTransfer(): void {
 									<form class="meter-form" @submit.prevent="submitMeter(asset)">
 										<input
 											v-model="meterDraft.key"
-											aria-label="Meter key"
+											:aria-label="t('maintenance_tracker', 'Meter key')"
 											pattern="[a-z0-9][a-z0-9_-]*"
-											placeholder="odometer"
+											:placeholder="t('maintenance_tracker', 'odometer')"
 											required>
 										<input
 											v-model="meterDraft.name"
-											aria-label="Meter name"
-											placeholder="Odometer"
+											:aria-label="t('maintenance_tracker', 'Meter name')"
+											:placeholder="t('maintenance_tracker', 'Odometer')"
 											required>
-										<select v-model="meterDraft.dimension" aria-label="Dimension" @change="syncMeterUnit">
+										<select v-model="meterDraft.dimension" :aria-label="t('maintenance_tracker', 'Dimension')" @change="syncMeterUnit">
 											<option value="distance">
-												distance
+												{{ t('maintenance_tracker', 'distance') }}
 											</option><option value="runtime">
-												runtime
+												{{ t('maintenance_tracker', 'runtime') }}
 											</option><option value="usage_count">
-												usage count
+												{{ t('maintenance_tracker', 'usage count') }}
 											</option>
 										</select>
-										<select v-model="meterDraft.displayUnit" aria-label="Display unit">
+										<select v-model="meterDraft.displayUnit" :aria-label="t('maintenance_tracker', 'Display unit')">
 											<option v-for="unit in meterUnits(meterDraft.dimension)" :key="unit" :value="unit">
 												{{ unit }}
 											</option>
 										</select>
-										<select v-model="meterDraft.componentUuid" aria-label="Component">
+										<select v-model="meterDraft.componentUuid" :aria-label="t('maintenance_tracker', 'Component')">
 											<option value="">
-												Whole asset
+												{{ t('maintenance_tracker', 'Whole asset') }}
 											</option><option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
 												{{ component.name }}
 											</option>
 										</select>
-										<label class="check-field"><input v-model="meterDraft.monotonic" type="checkbox"><span>Monotonic</span></label>
+										<label class="check-field"><input v-model="meterDraft.monotonic" type="checkbox"><span>{{ t('maintenance_tracker', 'Monotonic') }}</span></label>
 										<button type="submit">
-											Add meter
+											{{ t('maintenance_tracker', 'Add meter') }}
 										</button>
 									</form>
 									<form class="reading-form" @submit.prevent="submitReading">
 										<select
 											v-model="readingDraft.meterUuid"
-											aria-label="Meter"
+											:aria-label="t('maintenance_tracker', 'Meter')"
 											required
 											@change="syncReadingUnit">
 											<option value="" disabled>
-												Meter
+												{{ t('maintenance_tracker', 'Meter') }}
 											</option><option v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid" :value="meter.uuid">
 												{{ meter.name }}
 											</option>
 										</select>
 										<input
 											v-model="readingDraft.value"
-											aria-label="Reading"
+											:aria-label="t('maintenance_tracker', 'Reading')"
 											inputmode="decimal"
-											placeholder="Reading"
+											:placeholder="t('maintenance_tracker', 'Reading')"
 											required>
 										<input
 											v-model="readingDraft.unit"
-											aria-label="Unit"
-											placeholder="unit"
+											:aria-label="t('maintenance_tracker', 'Unit')"
+											:placeholder="t('maintenance_tracker', 'unit')"
 											required>
 										<input
 											v-model="readingDraft.observedAt"
-											aria-label="Observed at"
+											:aria-label="t('maintenance_tracker', 'Observed at')"
 											type="datetime-local"
 											required>
 										<button type="submit" :disabled="(meters[asset.uuid] ?? []).length === 0">
-											Record reading
+											{{ t('maintenance_tracker', 'Record reading') }}
 										</button>
 									</form>
 								</section>
 								<section class="status-section">
-									<h4>Maintenance status</h4>
+									<h4>{{ t('maintenance_tracker', 'Maintenance status') }}</h4>
 									<p class="panel-copy">
-										Derived from the current schedules, completed activity, and effective meter history. Due state is not stored.
+										{{ t('maintenance_tracker', 'Derived from the current schedules, completed activity, and effective meter history. Due state is not stored.') }}
 									</p>
 									<ul class="compact-list status-list">
 										<li v-for="item in maintenanceStatus[asset.uuid] ?? []" :key="item.definition.uuid">
@@ -1224,15 +1225,15 @@ function reloadAfterTransfer(): void {
 												<span class="status-chip" :data-state="item.state">{{ dueStateLabel(item.state) }}</span>
 											</div>
 											<span>{{ maintenanceRuleLabel(item) }}</span>
-											<span v-if="item.lastPerformedAt">Last completed {{ new Date(item.lastPerformedAt).toLocaleString() }}</span>
+											<span v-if="item.lastPerformedAt">{{ t('maintenance_tracker', 'Last completed {lastPerformedAt}', { lastPerformedAt: new Date(item.lastPerformedAt).toLocaleString() }) }}</span>
 										</li>
 									</ul>
 								</section>
 								<section class="occurrence-section">
 									<div class="section-heading section-heading--compact">
 										<div>
-											<h4>Maintenance work queue</h4><p class="panel-copy">
-												Due soon is policy-layer attention; each row still displays current derived status.
+											<h4>{{ t('maintenance_tracker', 'Maintenance work queue') }}</h4><p class="panel-copy">
+												{{ t('maintenance_tracker', 'Due soon is policy-layer attention; each row still displays current derived status.') }}
 											</p>
 										</div>
 										<button
@@ -1240,25 +1241,25 @@ function reloadAfterTransfer(): void {
 											type="button"
 											:disabled="saving"
 											@click="reconcileWorkQueue(asset.uuid)">
-											Reconcile work queue
+											{{ t('maintenance_tracker', 'Reconcile work queue') }}
 										</button>
 									</div>
 									<p v-if="(maintenanceOccurrences[asset.uuid] ?? []).length === 0" class="empty-inline">
-										No open maintenance occurrences.
+										{{ t('maintenance_tracker', 'No open maintenance occurrences.') }}
 									</p>
 									<ul v-else class="compact-list occurrence-list">
 										<li v-for="occurrence in maintenanceOccurrences[asset.uuid] ?? []" :key="occurrence.uuid">
 											<div class="status-line">
 												<strong>{{ occurrence.current?.definition.title ?? occurrence.definitionUuid }}</strong><span class="status-chip" :data-state="occurrence.current?.forecast.state">{{ forecastLabel(occurrence) }}</span>
 											</div>
-											<span>Opened {{ new Date(occurrence.openedAt).toLocaleString() }}<template v-if="occurrence.current?.lastPerformedAt"> · baseline {{ new Date(occurrence.current.lastPerformedAt).toLocaleString() }}</template></span>
+											<span>{{ t('maintenance_tracker', 'Opened') }} {{ new Date(occurrence.openedAt).toLocaleString() }}<template v-if="occurrence.current?.lastPerformedAt"> {{ t('maintenance_tracker', '· baseline {lastPerformedAt}', { lastPerformedAt: new Date(occurrence.current.lastPerformedAt).toLocaleString() }) }}</template></span>
 										</li>
 									</ul>
 								</section>
 								<section class="work-section">
-									<h4>Maintenance definitions</h4>
+									<h4>{{ t('maintenance_tracker', 'Maintenance definitions') }}</h4>
 									<p class="panel-copy">
-										Every definition carries an explicit schedule. Choose Unscheduled for ad-hoc work.
+										{{ t('maintenance_tracker', 'Every definition carries an explicit schedule. Choose Unscheduled for ad-hoc work.') }}
 									</p>
 									<ul class="compact-list">
 										<li v-for="definition in workDefinitions[asset.uuid] ?? []" :key="definition.uuid">
@@ -1269,102 +1270,102 @@ function reloadAfterTransfer(): void {
 									<form class="work-group-form" @submit.prevent="submitWorkGroup(asset)">
 										<input
 											v-model="workGroupDraft.key"
-											aria-label="Group key"
+											:aria-label="t('maintenance_tracker', 'Group key')"
 											pattern="[a-z0-9][a-z0-9_-]*"
-											placeholder="engine"
+											:placeholder="t('maintenance_tracker', 'engine')"
 											required>
 										<input
 											v-model="workGroupDraft.name"
-											aria-label="Group name"
-											placeholder="Engine"
+											:aria-label="t('maintenance_tracker', 'Group name')"
+											:placeholder="t('maintenance_tracker', 'Engine')"
 											required>
-										<input v-model="workGroupDraft.description" aria-label="Description (optional)" placeholder="Description (optional)">
+										<input v-model="workGroupDraft.description" :aria-label="t('maintenance_tracker', 'Description (optional)')" :placeholder="t('maintenance_tracker', 'Description (optional)')">
 										<input
 											v-model.number="workGroupDraft.sortOrder"
-											aria-label="Sort order"
+											:aria-label="t('maintenance_tracker', 'Sort order')"
 											type="number"
-											placeholder="Sort order">
+											:placeholder="t('maintenance_tracker', 'Sort order')">
 										<button type="submit">
-											Add work group
+											{{ t('maintenance_tracker', 'Add work group') }}
 										</button>
 									</form>
 									<form class="work-definition-form" @submit.prevent="submitWorkDefinition(asset)">
 										<input
 											v-model="workDefinitionDraft.key"
-											aria-label="Task key"
+											:aria-label="t('maintenance_tracker', 'Task key')"
 											pattern="[a-z0-9][a-z0-9_-]*"
-											placeholder="oil_change"
+											:placeholder="t('maintenance_tracker', 'oil_change')"
 											required>
 										<input
 											v-model="workDefinitionDraft.title"
-											aria-label="Task title"
-											placeholder="Oil change"
+											:aria-label="t('maintenance_tracker', 'Task title')"
+											:placeholder="t('maintenance_tracker', 'Oil change')"
 											required>
 										<input
 											v-model="workDefinitionDraft.kind"
-											aria-label="Task kind"
-											placeholder="maintenance"
+											:aria-label="t('maintenance_tracker', 'Task kind')"
+											:placeholder="t('maintenance_tracker', 'maintenance')"
 											required>
-										<select v-model="workDefinitionDraft.groupUuid" aria-label="Group">
+										<select v-model="workDefinitionDraft.groupUuid" :aria-label="t('maintenance_tracker', 'Group')">
 											<option value="">
-												No work group
+												{{ t('maintenance_tracker', 'No work group') }}
 											</option>
 											<option v-for="group in workGroups[asset.uuid] ?? []" :key="group.uuid" :value="group.uuid">
 												{{ group.name }}
 											</option>
 										</select>
-										<select v-model="workDefinitionDraft.componentUuid" aria-label="Component">
+										<select v-model="workDefinitionDraft.componentUuid" :aria-label="t('maintenance_tracker', 'Component')">
 											<option value="">
-												Whole asset
+												{{ t('maintenance_tracker', 'Whole asset') }}
 											</option>
 											<option v-for="component in components[asset.uuid] ?? []" :key="component.uuid" :value="component.uuid">
 												{{ component.name }}
 											</option>
 										</select>
-										<select v-model="workDefinitionDraft.scheduleMode" aria-label="Schedule mode">
+										<select v-model="workDefinitionDraft.scheduleMode" :aria-label="t('maintenance_tracker', 'Schedule mode')">
 											<option value="none">
-												Unscheduled (schedule: none)
+												{{ t('maintenance_tracker', 'Unscheduled (schedule: none)') }}
 											</option>
 											<option value="calendar">
-												Calendar interval
+												{{ t('maintenance_tracker', 'Calendar interval') }}
 											</option>
 											<option value="business_days">
-												Business-day interval
+												{{ t('maintenance_tracker', 'Business-day interval') }}
 											</option>
 											<option value="meter">
-												Meter interval
+												{{ t('maintenance_tracker', 'Meter interval') }}
 											</option>
 											<option value="meter_calendar">
-												Meter OR calendar
+												{{ t('maintenance_tracker', 'Meter OR calendar') }}
 											</option>
 										</select>
 										<template v-if="workDefinitionDraft.scheduleMode === 'calendar' || workDefinitionDraft.scheduleMode === 'meter_calendar'">
 											<input
 												v-model.number="workDefinitionDraft.calendarValue"
-												aria-label="Calendar value"
+												:aria-label="t('maintenance_tracker', 'Calendar value')"
 												type="number"
 												min="1"
 												required>
-											<select v-model="workDefinitionDraft.calendarUnit" aria-label="Calendar unit">
+											<select v-model="workDefinitionDraft.calendarUnit" :aria-label="t('maintenance_tracker', 'Calendar unit')">
 												<option value="day">
-													days
+													{{ t('maintenance_tracker', 'days') }}
 												</option><option value="week">
-													weeks
+													{{ t('maintenance_tracker', 'weeks') }}
 												</option><option value="month">
-													months
+													{{ t('maintenance_tracker', 'months') }}
 												</option><option value="year">
-													years
+													{{ t('maintenance_tracker', 'years') }}
 												</option>
 											</select>
 										</template>
 										<template v-if="workDefinitionDraft.scheduleMode === 'business_days'">
 											<input
 												v-model.number="workDefinitionDraft.businessDaysValue"
-												aria-label="Business days value"
+												:aria-label="t('maintenance_tracker', 'Business days value')"
 												type="number"
 												min="1"
 												required>
-											<div class="weekday-picker" aria-label="Business days">
+											<div class="weekday-picker" :aria-label="t('maintenance_tracker', 'Business days')">
 												<label v-for="day in businessWeekdayOptions" :key="day.value" class="weekday-option">
 													<input v-model="workDefinitionDraft.businessWeekdays" type="checkbox" :value="day.value">
 													<span>{{ day.label }}</span>
@@ -1374,11 +1375,11 @@ function reloadAfterTransfer(): void {
 										<template v-if="workDefinitionDraft.scheduleMode === 'meter' || workDefinitionDraft.scheduleMode === 'meter_calendar'">
 											<select
 												v-model="workDefinitionDraft.meterUuid"
-												aria-label="Schedule meter"
+												:aria-label="t('maintenance_tracker', 'Schedule meter')"
 												required
 												@change="syncWorkMeterUnit(asset.uuid)">
 												<option value="" disabled>
-													Schedule meter
+													{{ t('maintenance_tracker', 'Schedule meter') }}
 												</option>
 												<option v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid" :value="meter.uuid">
 													{{ meter.name }}
@@ -1386,29 +1387,29 @@ function reloadAfterTransfer(): void {
 											</select>
 											<input
 												v-model="workDefinitionDraft.meterValue"
-												aria-label="Interval"
+												:aria-label="t('maintenance_tracker', 'Interval')"
 												inputmode="decimal"
-												placeholder="Interval"
+												:placeholder="t('maintenance_tracker', 'Interval')"
 												required>
 											<input
 												v-model="workDefinitionDraft.meterUnit"
-												aria-label="Unit"
-												placeholder="unit"
+												:aria-label="t('maintenance_tracker', 'Unit')"
+												:placeholder="t('maintenance_tracker', 'unit')"
 												required>
 										</template>
 										<button type="submit">
-											Add work definition
+											{{ t('maintenance_tracker', 'Add work definition') }}
 										</button>
 									</form>
 								</section>
 								<section class="activity-section">
-									<h4>Maintenance activity</h4>
+									<h4>{{ t('maintenance_tracker', 'Maintenance activity') }}</h4>
 									<p class="panel-copy">
-										Record what actually happened. Work items and meter snapshots are immutable ledger facts.
+										{{ t('maintenance_tracker', 'Record what actually happened. Work items and meter snapshots are immutable ledger facts.') }}
 									</p>
 									<ul class="compact-list">
 										<li v-for="activity in activities[asset.uuid] ?? []" :key="activity.uuid">
-											<strong>{{ activity.summary || activity.items[0]?.title || 'Maintenance activity' }}</strong>
+											<strong>{{ activity.summary || activity.items[0]?.title || t('maintenance_tracker', 'Maintenance activity') }}</strong>
 											<span>{{ new Date(activity.performedAt).toLocaleString() }}</span>
 											<span v-if="activity.items[0]?.componentName">{{ activity.items[0]?.componentName }}</span>
 											<span v-for="used in activity.parts ?? []" :key="used.uuid">{{ used.quantity }} {{ used.unit }} × {{ used.manufacturer }} {{ used.partNumber }}<template v-if="used.vendorName"> ({{ used.vendorName }})</template></span>
@@ -1416,9 +1417,9 @@ function reloadAfterTransfer(): void {
 										</li>
 									</ul>
 									<form class="activity-form" @submit.prevent="submitActivity(asset)">
-										<select v-model="activityDraft.definitionUuid" aria-label="Planned task">
+										<select v-model="activityDraft.definitionUuid" :aria-label="t('maintenance_tracker', 'Planned task')">
 											<option value="">
-												Ad-hoc work
+												{{ t('maintenance_tracker', 'Ad-hoc work') }}
 											</option>
 											<option v-for="definition in workDefinitions[asset.uuid] ?? []" :key="definition.uuid" :value="definition.uuid">
 												{{ definition.title }}
@@ -1427,27 +1428,27 @@ function reloadAfterTransfer(): void {
 										<input
 											v-if="activityDraft.definitionUuid === ''"
 											v-model="activityDraft.title"
-											aria-label="Ad-hoc work title"
-											placeholder="Ad-hoc work title"
+											:aria-label="t('maintenance_tracker', 'Ad-hoc work title')"
+											:placeholder="t('maintenance_tracker', 'Ad-hoc work title')"
 											required>
 										<input
 											v-model="activityDraft.performedAt"
-											aria-label="Performed at"
+											:aria-label="t('maintenance_tracker', 'Performed at')"
 											type="datetime-local"
 											required>
-										<input v-model="activityDraft.summary" aria-label="Summary (optional)" placeholder="Summary (optional)">
-										<select v-model="activityDraft.meterUuid" aria-label="Meter">
+										<input v-model="activityDraft.summary" :aria-label="t('maintenance_tracker', 'Summary (optional)')" :placeholder="t('maintenance_tracker', 'Summary (optional)')">
+										<select v-model="activityDraft.meterUuid" :aria-label="t('maintenance_tracker', 'Meter')">
 											<option value="">
-												No meter reading
+												{{ t('maintenance_tracker', 'No meter reading') }}
 											</option><option v-for="meter in meters[asset.uuid] ?? []" :key="meter.uuid" :value="meter.uuid">
 												{{ meter.name }}
 											</option>
 										</select>
-										<input v-model="activityDraft.meterValue" aria-label="Meter value (optional)" placeholder="Meter value (optional)">
-										<input v-model="activityDraft.meterUnit" aria-label="Unit" placeholder="unit">
-										<select v-model="activityDraft.partUuid" aria-label="Part used">
+										<input v-model="activityDraft.meterValue" :aria-label="t('maintenance_tracker', 'Meter value (optional)')" :placeholder="t('maintenance_tracker', 'Meter value (optional)')">
+										<input v-model="activityDraft.meterUnit" :aria-label="t('maintenance_tracker', 'Unit')" :placeholder="t('maintenance_tracker', 'unit')">
+										<select v-model="activityDraft.partUuid" :aria-label="t('maintenance_tracker', 'Part used')">
 											<option value="">
-												No part used
+												{{ t('maintenance_tracker', 'No part used') }}
 											</option>
 											<option v-for="part in catalogParts" :key="part.uuid" :value="part.uuid">
 												{{ part.manufacturer }} {{ part.partNumber }}
@@ -1457,15 +1458,15 @@ function reloadAfterTransfer(): void {
 											v-if="activityDraft.partUuid !== ''"
 											v-model="activityDraft.partQuantity"
 											inputmode="decimal"
-											aria-label="Part quantity"
-											placeholder="Quantity">
-										<select v-if="activityDraft.partUuid !== ''" v-model="activityDraft.partUnit" aria-label="Part quantity unit">
+											:aria-label="t('maintenance_tracker', 'Part quantity')"
+											:placeholder="t('maintenance_tracker', 'Quantity')">
+										<select v-if="activityDraft.partUuid !== ''" v-model="activityDraft.partUnit" :aria-label="t('maintenance_tracker', 'Part quantity unit')">
 											<option v-for="unit in partUnits" :key="unit" :value="unit">
 												{{ unit }}
 											</option>
 										</select>
 										<button type="submit">
-											Record activity
+											{{ t('maintenance_tracker', 'Record activity') }}
 										</button>
 									</form>
 								</section>

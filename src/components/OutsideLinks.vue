@@ -7,6 +7,7 @@
 import type { LinkSubjectType, OutsideLink } from '../catalogTypes.ts'
 
 import { onMounted, reactive, ref } from 'vue'
+import { t } from '../l10n.ts'
 import { archiveLink, createLink, getLinks } from '../services/catalogApi.ts'
 
 const props = defineProps<{ subjectType: LinkSubjectType, subjectUuid: string }>()
@@ -29,7 +30,7 @@ function safeHref(url: string): string | undefined {
 }
 
 function readableError(reason: unknown): string {
-	return reason instanceof Error && reason.message !== '' ? reason.message : 'The request could not be completed.'
+	return reason instanceof Error && reason.message !== '' ? reason.message : t('maintenance_tracker', 'The request could not be completed.')
 }
 
 async function load(): Promise<void> {
@@ -75,30 +76,30 @@ onMounted(load)
 			<li v-for="link in links" :key="link.uuid">
 				<a :href="safeHref(link.url)" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>
 				<button type="button" :disabled="saving" @click="mutate(() => archiveLink(subjectType, subjectUuid, link.uuid, link.revision))">
-					Remove
+					{{ t('maintenance_tracker', 'Remove') }}
 				</button>
 			</li>
 		</ul>
 		<button v-if="!adding" type="button" @click="adding = true">
-			Add link
+			{{ t('maintenance_tracker', 'Add link') }}
 		</button>
 		<form v-else class="outside-links-form" @submit.prevent="submit">
 			<input
 				v-model="draft.label"
 				required
 				maxlength="255"
-				placeholder="Label"
-				aria-label="Link label">
+				:placeholder="t('maintenance_tracker', 'Label')"
+				:aria-label="t('maintenance_tracker', 'Link label')">
 			<input
 				v-model="draft.url"
 				type="url"
 				required
 				maxlength="2048"
 				pattern="https://.+"
-				placeholder="https://"
-				aria-label="Link URL">
+				:placeholder="t('maintenance_tracker', 'https://')"
+				:aria-label="t('maintenance_tracker', 'Link URL')">
 			<button type="submit" :disabled="saving">
-				Save
+				{{ t('maintenance_tracker', 'Save') }}
 			</button>
 		</form>
 	</div>

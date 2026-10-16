@@ -7,6 +7,7 @@ import type { OwnershipTransfer, WorkspaceMemberSummary, WorkspaceSummary } from
 import type { OcsEnvelope } from './api.ts'
 
 import axios from '@nextcloud/axios'
+import { t } from '../l10n.ts'
 import { data, endpoint, requestOptions } from './api.ts'
 
 /**
@@ -19,7 +20,7 @@ export function ocsMessage(reason: unknown): string {
 	if (typeof message === 'string' && message !== '') {
 		return message
 	}
-	return reason instanceof Error && reason.message !== '' ? reason.message : 'The request could not be completed.'
+	return reason instanceof Error && reason.message !== '' ? reason.message : t('maintenance_tracker', 'The request could not be completed.')
 }
 
 export async function listWorkspaces(): Promise<WorkspaceSummary[]> {
@@ -84,7 +85,7 @@ export async function downloadExport(workspace: string, format: ExportFormat, in
 			} catch {
 				message = ''
 			}
-			throw new Error(message !== '' ? message : 'The export could not be created.', { cause: reason })
+			throw new Error(message !== '' ? message : t('maintenance_tracker', 'The export could not be created.'), { cause: reason })
 		}
 		throw reason
 	}

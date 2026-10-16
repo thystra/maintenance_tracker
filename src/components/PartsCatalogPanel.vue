@@ -8,6 +8,7 @@ import type { Part, Vendor } from '../catalogTypes.ts'
 
 import { onMounted, reactive, ref } from 'vue'
 import OutsideLinks from './OutsideLinks.vue'
+import { t } from '../l10n.ts'
 import { archivePart, archiveVendor, createPart, createVendor, getParts, getVendors } from '../services/catalogApi.ts'
 
 const emit = defineEmits<{ (event: 'changed'): void }>()
@@ -20,7 +21,7 @@ const partDraft = reactive({ manufacturer: '', partNumber: '', description: '' }
 const vendorDraft = reactive({ name: '', notes: '' })
 
 function readableError(reason: unknown): string {
-	return reason instanceof Error && reason.message !== '' ? reason.message : 'The request could not be completed.'
+	return reason instanceof Error && reason.message !== '' ? reason.message : t('maintenance_tracker', 'The request could not be completed.')
 }
 
 async function load(): Promise<void> {
@@ -68,16 +69,16 @@ onMounted(load)
 
 <template>
 	<section class="catalog-panel">
-		<h2>Parts and vendors</h2>
+		<h2>{{ t('maintenance_tracker', 'Parts and vendors') }}</h2>
 		<p class="catalog-copy">
-			Canonical parts are shared across fitment packs, profiles, and recorded work. Manufacturer and part number form a part's identity and cannot be edited after creation.
+			{{ t('maintenance_tracker', 'Canonical parts are shared across fitment packs, profiles, and recorded work. Manufacturer and part number form a part\'s identity and cannot be edited after creation.') }}
 		</p>
 		<p v-if="error" class="catalog-error" role="alert">
 			{{ error }}
 		</p>
 		<div class="catalog-columns">
 			<div>
-				<h3>Parts</h3>
+				<h3>{{ t('maintenance_tracker', 'Parts') }}</h3>
 				<ul class="catalog-list">
 					<li v-for="part in parts" :key="part.uuid">
 						<span><strong>{{ part.manufacturer }} {{ part.partNumber }}</strong> · {{ part.description }}</span>
@@ -86,25 +87,25 @@ onMounted(load)
 							class="catalog-secondary"
 							:disabled="saving"
 							@click="mutate(() => archivePart(part.uuid, part.revision))">
-							Archive
+							{{ t('maintenance_tracker', 'Archive') }}
 						</button>
 						<OutsideLinks subjectType="part" :subjectUuid="part.uuid" />
 					</li>
 					<li v-if="parts.length === 0">
-						<span>No parts yet.</span>
+						<span>{{ t('maintenance_tracker', 'No parts yet.') }}</span>
 					</li>
 				</ul>
 				<form class="catalog-form" @submit.prevent="submitPart">
-					<label><span>Manufacturer</span><input v-model="partDraft.manufacturer" required maxlength="255"></label>
-					<label><span>Part number</span><input v-model="partDraft.partNumber" required maxlength="128"></label>
-					<label><span>Description</span><input v-model="partDraft.description" required maxlength="1000"></label>
+					<label><span>{{ t('maintenance_tracker', 'Manufacturer') }}</span><input v-model="partDraft.manufacturer" required maxlength="255"></label>
+					<label><span>{{ t('maintenance_tracker', 'Part number') }}</span><input v-model="partDraft.partNumber" required maxlength="128"></label>
+					<label><span>{{ t('maintenance_tracker', 'Description') }}</span><input v-model="partDraft.description" required maxlength="1000"></label>
 					<button type="submit" :disabled="saving">
-						Add part
+						{{ t('maintenance_tracker', 'Add part') }}
 					</button>
 				</form>
 			</div>
 			<div>
-				<h3>Vendors</h3>
+				<h3>{{ t('maintenance_tracker', 'Vendors') }}</h3>
 				<ul class="catalog-list">
 					<li v-for="vendor in vendors" :key="vendor.uuid">
 						<span><strong>{{ vendor.name }}</strong><template v-if="vendor.notes"> · {{ vendor.notes }}</template></span>
@@ -113,19 +114,19 @@ onMounted(load)
 							class="catalog-secondary"
 							:disabled="saving"
 							@click="mutate(() => archiveVendor(vendor.uuid, vendor.revision))">
-							Archive
+							{{ t('maintenance_tracker', 'Archive') }}
 						</button>
 						<OutsideLinks subjectType="vendor" :subjectUuid="vendor.uuid" />
 					</li>
 					<li v-if="vendors.length === 0">
-						<span>No vendors yet.</span>
+						<span>{{ t('maintenance_tracker', 'No vendors yet.') }}</span>
 					</li>
 				</ul>
 				<form class="catalog-form" @submit.prevent="submitVendor">
-					<label><span>Name</span><input v-model="vendorDraft.name" required maxlength="255"></label>
-					<label><span>Notes</span><input v-model="vendorDraft.notes" maxlength="2000" placeholder="Optional"></label>
+					<label><span>{{ t('maintenance_tracker', 'Name') }}</span><input v-model="vendorDraft.name" required maxlength="255"></label>
+					<label><span>{{ t('maintenance_tracker', 'Notes') }}</span><input v-model="vendorDraft.notes" maxlength="2000" :placeholder="t('maintenance_tracker', 'Optional')"></label>
 					<button type="submit" :disabled="saving">
-						Add vendor
+						{{ t('maintenance_tracker', 'Add vendor') }}
 					</button>
 				</form>
 			</div>
