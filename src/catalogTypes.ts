@@ -125,3 +125,25 @@ export interface CreateCost {
 	vendorUuid?: string | null
 	notes?: string | null
 }
+
+export type LinkSubjectType = 'part' | 'vendor'
+
+export interface OutsideLink {
+	uuid: string
+	subjectType: LinkSubjectType
+	subjectUuid: string
+	label: string
+	/** Server-validated https URL; render only with rel="noopener noreferrer". */
+	url: string
+	source: 'manual' | 'profile'
+	revision: number
+	createdAt: string
+	updatedAt: string
+	archived: boolean
+}
+
+export interface OutsideLinkList {
+	/** False when the Nextcloud administrator has disabled outside links. */
+	enabled: boolean
+	items: OutsideLink[]
+}

@@ -47,6 +47,7 @@ final class Capability implements ICapability {
 					'parts-catalog',
 					'vendors',
 					'cost-ledger',
+					'outside-links',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

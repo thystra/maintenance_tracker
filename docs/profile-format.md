@@ -77,8 +77,10 @@ Profile-v2 `parts` and `compatiblePartKeys` materialize (v0.1.10) through the sa
 canonical part catalog used by fitment packs rather than a profile-only parts table.
 A profile part whose manufacturer/part number already exists in the workspace reuses
 that canonical record. Two part keys that normalize to the same identity are a
-preview conflict rather than a silent merge. Part facts are never discarded or
-flattened into notes. See [fitment-pack-v1.md](fitment-pack-v1.md).
+preview conflict rather than a silent merge. Part `offers` become store links on the
+canonical part, validated by the shared outside-link policy (https only, ASCII host,
+no credentials); when the Nextcloud administrator has disabled outside links, a
+profile with offers fails closed. Part facts are never discarded or flattened into notes. See [fitment-pack-v1.md](fitment-pack-v1.md).
 
 Materialized components, meters, groups, and work definitions are ordinary domain
 records and remain editable/suppressible by the user. The immutable source snapshot
@@ -138,7 +140,7 @@ intervals against the manufacturer, qualified technician, or clinician.
 Imported profiles are untrusted user data:
 
 - no HTML, scripts, expressions, credentials, or embedded binary data;
-- HTTPS source/offer URLs only;
+- HTTPS source/offer URLs only (ASCII host, no embedded credentials, at most 2048 characters);
 - bounded strings, arrays, nesting, components, work definitions, and legacy v1 plans;
 - rendered as escaped text;
 - explicit SPDX data license and provenance;

@@ -1950,16 +1950,14 @@ foreach($p["components"] as &$c){if($c["key"]==="cabin_filter"){$c["compatiblePa
 foreach($p["workDefinitions"] as &$d){if($d["key"]==="replace_cabin_filter"){$d["compatiblePartKeys"]=["cabin_filter_b"];}}unset($d);
 $mode=getenv("MODE");
 if($mode==="duplicate"){$p["parts"][1]["manufacturer"]="smoke filters";$p["parts"][1]["partNumber"]="sf-100";}
-if($mode==="offers"){$p["parts"][1]["offers"]=[["label"=>"Store","url"=>"https://example.com/pp-7"]];}
-$out=["profile"=>$p];if($mode==="install"){$out["installationUuid"]="6c1d3e5f-7a8b-4c9d-8e0f-2a3b4c5d6e7f";}
+if($mode==="offers"||$mode==="offers-install"){$p["id"]="org.argentwolf.maintenance.smoke-offers";$p["parts"][1]["offers"]=[["label"=>"Store","url"=>"https://example.com/pp-7"]];}
+$out=["profile"=>$p];if($mode==="install"){$out["installationUuid"]="6c1d3e5f-7a8b-4c9d-8e0f-2a3b4c5d6e7f";}if($mode==="offers-install"){$out["installationUuid"]="0a5b7c9d-1e2f-4a3b-8c4d-6e7f80910213";}
 echo json_encode($out,JSON_UNESCAPED_SLASHES);'
 v0110_profile_payload() { docker exec --env MODE="$1" "$container" php -r "$v0110_profile_php"; }
 
 v0110_profile_dup=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload duplicate)")
 assert_contains "$v0110_profile_dup" '"installable":false' 'profile duplicate part identity fails closed'
 assert_contains "$v0110_profile_dup" 'resolve to the same canonical part identity' 'profile duplicate part identity reason'
-v0110_profile_offers=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload offers)")
-assert_contains "$v0110_profile_offers" '"installable":false' 'profile part offers fail closed before store links'
 v0110_profile_preview=$(owner_ocs POST "/assets/${v0110_profile_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload preview)")
 assert_contains "$v0110_profile_preview" '"installable":true' 'profile with parts installable'
 assert_contains "$v0110_profile_preview" '"parts":2' 'profile preview part count'
@@ -2019,6 +2017,78 @@ assert_not_contains "$v0110_cost_totals" '"EUR"' 'archived EUR entry excluded fr
 v0110_cost_audit=$(owner_ocs GET "/audit?${ws}&limit=100")
 assert_contains "$v0110_cost_audit" 'cost_settings.updated' 'cost settings audited'
 assert_contains "$v0110_cost_audit" 'cost.archived' 'cost archive audited'
+
+assert_contains "$capabilities" '"outside-links"' 'outside links capability'
+v0110_link_uuid='8e3f5a7b-9c0d-4e1f-8a2b-4c5d6e7f8091'
+v0110_link=$(owner_ocs POST "/parts/${v0110_part_uuid}/links?${ws}" "{\"link\":{\"uuid\":\"${v0110_link_uuid}\",\"label\":\"Smoke store\",\"url\":\"https://example.com/sf-100?ref=mt\"}}")
+assert_contains "$v0110_link" '"statuscode":201' 'part link created'
+assert_contains "$v0110_link" '"source":"manual"' 'manual part link'
+for v0110_bad_url in 'http://example.com/x' 'javascript:alert(1)' 'data:text/html,x' 'https://user:pass@example.com/' 'https://example.com@evil.example/' '//example.com/x'; do
+	v0110_bad=$(owner_ocs POST "/parts/${v0110_part_uuid}/links?${ws}" "{\"link\":{\"label\":\"Bad\",\"url\":\"${v0110_bad_url}\"}}")
+	assert_contains "$v0110_bad" '"statuscode":400' "unsafe link rejected: ${v0110_bad_url}"
+done
+v0110_link_denied=$(contributor_ocs POST "/vendors/${v0110_vendor_uuid}/links?${ws}" '{"link":{"label":"Vendor","url":"https://vendor.example/"}}')
+assert_contains "$v0110_link_denied" '"statuscode":403' 'contributor cannot add vendor link'
+v0110_vendor_link=$(owner_ocs POST "/vendors/${v0110_vendor_uuid}/links?${ws}" '{"link":{"label":"Vendor site","url":"https://vendor.example/"}}')
+assert_contains "$v0110_vendor_link" '"statuscode":201' 'vendor link created'
+v0110_links=$(contributor_ocs GET "/parts/${v0110_part_uuid}/links?${ws}")
+assert_contains "$v0110_links" '"enabled":true' 'links enabled by default'
+assert_contains "$v0110_links" 'sf-100?ref=mt' 'contributor reads part link'
+
+v0110_offer_asset_uuid='9f4a6b8c-0d1e-4f2a-9b3c-5d6e7f809102'
+v0110_offer_asset=$(owner_ocs POST "/assets?${ws}" "{\"asset\":{\"uuid\":\"${v0110_offer_asset_uuid}\",\"category\":\"vehicle\",\"name\":\"v0.1.10 profile offers vehicle\"}}")
+assert_contains "$v0110_offer_asset" '"statuscode":201' 'profile offers asset'
+v0110_offer_preview=$(owner_ocs POST "/assets/${v0110_offer_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload offers)")
+assert_contains "$v0110_offer_preview" '"installable":true' 'profile offers installable when links enabled'
+v0110_offer_install=$(owner_ocs POST "/assets/${v0110_offer_asset_uuid}/profiles/install?${ws}" "$(v0110_profile_payload offers-install)")
+assert_contains "$v0110_offer_install" '"statuscode":201' 'profile with offers installs'
+assert_contains "$v0110_offer_install" '"sourceType":"offer"' 'profile offer source binding'
+v0110_pp7_uuid=$(printf '%s' "$v0110_compat" | docker exec -i "$container" php -r '$d=json_decode(stream_get_contents(STDIN),true);foreach($d["ocs"]["data"]["items"] as $f){if($f["part"]["partNumber"]==="PP-7"){echo $f["part"]["uuid"];break;}}')
+v0110_pp7_links=$(contributor_ocs GET "/parts/${v0110_pp7_uuid}/links?${ws}")
+assert_contains "$v0110_pp7_links" 'pp-7"' 'profile offer materialized as part link'
+assert_contains "$v0110_pp7_links" '"source":"profile"' 'profile link source'
+
+v0110_admin_page=$(docker exec "$container" curl --silent --show-error --user "${admin_user}:${admin_password}" \
+	"http://127.0.0.1/index.php/settings/admin/maintenance_tracker")
+assert_contains "$v0110_admin_page" 'Allow store and vendor links' 'admin outside-link settings section'
+assert_contains "$v0110_admin_page" 'name="requesttoken"' 'admin settings form carries CSRF token'
+v0110_admin_post_nocsrf=$(docker exec "$container" curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+	--user "${admin_user}:${admin_password}" --data 'enabled=0' \
+	"http://127.0.0.1/index.php/apps/maintenance_tracker/admin/outside-links")
+assert_not_contains "$v0110_admin_post_nocsrf" '303' 'admin setting POST without CSRF token is refused'
+v0110_links_still=$(owner_ocs GET "/parts/${v0110_part_uuid}/links?${ws}")
+assert_contains "$v0110_links_still" '"enabled":true' 'CSRF-less POST did not change the setting'
+v0110_contrib_admin=$(docker exec "$container" curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+	--user "${v0110_user}:${v0110_password}" \
+	"http://127.0.0.1/index.php/settings/admin/maintenance_tracker")
+assert_not_contains "$v0110_contrib_admin" '200' 'non-admin cannot open admin settings'
+
+# Toggle through the real admin form (session cookie + CSRF token) so the web
+# process's APCu-backed app config cache sees the change; occ runs with a
+# separate CLI cache that the web process does not observe immediately.
+v0110_admin_toggle() {
+	docker exec --env NC_CRED="${admin_user}:${admin_password}" --env ENABLED="$1" "$container" sh -c '
+		jar=$(mktemp); base=http://127.0.0.1/index.php
+		token=$(curl -s -u "$NC_CRED" -c "$jar" -b "$jar" "$base/settings/admin/maintenance_tracker" | sed -n "s/.*name=\"requesttoken\" value=\"\([^\"]*\)\".*/\1/p" | head -n 1)
+		curl -s -o /dev/null -w "%{http_code}" -u "$NC_CRED" -c "$jar" -b "$jar" --data "enabled=$ENABLED" --data-urlencode "requesttoken=$token" "$base/apps/maintenance_tracker/admin/outside-links"
+		rm -f "$jar"'
+}
+v0110_toggle_off=$(v0110_admin_toggle 0)
+assert_contains "$v0110_toggle_off" '303' 'admin form disables outside links'
+v0110_links_off=$(contributor_ocs GET "/parts/${v0110_part_uuid}/links?${ws}")
+assert_contains "$v0110_links_off" '"enabled":false' 'links disabled flag'
+assert_not_contains "$v0110_links_off" 'example.com' 'existing links hidden while disabled'
+v0110_link_off=$(owner_ocs POST "/parts/${v0110_part_uuid}/links?${ws}" '{"link":{"label":"Off","url":"https://example.com/off"}}')
+assert_contains "$v0110_link_off" '"statuscode":400' 'new link refused while disabled'
+assert_contains "$v0110_link_off" 'disabled by the Nextcloud administrator' 'disabled link reason'
+v0110_offer_off=$(owner_ocs POST "/assets/${v0110_offer_asset_uuid}/profiles/preview?${ws}" "$(v0110_profile_payload offers)")
+assert_contains "$v0110_offer_off" '"installable":false' 'profile offers fail closed while links disabled'
+v0110_toggle_on=$(v0110_admin_toggle 1)
+assert_contains "$v0110_toggle_on" '303' 'admin form re-enables outside links'
+v0110_links_on=$(contributor_ocs GET "/parts/${v0110_part_uuid}/links?${ws}")
+assert_contains "$v0110_links_on" 'sf-100?ref=mt' 'links reappear when re-enabled'
+v0110_link_audit=$(owner_ocs GET "/audit?${ws}&limit=100")
+assert_contains "$v0110_link_audit" 'link.created' 'link creation audited'
 
 # @@V0110_NEXT@@
 

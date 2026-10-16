@@ -61,6 +61,8 @@ final class AuditEventCatalog {
 		'cost.updated' => ['subjectType' => 'cost', 'level' => 'info', 'detailKeys' => []],
 		'cost.archived' => ['subjectType' => 'cost', 'level' => 'info', 'detailKeys' => []],
 		'cost_settings.updated' => ['subjectType' => 'workspace', 'level' => 'info', 'detailKeys' => ['defaultCurrency', 'taxEnabled', 'multiCurrency']],
+		'link.created' => ['subjectType' => 'link', 'level' => 'info', 'detailKeys' => []],
+		'link.archived' => ['subjectType' => 'link', 'level' => 'info', 'detailKeys' => []],
 		'workspace.member.added' => [
 			'subjectType' => 'workspace_member',
 			'level' => 'security',

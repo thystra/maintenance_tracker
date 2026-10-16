@@ -11,6 +11,9 @@ import type {
 	CreateCost,
 	CreatePart,
 	CreateVendor,
+	LinkSubjectType,
+	OutsideLink,
+	OutsideLinkList,
 	Part,
 	PartList,
 	Vendor,
@@ -67,4 +70,20 @@ export async function getCostSettings(): Promise<CostSettings> {
 
 export async function updateCostSettings(expectedRevision: number, settings: Pick<CostSettings, 'defaultCurrency' | 'taxEnabled' | 'multiCurrency'>): Promise<CostSettings> {
 	return data(await axios.patch<OcsEnvelope<CostSettings>>(endpoint('/cost-settings'), { expectedRevision, settings }, requestOptions))
+}
+
+function linkBase(subjectType: LinkSubjectType, subjectUuid: string): string {
+	return `/${subjectType === 'part' ? 'parts' : 'vendors'}/${encodeURIComponent(subjectUuid)}/links`
+}
+
+export async function getLinks(subjectType: LinkSubjectType, subjectUuid: string): Promise<OutsideLinkList> {
+	return data(await axios.get<OcsEnvelope<OutsideLinkList>>(endpoint(linkBase(subjectType, subjectUuid)), requestOptions))
+}
+
+export async function createLink(subjectType: LinkSubjectType, subjectUuid: string, link: { uuid: string, label: string, url: string }): Promise<OutsideLink> {
+	return data(await axios.post<OcsEnvelope<OutsideLink>>(endpoint(linkBase(subjectType, subjectUuid)), { link }, requestOptions))
+}
+
+export async function archiveLink(subjectType: LinkSubjectType, subjectUuid: string, linkUuid: string, expectedRevision: number): Promise<OutsideLink> {
+	return data(await axios.delete<OcsEnvelope<OutsideLink>>(endpoint(`${linkBase(subjectType, subjectUuid)}/${encodeURIComponent(linkUuid)}`), { ...requestOptions, data: { expectedRevision } }))
 }

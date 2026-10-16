@@ -85,6 +85,9 @@ const activityPartService = await read('lib/Service/ActivityPartService.php')
 const costPolicy = await read('lib/Service/CostPolicy.php')
 const costService = await read('lib/Service/CostService.php')
 const migration1103 = await read('lib/Migration/Version1103Date20261016030000.php')
+const outsideLinkPolicy = await read('lib/Service/OutsideLinkPolicy.php')
+const linkService = await read('lib/Service/LinkService.php')
+const adminSettingsController = await read('lib/Controller/AdminSettingsController.php')
 const validateProfiles = await read('scripts/validate-profiles.mjs')
 const validateFitmentPacks = await read('scripts/validate-fitment-packs.mjs')
 const capabilities = await read('lib/Capability.php')
@@ -210,6 +213,12 @@ expect(viewerMatch !== null && viewerMatch[1].includes('COST_READ') && !viewerMa
 expect(!/Types::(FLOAT|DECIMAL)/.test(migration1103) && migration1103.includes("addColumn('amount_minor', Types::BIGINT"), 'Cost amounts must be stored as integer minor units, never float/decimal columns.')
 expect(!costPolicy.includes('(float)') && !costPolicy.includes('floatval') && !costService.includes('(float)'), 'Cost ledger code must not use floating point.')
 expect(costService.includes('Single-currency mode requires every active cost entry') && costPolicy.includes('enable multi-currency'), 'Single-currency mode must reject foreign currencies rather than convert them.')
+expect(outsideLinkPolicy.includes("strncmp($url, 'https://', 8)") && outsideLinkPolicy.includes('must not contain credentials') && outsideLinkPolicy.includes('ASCII domain host'), 'Outside links must be https-only, credential-free, and ASCII-host validated.')
+expect(linkService.includes('$this->settings->assertEnabled()') && linkService.includes("['enabled' => false, 'items' => []]"), 'Disabled outside links must refuse writes and hide existing links.')
+expect(profileValidator.includes('OutsideLinkPolicy::validate') && fitmentPackValidator.includes('OutsideLinkPolicy::validate'), 'Profile and fitment offer URLs must use the shared outside-link policy.')
+expect(!adminSettingsController.includes('NoAdminRequired') && !adminSettingsController.includes('NoCSRFRequired'), 'The outside-link admin switch must stay admin-only and CSRF-protected.')
+const outsideLinksVue = await read('src/components/OutsideLinks.vue')
+expect(outsideLinksVue.includes('target="_blank" rel="noopener noreferrer"') && outsideLinksVue.includes("url.startsWith('https://')"), 'Outside links must render https-only with rel="noopener noreferrer" target="_blank".')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -225,7 +234,7 @@ for (const capability of [
 ]) {
 	expect(authorizationCatalog.includes(`'${capability}' => ['implemented' => false`), `Reserved capability ${capability} must remain present and unimplemented.`)
 }
-for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger']) {
+for (const feature of ['capability-authorization', 'workspace-membership', 'append-only-audit', 'meters-readings', 'work-definitions-schedules', 'activity-ledger', 'maintenance-due-state', 'maintenance-forecast-policy', 'maintenance-occurrences', 'profile-installation', 'fitment-packs', 'fitment-csv-zip', 'parts-catalog', 'vendors', 'cost-ledger', 'outside-links']) {
 	expect(capabilities.includes(`'${feature}'`), `Capability discovery must advertise implemented feature ${feature}.`)
 }
 
@@ -397,7 +406,7 @@ for (const table of [...workspaceTables].sort()) {
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_costs', 'maint_cost_settings', 'maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_links', 'maint_costs', 'maint_cost_settings', 'maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 

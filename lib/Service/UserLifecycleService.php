@@ -27,6 +27,7 @@ final class UserLifecycleService {
 		'maint_fit_revs',
 		'maint_fit_packs',
 		'maint_parts',
+		'maint_links',
 		'maint_costs',
 		'maint_cost_settings',
 		'maint_part_compat',

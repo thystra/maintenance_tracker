@@ -7,6 +7,7 @@
 import type { Part, Vendor } from '../catalogTypes.ts'
 
 import { onMounted, reactive, ref } from 'vue'
+import OutsideLinks from './OutsideLinks.vue'
 import { archivePart, archiveVendor, createPart, createVendor, getParts, getVendors } from '../services/catalogApi.ts'
 
 const emit = defineEmits<{ (event: 'changed'): void }>()
@@ -87,6 +88,7 @@ onMounted(load)
 							@click="mutate(() => archivePart(part.uuid, part.revision))">
 							Archive
 						</button>
+						<OutsideLinks subjectType="part" :subjectUuid="part.uuid" />
 					</li>
 					<li v-if="parts.length === 0">
 						<span>No parts yet.</span>
@@ -113,6 +115,7 @@ onMounted(load)
 							@click="mutate(() => archiveVendor(vendor.uuid, vendor.revision))">
 							Archive
 						</button>
+						<OutsideLinks subjectType="vendor" :subjectUuid="vendor.uuid" />
 					</li>
 					<li v-if="vendors.length === 0">
 						<span>No vendors yet.</span>
@@ -141,7 +144,7 @@ onMounted(load)
 
 .catalog-list { display: grid; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
 
-.catalog-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.catalog-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 
 .catalog-form { display: grid; gap: 8px; }
 

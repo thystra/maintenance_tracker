@@ -51,12 +51,13 @@ data even though the app is not a medical product.
 - Local and bundled data follow the same validator. A profile is considered
   first-party only when ID, version, and canonical content hash exactly match a
   bundled profile.
-- Profile `sourceUrl` and future offer URLs are metadata only; the server does not
+- Profile `sourceUrl` and offer URLs are metadata only; the server does not
   make arbitrary outbound requests during validation or installation.
 - Multi-instance parent/task references and component-parent cycles are rejected
   rather than resolving ambiguously.
-- Part-bearing profiles fail closed until parts have canonical storage; no validated
-  profile facts are silently discarded.
+- Profile parts materialize through the canonical part catalog and offers through
+  the outside-link policy; duplicate identities, or offers while outside links are
+  disabled, fail closed. No validated profile facts are silently discarded.
 
 ### Fitment-pack boundary
 
@@ -184,6 +185,28 @@ Maintenance due state is read-only derived data and is not accepted from clients
 Forecast reads use dedicated read capabilities and never mutate due state. Reminder policy changes and occurrence reconciliation are separate write capabilities granted to Owner and Manager, not Contributor or Viewer. Reconciliation executes inside the serialized workspace write boundary.
 
 Occurrences are intentionally non-authoritative projections. They cannot be client-created with arbitrary due claims and their table has no fields for due dates, due state, remaining meter values, or thresholds. The unique open marker prevents duplicate active work items under concurrent reconciliation, while current status is always re-derived before presentation.
+
+### Outside links
+
+- Store/vendor links are stored only after strict validation: the literal
+  `https://` scheme, printable ASCII without whitespace or backslashes, an ASCII
+  domain (or IPv4) host with optional port, no userinfo/credentials, and at most
+  2048 characters. `javascript:`, `data:`, `http:`, and protocol-relative URLs
+  cannot pass. Profile and fitment-pack offer URLs use the same policy.
+- The server never fetches link targets.
+- The desktop renders links only as `<a target="_blank" rel="noopener noreferrer">`
+  and binds nothing but `https://` values to `href`.
+- Adding or removing a link requires the subject's manage capability
+  (`part.manage` / `vendor.manage`, Owner/Manager); every member may read them.
+  Link creation and removal are audited.
+- A Nextcloud administrator can disable outside links instance-wide under
+  Administration settings → Maintenance Tracker. The switch is a server-rendered,
+  admin-only, CSRF-protected form. While disabled, no new link is stored (manual,
+  profile offers, or fitment-pack offers), every link API returns
+  `enabled: false` with no items, and fitment source exports omit offers.
+  Stored rows are retained, so re-enabling restores them. The value is the
+  `outside_links_enabled` app config key; changing it with `occ` may not reach
+  web requests until the local memory cache refreshes, so prefer the settings page.
 
 ### Cost ledger integrity and visibility
 

@@ -28,6 +28,8 @@ final class ProfileInstallationService {
 		private WorkDefinitionService $definitions,
 		private PartService $parts,
 		private PartCompatibilityRepository $compatibility,
+		private LinkService $links,
+		private OutsideLinkSettings $outsideLinks,
 		private UuidGenerator $uuidGenerator,
 		private ChangeJournal $journal,
 		private ITimeFactory $timeFactory,
@@ -230,6 +232,10 @@ final class ProfileInstallationService {
 			$row = $this->parts->ensure($context, $this->uuidGenerator->generate(), $t['manufacturer'], $t['partNumber'], $t['description'])['row'];
 			$ids[$t['key']] = (int)$row['id'];
 			$this->repository->insertBinding($context->workspace()->getId(), $assetProfileId, 'part', $t['key'], 1, (string)$row['uuid']);
+			foreach ($t['offers'] as $j => $offer) {
+				$linkUuid = $this->links->ensureForPart($context, (int)$row['id'], $offer['label'], $offer['url']);
+				$this->repository->insertBinding($context->workspace()->getId(), $assetProfileId, 'offer', $t['key'], $j + 1, $linkUuid);
+			}
 		}
 		return $ids;
 	}
@@ -271,8 +277,8 @@ final class ProfileInstallationService {
 				$out[] = 'Profile parts ' . $identities[$identity] . ' and ' . $part['key'] . ' resolve to the same canonical part identity';
 			}
 			$identities[$identity] = $part['key'];
-			if ($part['offers'] !== []) {
-				$out[] = 'Profile part ' . $part['key'] . ' carries store offers, which cannot be materialized until store links are implemented';
+			if ($part['offers'] !== [] && !$this->outsideLinks->enabled()) {
+				$out[] = 'Profile part ' . $part['key'] . ' carries store offers, but ' . lcfirst(OutsideLinkSettings::DISABLED_MESSAGE);
 			}
 		}
 		return $out;

@@ -383,8 +383,10 @@ by manufacturer/part-number identity (an existing or archived identity is reused
 part key is recorded as a `part` source binding, and `compatiblePartKeys` on components
 and work definitions become informational compatibility facts (see
 `GET /assets/{assetUuid}/compatible-parts`). Preview reports a conflict, and installation
-fails closed, when two profile part keys resolve to the same canonical identity or when
-a part carries store offers that cannot be stored as links.
+fails closed, when two profile part keys resolve to the same canonical identity. Part
+`offers` become `profile`-sourced store links on the canonical part (an existing active
+link with the same URL is reused) with `offer` source bindings; while the administrator
+has disabled outside links, a profile carrying offers is a preview conflict instead.
 
 ### `POST /assets/{assetUuid}/profiles/install`
 
@@ -437,7 +439,7 @@ Canonical JSON endpoints:
 - `POST /fitment-packs/validate` validates and canonicalizes a fitment-pack-v1 JSON document and returns its SHA-256 content identity.
 - `POST /fitment-packs/preview` validates without writing and reports standardized-slot conflicts plus reasoned local-asset match suggestions.
 - `POST /fitment-packs/import` accepts a client-generated `importUuid` and a JSON `pack`. Retrying the same UUID/data is idempotent. An already-imported immutable revision cannot be aliased under a second import UUID.
-- `GET /fitment-packs/{importUuid}/export` returns the immutable canonical source revision, including source offers.
+- `GET /fitment-packs/{importUuid}/export` returns the immutable canonical source revision, including source offers. While outside links are disabled the offers array is emptied and `offersHidden: true` is returned (the `contentHash` still names the stored revision); importing a pack that carries offers is a preview conflict.
 
 CSV/ZIP projection endpoints use a multipart upload field named `bundle` and feed
 the reconstructed pack through the same canonical validator/hash path:
@@ -641,3 +643,15 @@ Endpoints:
 - `POST /assets/{assetUuid}/costs` with `{"cost": {"uuid", "incurredOn" (YYYY-MM-DD), "description", "amount", "currency"?, "lineType"?, "category"?, "activityUuid"?, "vendorUuid"?, "partUuid"?, "notes"?}}` — categories are `parts`, `labor`, `fluids`, `service`, `fees`, `other` (default). Retrying the same UUID with identical facts returns the existing entry; different facts are a precondition conflict.
 - `GET /costs/{uuid}`, `PATCH /costs/{uuid}` with `expectedRevision` and any of `incurredOn`, `category`, `description`, `amount`, `currency`, `vendorUuid`, `partUuid`, `notes` (changing `currency` requires restating `amount`), `DELETE /costs/{uuid}` with `expectedRevision` — archive.
 - `GET /costs/totals` — workspace-wide per-currency totals over active entries.
+
+## Store and vendor links — v0.1.10
+
+Links are https URLs attached to a canonical part or a vendor. Reading follows `part.read`/`vendor.read` (every role); adding and removing follow `part.manage`/`vendor.manage` (Owner/Manager). The server validates but never fetches them.
+
+- `GET /parts/{uuid}/links`, `GET /vendors/{uuid}/links` — `{"enabled": bool, "items": [...]}`; items have `uuid`, `subjectType`, `subjectUuid`, `label`, `url`, `source` (`manual` or `profile`), `revision`, timestamps, and `archived`.
+- `POST /parts/{uuid}/links`, `POST /vendors/{uuid}/links` with `{"link": {"uuid"?, "label", "url"}}` — at most 32 active links per subject; identical UUID retries return the existing link.
+- `DELETE /parts/{uuid}/links/{linkUuid}`, `DELETE /vendors/{uuid}/links/{linkUuid}` with `expectedRevision` — archive.
+
+URL rules: must begin with the literal lowercase `https://`; printable ASCII only (no whitespace or backslashes); ASCII domain or IPv4 host with optional port; no `user:password@`; at most 2048 characters. Anything else, including `javascript:`, `data:`, `http:`, and `//host` URLs, is a 400 validation error. Clients must render links with `target="_blank"` and `rel="noopener noreferrer"`.
+
+Administrator switch: Administration settings → Maintenance Tracker → "Allow store and vendor links" (default on). When off, `GET` returns `enabled: false` with no items, `POST` fails with "Outside links are disabled by the Nextcloud administrator", profile offers and fitment-pack offers become import conflicts, and fitment source exports omit offers. Existing rows are kept and reappear when re-enabled.
