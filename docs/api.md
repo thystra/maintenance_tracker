@@ -467,9 +467,8 @@ Mapping/query/export endpoints:
 - `POST /assets/{assetUuid}/fitment-export/community` rebuilds a reviewed generalized community JSON pack from mapped canonical facts and runs it through the same validator/canonicalizer. Local asset UUID/name, serial/VIN-like identity, notes, costs, receipts, and maintenance history are excluded. Offers are currently emitted as an empty array until an explicit local/source offer-selection policy is reviewed.
 - `POST /assets/{assetUuid}/fitment-export/community/bundle` performs the same privacy-minimized community rebuild and downloads the result as normalized CSV/ZIP with the same no-store/no-cache response semantics.
 
-Profile-v2 part materialization remains fail-closed until the profile installer is
-explicitly bridged to these canonical part/fitment records. Activity parts-used
-rows, vendor management, and central costs remain later v0.1.10 checkpoints.
+Profile-v2 parts, parts used per activity, vendors, store links, and the cost ledger
+build on these canonical part records; see the v0.1.10 sections below.
 
 Future resources include evidence, parts/costs, fuel entries, trips, calendar
 bindings, public report shares, external submissions, TCO reports, and mileage

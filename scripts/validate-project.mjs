@@ -453,8 +453,8 @@ expect(agents.includes('v0.1.10 fitment interoperability invariant') && agents.i
 expect(validateFitmentPacks.includes('duplicate fitment tuple') && validateFitmentPacks.includes('verified fitment') && validateFitmentPacks.includes('reverse-DNS-style extension'), 'Fitment validator must enforce referential uniqueness, evidence, and extension-key rules.')
 expect(api.includes('/fitment-packs/validate') && api.includes('/fitment-packs/import') && api.includes('/fitment-packs/bundle/validate') && api.includes('/fitment-packs/bundle/import') && api.includes('/fitment-packs/{importUuid}/bundle') && api.includes('/fitment-targets/{targetUuid}/map') && api.includes('/fitment-export/community/bundle'), 'API documentation must cover the implemented v0.1.10 JSON and CSV/ZIP fitment validation/import/mapping/export surface.')
 expect(docs.includes('JSON') && docs.includes('fitment') && docs.includes('CSV/ZIP') && docs.includes('reversible'), 'Documentation must describe CSV/ZIP as a reversible projection into the canonical fitment runtime.')
-expect(roadmap.includes('[ ] v0.1.10') || roadmap.includes('10. [ ]'), 'Roadmap must keep v0.1.10 open while profile-part materialization, activity parts, vendors, and costs remain pending.')
-expect(changelog.includes('0.1.10') && changelog.includes('CSV/ZIP') && readme.includes('fitment') && readme.includes('CSV/ZIP'), 'User-facing documentation must describe the v0.1.10 JSON and CSV/ZIP fitment foundation without claiming the whole tranche complete.')
+expect(roadmap.includes('10. [x] v0.1.10') && roadmap.includes('central cost ledger') && roadmap.includes('store/vendor links'), 'Roadmap must record v0.1.10 complete only with parts, links, and the cost ledger included.')
+expect(changelog.includes('0.1.10') && changelog.includes('CSV/ZIP') && readme.includes('fitment') && readme.includes('CSV/ZIP'), 'User-facing documentation must describe the v0.1.10 JSON and CSV/ZIP fitment foundation.')
 
 try {
 	await access('.github/workflows/ci.yml')

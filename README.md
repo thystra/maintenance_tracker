@@ -4,7 +4,7 @@ Maintenance Tracker is a self-hosted Nextcloud app for recurring maintenance,
 usage meters, service history, costs, vehicle mileage, and supporting documents.
 
 The project is in its early 0.1-series implementation phase. The current vertical
-slices provide the Nextcloud 34 foundation plus inventory, relationships, meters,
+slices provide the Nextcloud 33–35 foundation plus inventory, relationships, meters,
 work definitions, activity history, due/forecast workflow, and validated local or
 bundled profile installation into canonical domain records. The architecture deliberately supports
 a future offline-first mobile client without making the first release depend on it.
@@ -155,6 +155,6 @@ The Nextcloud server app is licensed under
 [AGPL-3.0-or-later](LICENSE). Profile data can carry a separate compatible data
 license and must declare its provenance.
 
-### v0.1.10 fitment foundation (in progress)
+### v0.1.10 parts, fitment, links, and costs
 
-The current v0.1.10 checkpoint implements portable fitment compatibility packs through canonical JSON and a bounded normalized CSV/ZIP spreadsheet projection: standardized service-position slots, canonical parts, immutable import provenance, reasoned equipment matching with explicit Owner/Manager mapping, source export, and privacy-minimized community export. This does **not** complete v0.1.10: profile-v2 part materialization, activity parts-used records, vendor management/store-link editing, and the central cost ledger remain pending.
+v0.1.10 implements portable fitment compatibility packs through canonical JSON and a bounded normalized CSV/ZIP spreadsheet projection: standardized service-position slots, canonical parts, immutable import provenance, reasoned equipment matching with explicit Owner/Manager mapping, source export, and privacy-minimized community export. It also adds a part and vendor catalog, parts used per activity, profile-v2 part installation, https-only store/vendor links that a Nextcloud administrator can switch off (Administration settings → Maintenance Tracker), and a central cost ledger. Costs default to one currency (USD) without tax lines; a workspace Owner can enable tax lines and multiple currencies. Amounts are exact integer minor units, and totals are per currency with no exchange-rate conversion. Every member can view costs, Contributors can add them, and Owners/Managers correct or archive them.

@@ -24,7 +24,7 @@ data is not automatically trusted, mapped, or installed.
 
 The current v0.1.10 checkpoint implements the bounded JSON validator/canonicalizer, immutable pack revision/import persistence, canonical standardized slots and parts, source offers/fitment assertions, explicit equipment-target-to-local-asset mapping, source/community JSON export, and the normalized CSV/ZIP spreadsheet projection defined below. JSON and CSV/ZIP import feed the same validator and persistence path; import and local-asset mapping remain separate operations.
 
-Profile-v2 parts remain fail-closed until a later v0.1.10 checkpoint explicitly materializes them through the canonical part/fitment services. Activity parts-used records, vendor/store-link management, and the central cost ledger likewise remain pending.
+Profile-v2 parts materialize through the same canonical part identity used here, and profile offers become store links under the shared outside-link policy. Imported source offers are retained with the immutable revision; when an administrator disables outside links, packs carrying offers are refused and source exports omit them.
 
 
 ## Stable slot identity
