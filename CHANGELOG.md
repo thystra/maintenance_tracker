@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- v0.1.13 workspace export: `GET /export?format=json|zip&includeFiles=0|1` and an “Export data” panel let every role download what it can read. The ZIP holds `manifest.json`, `data.json`, one CSV per table plus `csv/evidence.csv` (formula cells escaped with `leading-apostrophe-v1`), and optionally the evidence files the caller can open in their own Files (100 MiB per file, 512 MiB total; skipped files are listed). Audit and membership sections stay Owner-only, unshared evidence is never named, internal columns and bookkeeping tables are left out, and links follow the administrator switch. New capability `workspace.export`, feature `workspace-export`, and audit event `workspace.exported`.
+- v0.1.13 accessibility: `npm run check:a11y` (also in CI) statically checks every Vue template for unlabelled controls, unnamed/untyped buttons, missing alt text, unsafe `target="_blank"`, positive tabindex, mouse-only click handlers, and error notices without a live role. See `docs/accessibility.md`.
+
+### Changed
+
+- Accessibility fixes: every placeholder-only input and select now has an accessible name, completed saves are announced through a polite status region, the quota warning is announced, keyboard focus has a visible outline, and panel toggles expose `aria-expanded`/`aria-controls`.
+
 ### Fixed
 
 - Documentation no longer claims Activity delivery is at most once per audit row: a crash while one row is being projected re-projects that row and can duplicate its activities.

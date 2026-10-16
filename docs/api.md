@@ -687,6 +687,23 @@ All endpoints take `?workspace=<uuid>`. Capability `evidence-files` is advertise
 
 Each item has `availability`: `available` (with `file.{fileId,name,path,currentSize,changed,filesUrl,downloadUrl,previewUrl}`), `not_shared`, or `missing` (`file: null`, `sha256: null`).
 
+## Workspace export (v0.1.13)
+
+### `GET /export?workspace=<uuid>&format=zip|json&includeFiles=0|1`
+
+Capability `workspace.export` (every role; read-only). Feature `workspace-export` is advertised. Returns a download, not an OCS envelope: `application/json` (`format=json`) or `application/zip` (`format=zip`, default), with `Content-Disposition: attachment` and `Cache-Control: no-store`. `includeFiles=1` requires `format=zip`; an unknown format returns 400 and a non-member 403.
+
+The JSON document (also `data.json` in the ZIP) has `format: "maintenance-tracker-export"`, `formatVersion: 1`, `appVersion`, `exportedAt`, `exportedBy`, `role`, `workspace{uuid,name,kind}`, a `sensitivity` note, `sections{included,omitted[{section,reason}]}`, `tables{<section>: rows}` and `evidence`.
+
+- A section is included only when the caller's role holds that section's read capability. Members and audit need `workspace.members.read` / `audit.read` (Owner only today), so other roles get `reason: "not_permitted_for_role"`. Links are omitted with `outside_links_disabled` while the administrator switch is off, and fitment offer URLs are blanked.
+- Rows are the stored columns minus `workspace_id` and `write_lock_token`. Local numeric `id`s are kept so foreign keys can be followed inside one export; UUIDs are the stable identities. Timestamps are Unix seconds.
+- Not exported: the change journal, evidence folder/share bookkeeping, transfer state, notification/calendar delivery logs, and raw evidence rows.
+- `evidence` uses the same viewer-scoped projection as `GET /evidence/{uuid}` (archived items included) without `filesUrl`/`downloadUrl`/`previewUrl`/`canChange`. Files you cannot open are `not_shared`/`missing` without names.
+
+The ZIP contains `manifest.json` (format, CSV dialect `rfc4180`, UTF-8, `spreadsheetEscape: "leading-apostrophe-v1"`, sections, `files`, `skippedFiles`), `data.json`, `csv/<section>.csv` per included table, `csv/evidence.csv`, and with `includeFiles=1` the bytes of active evidence files you can open as `files/<evidenceUuid>-<sanitized name>`. Files over 100 MiB, or beyond 512 MiB in total, are listed in `skippedFiles` with `size_limit`. CSV cells starting with `= + - @ '`, tab, CR, LF or their full-width forms are prefixed with `'`.
+
+Each export records audit event `workspace.exported` with `format`, `includeFiles` and the included section count.
+
 ## Integrations (v0.1.12)
 
 These are the authenticated user's own preferences. They are not workspace-scoped and accept no user ID. Capabilities `activity-integration`, `notifications`, and `calendar-projection` are advertised.

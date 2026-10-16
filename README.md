@@ -145,6 +145,7 @@ not this public application repository.
 - [OCS API](docs/api.md)
 - [Profile format](docs/profile-format.md)
 - [Security and privacy](docs/security.md)
+- [Accessibility](docs/accessibility.md)
 - [Nextcloud app engineering guidance](docs/NEXTCLOUD-DEVELOPMENT-GUIDANCE.md)
 - [Licensing and distribution](docs/licensing.md)
 - [Roadmap](docs/roadmap.md)
@@ -164,6 +165,10 @@ v0.1.10 implements portable fitment compatibility packs through canonical JSON a
 Owners can hand a workspace and its evidence folder to another member, who must accept.
 When an owner's account is deleted, a Manager inherits the workspace. Without a Manager it
 is kept as orphaned for an administrator to reassign with occ. See `docs/architecture.md`.
+
+### v0.1.13 export and accessibility
+
+“Export data” downloads everything your role can read in the current workspace as one JSON file or a ZIP with JSON plus spreadsheet-safe CSV tables, optionally including the evidence files you can open. Viewers and Contributors do not get the audit trail or member list, and other people's private files are never named. Exports can contain private notes, costs, and serial numbers, so store them carefully. The UI is checked for labelled controls, keyboard operation, and screen-reader announcements; see [Accessibility](docs/accessibility.md).
 
 ### v0.1.12 Activity, notifications, and calendar
 
