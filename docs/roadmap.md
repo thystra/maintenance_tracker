@@ -146,11 +146,21 @@ deferred.
 
 ## 1.0
 
-- Stable OCS/OpenAPI contract and compatibility policy.
+Status notes describe work on development branches that has not been released;
+an item is only complete once it passes on Forgejo `main`.
+
+- Stable OCS/OpenAPI contract and compatibility policy. *In progress: a generated
+  `openapi.json` with a CI freshness check exists; response schemas and a written
+  compatibility policy remain.*
 - Fresh-install and upgrade migrations on PostgreSQL, MariaDB, and SQLite.
+  *In progress: smoke and upgrade-from-v0.1.10 tests run on all three databases.*
 - Calendar and Files integration tests.
 - Accessibility, localization, export, retention, and uninstall behavior.
+  *In progress: static accessibility checks, translatable UI, export, and restore
+  exist; real translations, retention, and uninstall behavior remain.*
 - Signed Nextcloud App Store package.
 - Privacy policy, support channel, security response process, and user/admin
-  documentation.
+  documentation. *In progress: README, CONTRIBUTING, and SECURITY cover
+  installation, configuration, GitHub issues for support, and private
+  vulnerability reporting; a privacy policy remains.*
 - Packaged Android/iOS testing as applicable, store privacy/data-safety review, pricing decision, and store-ready notices/EULA.
