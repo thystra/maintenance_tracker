@@ -1,190 +1,225 @@
-# Maintenance Tracker
+# Maintenance Tracker for Nextcloud
 
-Maintenance Tracker is a self-hosted Nextcloud app for recurring maintenance,
-usage meters, service history, costs, vehicle mileage, and supporting documents.
+Maintenance Tracker is a self-hosted Nextcloud app for keeping track of the things
+you maintain: vehicles, trailers, homes and building systems, appliances, tools,
+medical devices, and anything else with a service schedule. It records what you
+own, what needs doing and when, what was done, which parts were used, what it
+cost, and the receipts and photos that go with it. All data stays in your
+Nextcloud database and Files.
 
-The project is in its early 0.1-series implementation phase. The current vertical
-slices provide the Nextcloud 33–35 foundation plus inventory, relationships, meters,
-work definitions, activity history, due/forecast workflow, and validated local or
-bundled profile installation into canonical domain records. The architecture deliberately supports
-a future offline-first mobile client without making the first release depend on it.
+> **Status: pre-release (0.1 series).** The app is usable but has not had a
+> signed App Store release yet. The web UI and the API may still change between
+> versions, and some features are available only through the API so far (see
+> [Current limitations](#current-limitations)).
 
-## Repository authority
+## Features
 
-The authoritative development repository is:
+- **Inventory** – maintained items with categories (built-in and custom), broad
+  asset classes, nested components, structured specifications, typed
+  relationships between items (for example a trailer towed by a truck), and
+  effective-dated assignments.
+- **Meters and readings** – distance, runtime hours, and usage counts. Readings are
+  never edited in place; a mistake is corrected by a superseding reading, so the
+  history stays intact.
+- **Maintenance schedules** – work groups and work definitions scheduled by
+  calendar interval, business days, or meter interval, or left unscheduled for
+  ad-hoc work.
+- **Due status and forecast** – each task is shown as upcoming, due soon, due,
+  overdue, or as needing a baseline reading, calculated from your schedules,
+  completed work, and meter readings. The forecast window and reminder policy are
+  configurable per workspace.
+- **Service history** – record completed maintenance with the work performed,
+  meter values at the time, notes, and the parts used.
+- **Maintenance profiles** – install a validated maintenance profile (profile-v2 installation
+  from the bundled generic profile or your own JSON file) to create
+  work definitions and parts in one step, with a preview before anything is
+  written.
+- **Parts, vendors, and fitment** – a parts and vendors catalog, compatible parts
+  per item, and portable fitment compatibility packs in JSON or a spreadsheet-
+  friendly CSV/ZIP format.
+- **Costs** – a cost ledger per item with exact amounts. By default one currency
+  (USD) without tax lines; a workspace owner can choose the default currency and
+  allow tax lines and multiple currencies. Currencies are never converted; totals
+  are shown per currency.
+- **Receipts, photos, and documents** – attach files to items, service records, and
+  costs, either by uploading them or by picking files you already have in
+  Nextcloud Files.
+- **Shared workspaces** – every user gets a private workspace. Shared workspaces
+  have Owner, Manager, Contributor, and Viewer roles, an append-only audit trail,
+  and an ownership transfer that the new owner must accept.
+- **Nextcloud integration** – changes appear in the Activity app, due and overdue
+  tasks send Nextcloud notifications, and each user can choose one of their own
+  calendars to receive all-day “Maintenance due” entries.
+- **Export and restore** – download everything your role can see as JSON or a ZIP
+  (JSON, spreadsheet-safe CSV, and optionally your evidence files), and restore an
+  owner's export into a new workspace.
+- **Accessibility and translations** – the interface is checked for labelled
+  controls, keyboard use, and screen-reader announcements, and all interface text
+  is ready for translation.
 
-```text
-https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud
-```
+### Screenshots
 
-GitHub is maintained as a downstream mirror. The private GitHub security
-advisory endpoint documented in `SECURITY.md` remains an explicit vulnerability
-reporting channel, but GitHub is not the source, CI, or release authority.
+No screenshots are published yet.
 
-## Platform targets
+### Current limitations
 
-- Nextcloud 33, 34, and 35 (Nextcloud 35 itself requires PHP 8.3 or newer)
-- PHP 8.2 through 8.5, with PHP 8.5 as the primary deployment target
-- nginx with PHP-FPM is supported by Nextcloud; the app adds no nginx routes
-- PostgreSQL, MariaDB/MySQL, and SQLite through Nextcloud's database APIs
-- Node.js 24 for frontend builds
-- Future mobile client: Vue offline-first PWA with Capacitor packaging for Android/iOS when native capabilities are needed
+- Adding members to a shared workspace and importing fitment packs are available
+  through the [OCS API](docs/api.md) only; there is no UI for them yet.
+- Calendar entries are not removed when a task is completed, because Nextcloud's
+  public Calendar API does not support it.
+- Restoring an export does not restore workspace members or the audit trail.
+- The interface is English only until translations are contributed.
+- There is no mobile app yet. A mobile client is planned (see the
+  [roadmap](docs/roadmap.md)).
 
-The repository directory may have any name. When installed in Nextcloud, the
-app directory must be named `maintenance_tracker` so it matches
-`appinfo/info.xml`.
+## Requirements
 
-## Current foundation
+| Component | Supported |
+|-----------|-----------|
+| Nextcloud | 33, 34, 35 |
+| PHP | 8.2 – 8.5, 64-bit, with the `zip` extension (Nextcloud 35 itself needs PHP 8.3 or newer) |
+| Database | SQLite, PostgreSQL, MariaDB/MySQL |
+| Background jobs | System cron is strongly recommended (reminders, Activity, and calendar entries run as background jobs) |
 
-- Classic Nextcloud PHP app using only public `OCP` APIs
-- Vue 3 web shell based on the current Nextcloud app template
-- Authenticated, versioned OCS API under
-  `/ocs/v2.php/apps/maintenance_tracker/api/v1`
-- Private workspace created lazily for each Nextcloud user
-- Asset records with stable UUIDs, revisions, timestamps, and tombstones
-- Custom categories, broad asset classes, nested component instances, and structured specifications
-- Typed class-compatible asset relationships and effective-dated assignments
-- Workspace-wide mutation serialization for invariants that span multiple members
-- Capability-based Owner/Manager/Contributor/Viewer workspace authorization
-- Shared-workspace membership API with lifecycle-safe grants and role changes
-- Append-only audit events for implemented domain and membership mutations
-- Asset/component meters with immutable distance, runtime, and usage-count readings
-- Work groups and common work definitions with explicit calendar, business-day, and meter schedules
-- Maintenance activity ledger with immutable performed-work items and meter snapshots
-- Configurable maintenance forecasting plus a materialized one-open-occurrence work queue
-- Bounded cursor pagination and account-lifecycle cleanup
-- Change journal foundation for future mobile delta synchronization
-- Validated profile-v2 installation from bundled or local JSON, with immutable SHA-256 revision provenance, source bindings, preview/conflict checks, and a generic starter profile
-- Common work-definition/scheduling foundation with required explicit `schedule`; `schedule: none` means unscheduled/ad-hoc work
-- Architecture, domain, API, security, licensing, and delivery roadmap
+Each supported Nextcloud version is tested with SQLite, PostgreSQL, and MariaDB,
+including upgrades from version 0.1.10.
 
-The UI and API are explicitly pre-release. Do not treat the current API as a
-stable third-party contract yet.
+## Installation
 
-Maintenance due state is derived from schedules, completed activities, and effective meter readings; it is not persisted. Forecast/reminder policy may classify an upcoming item as `due_soon`, while occurrence rows materialize workflow attention without copying due truth into storage.
+### Nextcloud App Store
 
-## Development
+Not available yet. The App Store release is planned for 1.0.
 
-Install PHP dependencies:
+### Manual installation
+
+No signed release archive is published yet, so install from the source
+repository. The built JavaScript and CSS are committed, so no build step is
+needed to run the app.
+
+1. Clone the repository into your Nextcloud apps directory. The app directory
+   **must** be named `maintenance_tracker`:
+
+   ```bash
+   cd /path/to/nextcloud/custom_apps   # or another configured apps path
+   git clone https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud.git maintenance_tracker
+   ```
+
+2. Enable the app as the web server user:
+
+   ```bash
+   sudo -u www-data php occ app:enable maintenance_tracker
+   ```
+
+3. Make sure Nextcloud's background jobs use [system cron](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/background_jobs_configuration.html).
+
+To update, run `git pull` in the app directory and then `sudo -u www-data php occ upgrade`.
+
+If you change the frontend sources, rebuild with Node.js 24 (`npm ci && npm run build`);
+see [docs/development.md](docs/development.md).
+
+## Configuration
+
+### Administrator settings
+
+Under **Administration settings → Maintenance Tracker**:
+
+- **Allow store and vendor links** (on by default) – parts and vendors can carry
+  https-only store links, which the server never opens. When switched off, no new
+  links are stored and existing ones are hidden from everyone; they come back if
+  the switch is turned on again. The app config key is `outside_links_enabled`;
+  prefer the settings page, because changing it with `occ` may only take effect
+  after the memory cache refreshes.
+
+### Owner account deletion
+
+When the owner of a shared workspace deletes their account, ownership passes to
+the longest-standing Manager. Set the app config key `owner_deletion_policy` to
+`orphan` to keep such workspaces without an owner instead, so an administrator
+decides who takes over:
 
 ```bash
-composer install
+sudo -u www-data php occ config:app:set maintenance_tracker owner_deletion_policy --value=orphan
 ```
 
-Install frontend dependencies and build:
+The default is `transfer_to_manager`. A workspace without a Manager is always
+kept as orphaned. Personal workspaces, and shared workspaces that have no other
+members, are deleted with the account.
 
-```bash
-npm ci
-npm run build
-```
+### Workspace settings
 
-Run the deterministic local checks:
+Workspace owners set the default currency and whether tax lines and multiple
+currencies are allowed in the cost panel. Owners and Managers set the
+maintenance forecast and reminder policy. Each user chooses in **Reminders and
+calendar** whether to get reminder notifications and which of their calendars
+receives due dates.
 
-```bash
-composer validate --strict
-composer test
-composer openapi:install && composer openapi   # regenerate openapi.json after API changes
-npm run validate:project
-bash tests/validate-project-selftest.sh
-npm run validate:profiles
-npm run typecheck
-npm run lint
-npm run stylelint
-npm run build
-git diff --check
-git diff --exit-code -- js css
-```
+### occ commands
 
-Run the disposable Nextcloud integration suite when Docker is available (it uses
-Nextcloud 34 by default; set `NC_SMOKE_IMAGE=nextcloud:33.0.10-apache` or
-`nextcloud:35.0.2-apache` for the other supported releases):
+| Command | Purpose |
+|---------|---------|
+| `maintenance_tracker:workspace:list-orphaned [--output=plain\|json]` | List workspaces that need an administrator to assign an owner |
+| `maintenance_tracker:workspace:assign-owner <workspace-uuid> <user> [--remove-previous]` | Assign a workspace to a new owner; the previous owner becomes a Manager unless `--remove-previous` is given |
+| `maintenance_tracker:integrations:run` | Run the Activity, notification, calendar, and offer-expiry jobs now instead of waiting for cron |
 
-```bash
-NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh
-NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
-NC_SMOKE_DATABASE=mysql bash tests/integration/nextcloud-smoke.sh   # MariaDB 11.4
-# Upgrade migration: install v0.1.10 (6fc011d, override with NC_UPGRADE_FROM),
-# add data, upgrade to the working tree, and verify. Needs full git history.
-NC_SMOKE_DATABASE=mysql bash tests/integration/upgrade-smoke.sh
-```
+## Privacy
 
-PostgreSQL and MariaDB run in a sibling container on a user-defined Docker
-network. On hosts whose firewall drops traffic on user-defined bridges (for
-example mixed iptables-legacy/nft rules), set `NC_SMOKE_NETWORK_MODE=bridge` to
-use the default bridge and address the database by container IP.
+- All data is stored in your Nextcloud database. Uploaded evidence is stored in a
+  `Maintenance Tracker` folder in the workspace owner's Files, shared with members
+  according to their role, and counts against the owner's quota.
+- The app makes no outgoing network requests and sends no telemetry. Store and
+  vendor links are never fetched by the server.
+- Members only see the evidence files that Nextcloud lets them open.
+- Calendar entries contain only a neutral title and the due date.
+- Exports can contain private notes, costs, and serial numbers. Store them
+  carefully.
 
-The integration harness stages the runtime app and transfers it with
-`docker cp`; it does not require the Docker daemon to bind-mount the source
-checkout. This makes the same harness usable with a local daemon and with the
-isolated Docker daemon used by the Forgejo workstation runners.
+More detail is in [docs/security.md](docs/security.md).
 
-Authoritative Forgejo CI repeats the PHP/frontend checks, exercises the app on
-Nextcloud 33, 34, and 35 with SQLite, PostgreSQL, and MariaDB, runs the upgrade-migration test from v0.1.10 on the same matrix, and publishes an explicitly unsigned
-install-candidate archive plus checksum. App Store releases need a separate
-integrity-signing step and must not treat that unsigned candidate as a published
-release.
+## Export and restore
 
-Live package-registry advisory queries are intentionally separate from normal
-CI because registry availability and advisory state are external inputs. Run the
-Forgejo **Dependency advisories** workflow before release and investigate real
-findings without treating a registry outage as a product regression.
+Open **Export or restore** in the workspace panel.
 
-For development, clone or mount this repository at:
+- **Export data** downloads everything your role can read in the current workspace,
+  as one JSON file or as a ZIP with JSON, one CSV file per table (with formula
+  escaping, so spreadsheet apps do not run cell contents), and optionally the
+  evidence files you can open. Only owners get the member list and audit trail.
+- **Restore an export** creates a new workspace that you own from a complete export
+  made by a workspace owner. Evidence files in a ZIP are copied into
+  `Maintenance Tracker imports/` in your Files. Members and the audit trail are not
+  restored. Uploads are limited to 640 MiB.
 
-```text
-<nextcloud>/custom_apps/maintenance_tracker
-```
+## Translations
 
-Then enable it:
-
-```bash
-sudo -u www-data php occ app:enable maintenance_tracker
-```
-
-Production deployments should use Nextcloud's recommended system cron, not AJAX
-background jobs, before calendar synchronization and reminders are enabled.
-Environment-specific deployment details belong in infrastructure management,
-not this public application repository.
+All interface text uses Nextcloud's translation system, but no translations
+exist yet. See [docs/localization.md](docs/localization.md) if you want to help.
 
 ## Documentation
 
-- [Project/agent guidance](AGENTS.md)
-- [Architecture](docs/architecture.md)
-- [Product architecture](docs/product-architecture.md)
-- [Domain model](docs/domain-model.md)
-- [OCS API](docs/api.md)
-- [Profile format](docs/profile-format.md)
+- [Documentation index](docs/README.md)
+- [OCS API](docs/api.md) and the generated [OpenAPI contract](openapi.json)
 - [Security and privacy](docs/security.md)
-- [Accessibility](docs/accessibility.md)
-- [Localization](docs/localization.md)
-- [Nextcloud app engineering guidance](docs/NEXTCLOUD-DEVELOPMENT-GUIDANCE.md)
-- [Licensing and distribution](docs/licensing.md)
 - [Roadmap](docs/roadmap.md)
+- [Changelog](CHANGELOG.md)
+
+## Support, bugs, and security
+
+- Bugs, questions, and feature requests:
+  [GitHub issues](https://github.com/thystra/maintenance_tracker/issues).
+- Security vulnerabilities: please **do not** open a public issue. Follow
+  [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[docs/development.md](docs/development.md).
+
+## Repositories
+
+- Primary repository, CI, and releases: <https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud>
+- GitHub mirror (issues and security reports): <https://github.com/thystra/maintenance_tracker>
 
 ## License
 
-The Nextcloud server app is licensed under
-[AGPL-3.0-or-later](LICENSE). Profile data can carry a separate compatible data
-license and must declare its provenance.
-
-### v0.1.10 parts, fitment, links, and costs
-
-v0.1.10 implements portable fitment compatibility packs through canonical JSON and a bounded normalized CSV/ZIP spreadsheet projection: standardized service-position slots, canonical parts, immutable import provenance, reasoned equipment matching with explicit Owner/Manager mapping, source export, and privacy-minimized community export. It also adds a part and vendor catalog, parts used per activity, profile-v2 part installation, https-only store/vendor links that a Nextcloud administrator can switch off (Administration settings → Maintenance Tracker), and a central cost ledger. Costs default to one currency (USD) without tax lines; a workspace Owner can enable tax lines and multiple currencies. Amounts are exact integer minor units, and totals are per currency with no exchange-rate conversion. Every member can view costs, Contributors can add them, and Owners/Managers correct or archive them.
-
-### Workspace ownership transfer
-
-Owners can hand a workspace and its evidence folder to another member, who must accept.
-When an owner's account is deleted, a Manager inherits the workspace. Without a Manager it
-is kept as orphaned for an administrator to reassign with occ. See `docs/architecture.md`.
-
-### v0.1.13 export and accessibility
-
-“Export data” downloads everything your role can read in the current workspace as one JSON file or a ZIP with JSON plus spreadsheet-safe CSV tables, optionally including the evidence files you can open. Viewers and Contributors do not get the audit trail or member list, and other people's private files are never named. Exports can contain private notes, costs, and serial numbers, so store them carefully. The UI is checked for labelled controls, keyboard operation, and screen-reader announcements; see [Accessibility](docs/accessibility.md).
-
-### v0.1.12 Activity, notifications, and calendar
-
-Workspace changes (maintenance records and tasks, evidence, membership, ownership transfers) appear in the Nextcloud Activity app under “Maintenance”. Members get Nextcloud notifications when a task becomes due soon, due, or overdue (they can switch this off under “Reminders and calendar”), and ownership offers notify the recipient. Unanswered offers expire automatically. Each user can choose one of their own writable calendars to receive all-day “Maintenance due” entries for dated tasks. Delivery runs from Nextcloud background jobs, so configure system cron.
-
-### v0.1.11 evidence in Nextcloud Files
-
-Attach photos, receipts, invoices, documents, and video to assets, activities, and costs. "Upload" stores the file in the workspace folder `Maintenance Tracker/<Workspace>/<Asset>/` in the workspace owner's Files. That folder is shared with every member, read-only for Viewers and writable for Contributors and Managers, so everyone can browse it in Files. "Attach from Files" links any file you already have. Evidence follows renames and moves made in Files. Members only see files Nextcloud lets them open, and uploads count against the workspace owner's quota.
+The app is licensed under [AGPL-3.0-or-later](LICENSE). Maintenance profiles and
+fitment packs may carry their own compatible data licenses; see
+[docs/licensing.md](docs/licensing.md).
