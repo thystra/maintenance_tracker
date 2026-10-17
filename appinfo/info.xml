@@ -3,11 +3,26 @@
 	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
 	<id>maintenance_tracker</id>
 	<name>Maintenance Tracker</name>
-	<summary>Track maintenance, usage, service history, and ownership costs</summary>
+	<summary>Keep track of maintenance schedules, service history, parts, and costs</summary>
 	<description><![CDATA[
-Track recurring maintenance for vehicles, homes, tools, health equipment, and
-other assets. Record meter readings, service history, costs, parts, receipts,
-and reminders while keeping the data in your Nextcloud.
+Maintenance Tracker keeps the upkeep of your vehicles, home, appliances, tools,
+medical devices, and other equipment in your own Nextcloud.
+
+- **Schedules and due dates** by calendar interval, business days, or meter
+  readings such as mileage, runtime hours, or usage counts
+- **Service history** with the work done, meter values, notes, and parts used
+- **Parts, vendors, and costs**, with optional tax lines and multiple currencies
+- **Receipts, photos, and documents** stored in Nextcloud Files
+- **Shared workspaces** with Owner, Manager, Contributor, and Viewer roles
+- **Reminders** through Nextcloud notifications, the Activity app, and an
+  optional calendar of your choice
+- **Maintenance profiles** to set up common schedules and parts in one step
+- **Export and restore** as JSON or a ZIP with spreadsheet-friendly CSV files
+
+The app makes no outgoing network requests; your data stays on your server.
+
+This is a pre-release version: some features are available only through the API,
+and the interface is English only for now.
 	]]></description>
 	<version>0.1.10</version>
 	<licence>AGPL-3.0-or-later</licence>
