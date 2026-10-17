@@ -32,6 +32,7 @@ configuration.
 
 - [Contributing](../CONTRIBUTING.md)
 - [Development, testing, and CI](development.md)
+- [Releasing](releasing.md)
 - [Nextcloud app engineering guidance](NEXTCLOUD-DEVELOPMENT-GUIDANCE.md)
 - [Project rules for contributors and coding agents](../AGENTS.md)
 - [Security policy](../SECURITY.md)

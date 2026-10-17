@@ -112,5 +112,8 @@ Package-registry advisory queries are kept out of normal CI because registry
 availability is an external input. Run the Forgejo **Dependency advisories**
 workflow before a release and investigate real findings.
 
+Tagged releases are built, signed, and published by the **Release** workflow;
+see [releasing.md](releasing.md).
+
 Deployment-specific details belong in infrastructure management, not in this
 repository.

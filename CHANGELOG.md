@@ -98,6 +98,7 @@ preparation) that introduced them. The app version in `appinfo/info.xml` stays
 - The roadmap now distinguishes the `v0.1.0` foundation preview from the
   remaining 0.1-series core MVP.
 - Public documentation rewritten for users and administrators: a new README (features, limitations, requirements, installation, configuration, `occ` commands, privacy, export/restore), `CONTRIBUTING.md`, a refreshed `SECURITY.md`, `docs/development.md` for build/test/CI details, a `docs/README.md` index, and a user-facing App Store description in `appinfo/info.xml`.
+- Release packaging: `make appstore` (`scripts/build-appstore.sh`) builds a reproducible App Store archive with only runtime files, optionally signed with `APP_SIGNING_KEY` (and code-signed with `occ integrity:sign-app`). A tag-triggered Forgejo workflow checks the tag against the app version, runs the checks, builds and signs the archive, and creates a Forgejo release. See `docs/releasing.md`.
 
 ### Fixed
 

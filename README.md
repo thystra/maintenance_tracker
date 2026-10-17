@@ -93,7 +93,9 @@ Not available yet. The App Store release is planned for 1.0.
 ### Manual installation
 
 No signed release archive is published yet, so install from the source
-repository. The built JavaScript and CSS are committed, so no build step is
+repository. Once releases are published on Forgejo, you can instead extract
+`maintenance_tracker.tar.gz` from a release into your apps directory (see
+[docs/releasing.md](docs/releasing.md#installing-an-archive-by-hand)). The built JavaScript and CSS are committed, so no build step is
 needed to run the app.
 
 1. Clone the repository into your Nextcloud apps directory. The app directory
