@@ -3,7 +3,7 @@
     "info": {
         "title": "maintenance_tracker",
         "version": "0.0.1",
-        "description": "Track maintenance, usage, service history, and ownership costs",
+        "description": "Keep track of maintenance schedules, service history, parts, and costs",
         "license": {
             "name": "AGPL-3.0-or-later"
         }
