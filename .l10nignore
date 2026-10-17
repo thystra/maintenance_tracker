@@ -1,0 +1,6 @@
+# Nextcloud translationtool: do not extract from generated or third-party code.
+js/
+css/
+vendor/
+node_modules/
+tests/

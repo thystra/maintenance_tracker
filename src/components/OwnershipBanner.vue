@@ -7,6 +7,7 @@
 import type { OwnershipTransfer } from '../workspaceTypes.ts'
 
 import { onMounted, reactive, ref } from 'vue'
+import { t } from '../l10n.ts'
 import { acceptTransfer, listTransfers, ocsMessage, transferAction } from '../services/workspaceApi.ts'
 
 const emit = defineEmits<{ (event: 'changed'): void }>()
@@ -73,56 +74,54 @@ defineExpose({ load })
 			class="panel ownership-offer"
 			aria-live="polite">
 			<template v-if="transfer.status === 'pending'">
-				<h2>Workspace ownership offered to you</h2>
+				<h2>{{ t('maintenance_tracker', 'Workspace ownership offered to you') }}</h2>
 				<p>
-					<strong>{{ transfer.fromUid }}</strong> wants to make you the owner of
-					<strong>{{ transfer.workspace?.name ?? 'a workspace' }}</strong> (offer expires {{ transfer.expiresAt.slice(0, 10) }}).
-					They will {{ transfer.leaveAfter ? 'leave the workspace' : 'stay on as a Manager' }}.
+					{{ transfer.leaveAfter
+						? t('maintenance_tracker', '{user} wants to make you the owner of {workspace} (offer expires {date}). They will leave the workspace.', { user: transfer.fromUid, workspace: transfer.workspace?.name ?? t('maintenance_tracker', 'a workspace'), date: transfer.expiresAt.slice(0, 10) })
+						: t('maintenance_tracker', '{user} wants to make you the owner of {workspace} (offer expires {date}). They will stay on as a Manager.', { user: transfer.fromUid, workspace: transfer.workspace?.name ?? t('maintenance_tracker', 'a workspace'), date: transfer.expiresAt.slice(0, 10) }) }}
 				</p>
 				<p v-if="transfer.quota">
-					Accepting moves the workspace evidence folder ({{ bytes(transfer.quota.folderBytes) }}) into your Files.
-					Uploads by every member will count against your storage quota; you have {{ bytes(transfer.quota.recipientFreeBytes) }} free.
+					{{ t('maintenance_tracker', 'Accepting moves the workspace evidence folder ({folderBytes}) into your Files. Uploads by every member will count against your storage quota; you have {recipientFreeBytes} free.', { folderBytes: bytes(transfer.quota.folderBytes), recipientFreeBytes: bytes(transfer.quota.recipientFreeBytes) }) }}
 				</p>
 				<p v-if="transfer.quota && transfer.quota.fits === false" class="notice notice--error" role="alert">
-					The folder does not fit in your remaining quota. Free up space or ask an administrator before accepting.
+					{{ t('maintenance_tracker', 'The folder does not fit in your remaining quota. Free up space or ask an administrator before accepting.') }}
 				</p>
 				<label class="checkbox">
 					<input v-model="acknowledged[transfer.uuid]" type="checkbox">
-					<span>I understand the evidence counts against my quota and I become responsible for this workspace.</span>
+					<span>{{ t('maintenance_tracker', 'I understand the evidence counts against my quota and I become responsible for this workspace.') }}</span>
 				</label>
 				<div class="actions">
 					<button
 						type="button"
 						class="primary"
 						:disabled="busy || !acknowledged[transfer.uuid] || transfer.quota?.fits === false"
-						@click="act(() => acceptTransfer(transfer.uuid), 'You now own the workspace.')">
-						Accept ownership
+						@click="act(() => acceptTransfer(transfer.uuid), t('maintenance_tracker', 'You now own the workspace.'))">
+						{{ t('maintenance_tracker', 'Accept ownership') }}
 					</button>
-					<button type="button" :disabled="busy" @click="act(() => transferAction(transfer.uuid, 'decline'), 'Offer declined.')">
-						Decline
+					<button type="button" :disabled="busy" @click="act(() => transferAction(transfer.uuid, 'decline'), t('maintenance_tracker', 'Offer declined.'))">
+						{{ t('maintenance_tracker', 'Decline') }}
 					</button>
 				</div>
 			</template>
 			<template v-else>
-				<h2>Ownership transfer not finished</h2>
+				<h2>{{ t('maintenance_tracker', 'Ownership transfer not finished') }}</h2>
 				<p>
-					The transfer of <strong>{{ transfer.workspace?.name ?? 'a workspace' }}</strong> stopped at the “{{ transfer.step }}” step.
-					It is safe to resume; nothing is half-moved.
+					{{ t('maintenance_tracker', 'The transfer of {workspace} stopped at the “{step}” step. It is safe to resume; nothing is half-moved.', { workspace: transfer.workspace?.name ?? t('maintenance_tracker', 'a workspace'), step: transfer.step }) }}
 				</p>
 				<div class="actions">
 					<button
 						type="button"
 						class="primary"
 						:disabled="busy"
-						@click="act(() => transferAction(transfer.uuid, 'resume'), 'Transfer finished.')">
-						Resume transfer
+						@click="act(() => transferAction(transfer.uuid, 'resume'), t('maintenance_tracker', 'Transfer finished.'))">
+						{{ t('maintenance_tracker', 'Resume transfer') }}
 					</button>
 					<button
 						v-if="transfer.abortable"
 						type="button"
 						:disabled="busy"
-						@click="act(() => transferAction(transfer.uuid, 'abort'), 'Transfer aborted.')">
-						Abort
+						@click="act(() => transferAction(transfer.uuid, 'abort'), t('maintenance_tracker', 'Transfer aborted.'))">
+						{{ t('maintenance_tracker', 'Abort') }}
 					</button>
 				</div>
 			</template>

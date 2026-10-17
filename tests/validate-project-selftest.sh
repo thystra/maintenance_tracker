@@ -43,7 +43,9 @@ fixture_paths=(
 	lib/Service/ProfileValidator.php lib/Service/ProfileCatalog.php lib/Service/ProfileRepository.php lib/Service/ProfileInstallationService.php
 	lib/Service/FitmentPackValidator.php lib/Service/FitmentCsvBundleService.php lib/Service/FitmentZipBundleService.php lib/Service/FitmentRepository.php lib/Service/AssetFitmentDescriptorService.php lib/Service/FitmentService.php
 	lib/Migration/Version1120Date20261016160000.php lib/Service/IntegrationProjector.php lib/Service/ReminderService.php lib/Service/IntegrationSettingsService.php lib/Service/CalendarEventBuilder.php lib/Service/IntegrationEventMap.php
-	lib/Service/ExportPolicy.php lib/Service/ExportService.php scripts/check-a11y.mjs
+	lib/Service/ExportPolicy.php lib/Service/ExportService.php lib/Service/ImportPolicy.php lib/Service/ImportService.php openapi.json scripts/check-a11y.mjs
+	tests/integration/nextcloud-smoke.sh tests/integration/upgrade-smoke.sh
+	scripts/l10n.mjs .l10nignore templates lib/Settings/AdminSection.php
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 )
 
@@ -636,5 +638,9 @@ expect_rejected 'Files access inside the export transaction' 'Workspace export m
 copy_fixture
 sed -i "s/'maint_notify_log', //" "$tmp/fixture/lib/Service/ExportPolicy.php"
 expect_rejected 'unclassified workspace table in export' 'Workspace export policy must either export or explicitly exclude workspace-scoped table maint_notify_log.' "$tmp/export-table.out"
+
+copy_fixture
+sed -i "s/!== 'owner'/=== 'viewer'/" "$tmp/fixture/lib/Service/ImportPolicy.php"
+expect_rejected 'import of non-owner exports' 'Import must accept only complete Owner exports.' "$tmp/import-owner.out"
 
 echo 'Project validator self-tests passed.'

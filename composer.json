@@ -25,7 +25,9 @@
 		"test": [
 			"@lint",
 			"@test:unit"
-		]
+		],
+		"openapi:install": "composer --working-dir=vendor-bin/openapi-extractor install --no-interaction",
+		"openapi": "vendor-bin/openapi-extractor/vendor/bin/generate-spec . openapi.json --verbose"
 	},
 	"require": {
 		"php": ">=8.2 <8.6"

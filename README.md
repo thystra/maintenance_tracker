@@ -83,6 +83,7 @@ Run the deterministic local checks:
 ```bash
 composer validate --strict
 composer test
+composer openapi:install && composer openapi   # regenerate openapi.json after API changes
 npm run validate:project
 bash tests/validate-project-selftest.sh
 npm run validate:profiles
@@ -101,7 +102,16 @@ Nextcloud 34 by default; set `NC_SMOKE_IMAGE=nextcloud:33.0.10-apache` or
 ```bash
 NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh
 NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
+NC_SMOKE_DATABASE=mysql bash tests/integration/nextcloud-smoke.sh   # MariaDB 11.4
+# Upgrade migration: install v0.1.10 (6fc011d, override with NC_UPGRADE_FROM),
+# add data, upgrade to the working tree, and verify. Needs full git history.
+NC_SMOKE_DATABASE=mysql bash tests/integration/upgrade-smoke.sh
 ```
+
+PostgreSQL and MariaDB run in a sibling container on a user-defined Docker
+network. On hosts whose firewall drops traffic on user-defined bridges (for
+example mixed iptables-legacy/nft rules), set `NC_SMOKE_NETWORK_MODE=bridge` to
+use the default bridge and address the database by container IP.
 
 The integration harness stages the runtime app and transfers it with
 `docker cp`; it does not require the Docker daemon to bind-mount the source
@@ -109,7 +119,7 @@ checkout. This makes the same harness usable with a local daemon and with the
 isolated Docker daemon used by the Forgejo workstation runners.
 
 Authoritative Forgejo CI repeats the PHP/frontend checks, exercises the app on
-Nextcloud 33, 34, and 35 with SQLite and PostgreSQL, and publishes an explicitly unsigned
+Nextcloud 33, 34, and 35 with SQLite, PostgreSQL, and MariaDB, runs the upgrade-migration test from v0.1.10 on the same matrix, and publishes an explicitly unsigned
 install-candidate archive plus checksum. App Store releases need a separate
 integrity-signing step and must not treat that unsigned candidate as a published
 release.
@@ -146,6 +156,7 @@ not this public application repository.
 - [Profile format](docs/profile-format.md)
 - [Security and privacy](docs/security.md)
 - [Accessibility](docs/accessibility.md)
+- [Localization](docs/localization.md)
 - [Nextcloud app engineering guidance](docs/NEXTCLOUD-DEVELOPMENT-GUIDANCE.md)
 - [Licensing and distribution](docs/licensing.md)
 - [Roadmap](docs/roadmap.md)

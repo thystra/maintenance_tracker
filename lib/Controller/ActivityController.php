@@ -39,6 +39,18 @@ final class ActivityController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List activitys
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/activities')]
 	public function index(string $assetUuid, ?string $workspace = null): DataResponse {
@@ -49,6 +61,18 @@ final class ActivityController extends OCSController {
 		);
 	}
 
+	/**
+	 * Get activity
+	 *
+	 * @param string $uuid UUID of the activity
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/activities/{uuid}')]
 	public function show(string $uuid, ?string $workspace = null): DataResponse {
@@ -59,6 +83,19 @@ final class ActivityController extends OCSController {
 		);
 	}
 
+	/**
+	 * Create activity
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param array<string, mixed> $activity Activity fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Activity created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/activities')]
 	public function create(string $assetUuid, array $activity, ?string $workspace = null): DataResponse {
@@ -69,6 +106,20 @@ final class ActivityController extends OCSController {
 		);
 	}
 
+	/**
+	 * Update activity
+	 *
+	 * @param string $uuid UUID of the activity
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param array<string, mixed> $activity Activity fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PATCH', url: '/api/v1/activities/{uuid}')]
 	public function update(string $uuid, int $expectedRevision, array $activity, ?string $workspace = null): DataResponse {
@@ -79,6 +130,19 @@ final class ActivityController extends OCSController {
 		);
 	}
 
+	/**
+	 * Delete activity
+	 *
+	 * @param string $uuid UUID of the activity
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/activities/{uuid}')]
 	public function destroy(string $uuid, int $expectedRevision, ?string $workspace = null): DataResponse {

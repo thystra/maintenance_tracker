@@ -39,6 +39,18 @@ final class WorkGroupController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List work groups
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/work-groups')]
 	public function index(string $assetUuid, ?string $workspace = null): DataResponse {
@@ -52,6 +64,19 @@ final class WorkGroupController extends OCSController {
 		);
 	}
 
+	/**
+	 * Create work group
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param array<string, mixed> $group Group fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Work group created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/work-groups')]
 	public function create(string $assetUuid, array $group, ?string $workspace = null): DataResponse {
@@ -62,6 +87,20 @@ final class WorkGroupController extends OCSController {
 		);
 	}
 
+	/**
+	 * Update work group
+	 *
+	 * @param string $uuid UUID of the work group
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param array<string, mixed> $group Group fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PATCH', url: '/api/v1/work-groups/{uuid}')]
 	public function update(string $uuid, int $expectedRevision, array $group, ?string $workspace = null): DataResponse {
@@ -72,6 +111,19 @@ final class WorkGroupController extends OCSController {
 		);
 	}
 
+	/**
+	 * Delete work group
+	 *
+	 * @param string $uuid UUID of the work group
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/work-groups/{uuid}')]
 	public function destroy(string $uuid, int $expectedRevision, ?string $workspace = null): DataResponse {

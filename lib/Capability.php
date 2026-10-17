@@ -54,6 +54,7 @@ final class Capability implements ICapability {
 					'notifications',
 					'calendar-projection',
 					'workspace-export',
+					'workspace-import',
 					'client-generated-uuid',
 					'optimistic-revisions',
 					'cursor-pagination',

@@ -7,6 +7,7 @@
 import type { IntegrationSettings, WritableCalendar } from '../integrationTypes.ts'
 
 import { ref } from 'vue'
+import { t } from '../l10n.ts'
 import { getIntegrationSettings, listWritableCalendars, updateIntegrationSettings } from '../services/integrationApi.ts'
 import { ocsMessage } from '../services/workspaceApi.ts'
 
@@ -43,7 +44,7 @@ async function save(change: Partial<Pick<IntegrationSettings, 'reminders' | 'cal
 	try {
 		settings.value = await updateIntegrationSettings(change)
 		calendarChoice.value = settings.value.calendarUri ?? ''
-		notice.value = 'Saved. Reminders and calendar entries are delivered by the Nextcloud background job.'
+		notice.value = t('maintenance_tracker', 'Saved. Reminders and calendar entries are delivered by the Nextcloud background job.')
 	} catch (reason) {
 		error.value = ocsMessage(reason)
 	} finally {
@@ -60,10 +61,10 @@ function onReminders(event: Event): void {
 	<section class="panel integrations" aria-labelledby="integrations-heading">
 		<div class="integrations__bar">
 			<h2 id="integrations-heading">
-				Reminders and calendar
+				{{ t('maintenance_tracker', 'Reminders and calendar') }}
 			</h2>
 			<button type="button" :aria-expanded="open" @click="toggle">
-				{{ open ? 'Hide' : 'Configure' }}
+				{{ open ? t('maintenance_tracker', 'Hide') : t('maintenance_tracker', 'Configure') }}
 			</button>
 		</div>
 		<template v-if="open && settings">
@@ -79,26 +80,24 @@ function onReminders(event: Event): void {
 					:checked="settings.reminders"
 					:disabled="busy"
 					@change="onReminders">
-				<span>Send me Nextcloud notifications when maintenance is due soon, due, or overdue</span>
+				<span>{{ t('maintenance_tracker', 'Send me Nextcloud notifications when maintenance is due soon, due, or overdue') }}</span>
 			</label>
 			<template v-if="settings.calendarAvailable">
-				<label><span>Add due dates to calendar</span>
+				<label><span>{{ t('maintenance_tracker', 'Add due dates to calendar') }}</span>
 					<select v-model="calendarChoice" :disabled="busy" @change="save({ calendarUri: calendarChoice === '' ? null : calendarChoice })">
-						<option value="">Do not add calendar entries</option>
+						<option value="">{{ t('maintenance_tracker', 'Do not add calendar entries') }}</option>
 						<option v-for="calendar in calendars" :key="calendar.uri" :value="calendar.uri">{{ calendar.displayName }}</option>
 					</select>
 				</label>
 				<p class="hint">
-					Only your own writable calendars are listed. Create a dedicated calendar such as “Maintenance” in the Calendar app first if you prefer.
-					Entries are titled “Maintenance due” without task or asset names, are added once per due date, and are not removed automatically after the work is done.
-					Tasks that are due only by meter readings have no date and are not added.
+					{{ t('maintenance_tracker', 'Only your own writable calendars are listed. Create a dedicated calendar such as “Maintenance” in the Calendar app first if you prefer. Entries are titled “Maintenance due” without task or asset names, are added once per due date, and are not removed automatically after the work is done. Tasks that are due only by meter readings have no date and are not added.') }}
 				</p>
 			</template>
 			<p v-else class="hint">
-				Calendar integration is unavailable because the Nextcloud calendar backend is disabled.
+				{{ t('maintenance_tracker', 'Calendar integration is unavailable because the Nextcloud calendar backend is disabled.') }}
 			</p>
 			<p class="hint">
-				Workspace activity appears in the Nextcloud Activity app under “Maintenance”.
+				{{ t('maintenance_tracker', 'Workspace activity appears in the Nextcloud Activity app under “Maintenance”.') }}
 			</p>
 		</template>
 	</section>

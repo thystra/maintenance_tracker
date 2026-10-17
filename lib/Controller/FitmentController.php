@@ -43,24 +43,72 @@ final class FitmentController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * Validate (fitment)
+	 *
+	 * @param array<string, mixed> $pack Pack fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/fitment-packs/validate')]
 	public function validate(array $pack, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_READ, $workspace, fn ($context): DataResponse => new DataResponse($this->service->validatePack($pack)));
 	}
 
+	/**
+	 * Preview (fitment)
+	 *
+	 * @param array<string, mixed> $pack Pack fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/fitment-packs/preview')]
 	public function preview(array $pack, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_READ, $workspace, fn ($context): DataResponse => new DataResponse($this->service->preview($context, $pack)));
 	}
 
+	/**
+	 * Import (fitment)
+	 *
+	 * @param string $importUuid UUID of the import
+	 * @param array<string, mixed> $pack Pack fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Fitment created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/fitment-packs/import')]
 	public function import(string $importUuid, array $pack, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_IMPORT, $workspace, fn ($context): DataResponse => new DataResponse($this->service->import($context, $importUuid, $pack), Http::STATUS_CREATED));
 	}
 
+	/**
+	 * Validate bundle (fitment)
+	 *
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/fitment-packs/bundle/validate')]
 	public function validateBundle(?string $workspace = null): DataResponse {
@@ -70,6 +118,17 @@ final class FitmentController extends OCSController {
 		});
 	}
 
+	/**
+	 * Preview bundle (fitment)
+	 *
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/fitment-packs/bundle/preview')]
 	public function previewBundle(?string $workspace = null): DataResponse {
@@ -79,6 +138,18 @@ final class FitmentController extends OCSController {
 		});
 	}
 
+	/**
+	 * Import bundle (fitment)
+	 *
+	 * @param string $importUuid UUID of the import
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Fitment created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/fitment-packs/bundle/import')]
 	public function importBundle(string $importUuid, ?string $workspace = null): DataResponse {
@@ -88,12 +159,36 @@ final class FitmentController extends OCSController {
 		});
 	}
 
+	/**
+	 * Export (fitment)
+	 *
+	 * @param string $importUuid UUID of the import
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/fitment-packs/{importUuid}/export')]
 	public function export(string $importUuid, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_READ, $workspace, fn ($context): DataResponse => new DataResponse($this->service->sourceExport($context, $importUuid)));
 	}
 
+	/**
+	 * Export bundle (fitment)
+	 *
+	 * @param string $importUuid UUID of the import
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataDownloadResponse<Http::STATUS_OK, 'application/zip', array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: ZIP bundle
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/fitment-packs/{importUuid}/bundle')]
 	public function exportBundle(string $importUuid, ?string $workspace = null): DataDownloadResponse {
@@ -103,36 +198,113 @@ final class FitmentController extends OCSController {
 		});
 	}
 
+	/**
+	 * Targets (fitment)
+	 *
+	 * @param string $importUuid UUID of the import
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/fitment-packs/{importUuid}/targets')]
 	public function targets(string $importUuid, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_READ, $workspace, fn ($context): DataResponse => new DataResponse($this->service->targets($context, $importUuid)));
 	}
 
+	/**
+	 * Matches (fitment)
+	 *
+	 * @param string $targetUuid UUID of the target
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/fitment-targets/{targetUuid}/matches')]
 	public function matches(string $targetUuid, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_READ, $workspace, fn ($context): DataResponse => new DataResponse($this->service->matchSuggestions($context, $targetUuid)));
 	}
 
+	/**
+	 * Map (fitment)
+	 *
+	 * @param string $targetUuid UUID of the target
+	 * @param string $mappingUuid UUID of the mapping
+	 * @param string $assetUuid UUID of the asset
+	 * @param bool $acceptConflict Accept conflict
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Fitment created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/fitment-targets/{targetUuid}/map')]
 	public function map(string $targetUuid, string $mappingUuid, string $assetUuid, bool $acceptConflict = false, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_MAP, $workspace, fn ($context): DataResponse => new DataResponse($this->service->map($context, $targetUuid, $mappingUuid, $assetUuid, $acceptConflict), Http::STATUS_CREATED));
 	}
 
+	/**
+	 * Asset fitments (fitment)
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/fitments')]
 	public function assetFitments(string $assetUuid, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_READ, $workspace, fn ($context): DataResponse => new DataResponse($this->service->assetFitments($context, $assetUuid)));
 	}
 
+	/**
+	 * Community export (fitment)
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param array<string, mixed> $export Export fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/fitment-export/community')]
 	public function communityExport(string $assetUuid, array $export, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::FITMENT_READ, $workspace, fn ($context): DataResponse => new DataResponse($this->service->communityExport($context, $assetUuid, $export)));
 	}
 
+	/**
+	 * Community bundle export (fitment)
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param array<string, mixed> $export Export fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataDownloadResponse<Http::STATUS_OK, 'application/zip', array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: ZIP bundle
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/fitment-export/community/bundle')]
 	public function communityBundleExport(string $assetUuid, array $export, ?string $workspace = null): DataDownloadResponse {

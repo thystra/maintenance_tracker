@@ -130,6 +130,7 @@ Use the project's documented commands. Normal local deterministic checks are:
 ```bash
 composer validate --strict
 composer test
+composer openapi   # after composer openapi:install; commit openapi.json when routes change
 npm ci
 npm run validate:project
 bash tests/validate-project-selftest.sh
@@ -150,7 +151,16 @@ e.g. `nextcloud:35.0.2-apache`, for other declared releases, and
 ```bash
 NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh
 NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
+NC_SMOKE_DATABASE=mysql bash tests/integration/nextcloud-smoke.sh   # MariaDB 11.4
+# Upgrade migration: install v0.1.10 (6fc011d, override with NC_UPGRADE_FROM),
+# add data, upgrade to the working tree, and verify. Needs full git history.
+NC_SMOKE_DATABASE=mysql bash tests/integration/upgrade-smoke.sh
 ```
+
+PostgreSQL and MariaDB run in a sibling container on a user-defined Docker
+network. On hosts whose firewall drops traffic on user-defined bridges (for
+example mixed iptables-legacy/nft rules), set `NC_SMOKE_NETWORK_MODE=bridge` to
+use the default bridge and address the database by container IP.
 
 The integration harness must use disposable data and must never point at a real
 Nextcloud database or user store.
@@ -268,9 +278,18 @@ Fitment-pack import and local-asset mapping are separate operations. Immutable s
 
 Activity, notifications, and calendar events are projections. Activity and transfer notifications come only from the append-only audit trail through the cursor-driven `IntegrationProjector`. Reminders come only from `MaintenanceForecastService`, never a second due calculation. Delivery bookkeeping (`maint_notify_log`, `maint_cal_events`) records what was delivered, never due truth. All delivery runs in background jobs or `occ`, outside any app database transaction. Activity parameters carry identifiers and reviewed detail keys only; names are rendered at read time and the workspace name only for current members. Calendar events go only to a calendar the user owns and selected, through public `OCP\Calendar` APIs, with the neutral title “Maintenance due”, no description, and a deterministic UID per (workspace, user, calendar, task, baseline).
 
+## Localization invariant
+
+All user-facing UI text goes through l10n: PHP via `IL10N::t()/n()` (templates print `p($l->t(...))`), Vue/TypeScript via `t('maintenance_tracker', 'literal', vars)` / `n(...)` from `src/l10n.ts`, with literal app id and text and whole sentences with placeholders. Keep `npm run l10n:check` passing. OCS error messages, `occ` output, logs, and stored data stay English by design (see `docs/localization.md`).
+
 ## v0.1.13 export invariant
 
 Workspace export is a read-only, explicitly requested projection. `workspace.export` is granted explicitly to every role, but each section still needs its own read capability (`ExportPolicy::CAPABILITY`); never widen what a role can read through export. Every workspace-scoped table must be listed in `ExportPolicy` as exported or explicitly excluded (the project validator enforces this). Table reads and the `workspace.exported` audit event run inside `runLocked`; evidence projection, file reads, temp files, and ZIP building run after it, never inside an app transaction. Evidence goes through the viewer-scoped projection: never export another user's file name, path, or bytes without a share, and never export session-bound Files URLs. CSV uses the reversible `leading-apostrophe-v1` formula escaping, ZIP entry names are generated (never taken from user paths), and evidence bytes stay within the reviewed per-file and total bounds. Keep `npm run check:a11y` passing for UI changes.
+
+
+## Workspace restore invariant
+
+`POST /import` only ever creates a new workspace owned by the caller, from an Owner export with a known `formatVersion`. Every workspace-scoped table must be listed in `ImportPolicy::ORDER` or `NOT_RESTORED`, and each numeric or UUID reference in `REFERENCES`/`POLYMORPHIC`; never trust an ID, UUID, workspace, owner, or column name from the file. Keep the size bounds, schema-checked column whitelist, and single `runForActiveUser` transaction for database rows; Files writes and evidence attachment happen after commit and only in the caller's own folder.
 
 ## v0.1.11 evidence invariant
 

@@ -39,6 +39,17 @@ final class MeterController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List meters
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/meters')]
 	public function index(string $assetUuid, ?string $workspace = null): DataResponse {
@@ -59,6 +70,18 @@ final class MeterController extends OCSController {
 		}
 	}
 
+	/**
+	 * Get meter
+	 *
+	 * @param string $uuid UUID of the meter
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/meters/{uuid}')]
 	public function show(string $uuid, ?string $workspace = null): DataResponse {
@@ -78,6 +101,19 @@ final class MeterController extends OCSController {
 		}
 	}
 
+	/**
+	 * Create meter
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param array<string, mixed> $meter Meter fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Meter created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/meters')]
 	public function create(string $assetUuid, array $meter, ?string $workspace = null): DataResponse {
@@ -102,6 +138,20 @@ final class MeterController extends OCSController {
 		}
 	}
 
+	/**
+	 * Update meter
+	 *
+	 * @param string $uuid UUID of the meter
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param array<string, mixed> $meter Meter fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PATCH', url: '/api/v1/meters/{uuid}')]
 	public function update(string $uuid, int $expectedRevision, array $meter, ?string $workspace = null): DataResponse {
@@ -125,6 +175,19 @@ final class MeterController extends OCSController {
 		}
 	}
 
+	/**
+	 * Delete meter
+	 *
+	 * @param string $uuid UUID of the meter
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/meters/{uuid}')]
 	public function destroy(string $uuid, int $expectedRevision, ?string $workspace = null): DataResponse {

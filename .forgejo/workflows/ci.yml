@@ -54,6 +54,13 @@ jobs:
       - name: Run PHP checks
         run: composer test
 
+      - name: Check OpenAPI contract is up to date
+        run: |
+          set -euo pipefail
+          composer openapi:install --no-progress
+          composer openapi
+          git diff --exit-code -- openapi.json || { echo 'openapi.json is stale; run composer openapi and commit it.' >&2; exit 1; }
+
   frontend:
     name: Frontend and generated assets
     runs-on: forgejo-workstation
@@ -85,6 +92,7 @@ jobs:
           npm run lint
           npm run stylelint
           npm run check:a11y
+          npm run l10n:check
           npm run build
           test -f js/maintenance_tracker-main.mjs
           test -f css/maintenance_tracker-main.css
@@ -114,6 +122,7 @@ jobs:
         database:
           - sqlite
           - pgsql
+          - mysql
 
     steps:
       - name: Check out repository
@@ -138,12 +147,47 @@ jobs:
           NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
         run: bash tests/integration/nextcloud-smoke.sh
 
+  upgrade:
+    name: Upgrade from v0.1.10 on Nextcloud ${{ matrix.nextcloud }} / ${{ matrix.database }}
+    runs-on: forgejo-workstation
+    timeout-minutes: 20
+    container:
+      image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud@sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c
+    needs:
+      - php
+      - frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        nextcloud:
+          - 33.0.10
+          - 34.0.5
+          - 35.0.2
+        database:
+          - sqlite
+          - pgsql
+          - mysql
+
+    steps:
+      - name: Check out repository with history for the upgrade base
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Run upgrade-migration test
+        env:
+          NC_SMOKE_DATABASE: ${{ matrix.database }}
+          NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+        run: bash tests/integration/upgrade-smoke.sh
+
   package:
     name: Unsigned install candidate
     runs-on: forgejo-workstation
     timeout-minutes: 10
     needs:
       - nextcloud
+      - upgrade
 
     steps:
       - name: Check out repository

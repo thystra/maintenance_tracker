@@ -8,6 +8,7 @@ import type { Evidence, EvidenceKind, EvidenceTargetType } from '../evidenceType
 
 import { getFilePickerBuilder } from '@nextcloud/dialogs'
 import { onMounted, ref } from 'vue'
+import { t } from '../l10n.ts'
 import { archiveEvidence, attachEvidence, getUploadTarget, listEvidence, uploadToFiles } from '../services/evidenceApi.ts'
 
 import '@nextcloud/dialogs/style.css'
@@ -23,8 +24,8 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const availabilityText: Record<Evidence['availability'], string> = {
 	available: '',
-	not_shared: 'Not shared with you in Files',
-	missing: 'File was deleted or is no longer reachable',
+	not_shared: t('maintenance_tracker', 'Not shared with you in Files'),
+	missing: t('maintenance_tracker', 'File was deleted or is no longer reachable'),
 }
 
 /**
@@ -33,12 +34,12 @@ const availabilityText: Record<Evidence['availability'], string> = {
 function readableError(reason: unknown): string {
 	const status = (reason as { response?: { status?: number } })?.response?.status
 	if (status === 507) {
-		return 'Not enough storage: uploads to the workspace folder count against the workspace owner\'s quota.'
+		return t('maintenance_tracker', 'Not enough storage: uploads to the workspace folder count against the workspace owner\'s quota.')
 	}
 	if (status === 403) {
-		return 'You do not have permission to add files to the workspace folder.'
+		return t('maintenance_tracker', 'You do not have permission to add files to the workspace folder.')
 	}
-	return reason instanceof Error && reason.message !== '' ? reason.message : 'The request could not be completed.'
+	return reason instanceof Error && reason.message !== '' ? reason.message : t('maintenance_tracker', 'The request could not be completed.')
 }
 
 /**
@@ -81,10 +82,10 @@ async function run(operation: () => Promise<unknown>): Promise<void> {
 async function pickFromFiles(): Promise<void> {
 	let path: string
 	try {
-		path = await getFilePickerBuilder('Attach evidence from Files')
+		path = await getFilePickerBuilder(t('maintenance_tracker', 'Attach evidence from Files'))
 			.setMultiSelect(false)
 			.allowDirectories(false)
-			.addButton({ label: 'Attach', variant: 'primary', callback: () => {} })
+			.addButton({ label: t('maintenance_tracker', 'Attach'), variant: 'primary', callback: () => {} })
 			.build()
 			.pick()
 	} catch {
@@ -101,13 +102,13 @@ async function upload(event: Event): Promise<void> {
 	await run(async () => {
 		const target = await getUploadTarget(props.targetType, props.targetUuid, file.name)
 		if (!target.available || target.uploadPath === null) {
-			throw new Error(target.reason ?? 'The workspace evidence folder is not available to you.')
+			throw new Error(target.reason ?? t('maintenance_tracker', 'The workspace evidence folder is not available to you.'))
 		}
 		if (!target.writable) {
-			throw new Error('Your role can view but not add files in the workspace folder.')
+			throw new Error(t('maintenance_tracker', 'Your role can view but not add files in the workspace folder.'))
 		}
 		if (target.quotaLimited && target.freeBytes !== null && file.size > target.freeBytes) {
-			throw new Error('Not enough storage left in the workspace owner\'s quota for this file.')
+			throw new Error(t('maintenance_tracker', 'Not enough storage left in the workspace owner\'s quota for this file.'))
 		}
 		const path = await uploadToFiles(target.uploadPath, file)
 		await attachEvidence({ uuid: crypto.randomUUID(), kind: kind.value, title: file.name, path, targetType: props.targetType, targetUuid: props.targetUuid })
@@ -123,7 +124,7 @@ onMounted(load)
 <template>
 	<section class="evidence-panel" :class="{ compact }">
 		<h4 v-if="!compact">
-			Evidence
+			{{ t('maintenance_tracker', 'Evidence') }}
 		</h4>
 		<p v-if="error" class="evidence-error" role="alert">
 			{{ error }}
@@ -143,31 +144,31 @@ onMounted(load)
 						target="_blank"
 						rel="noopener noreferrer">{{ item.title }}</a>
 					<strong v-else>{{ item.title }}</strong>
-					<span> · {{ item.kind }} · {{ size(item.size) }}<template v-if="item.storage === 'workspace'"> · workspace folder</template></span>
+					<span> · {{ item.kind }} · {{ size(item.size) }}<template v-if="item.storage === 'workspace'"> {{ t('maintenance_tracker', '· workspace folder') }}</template></span>
 					<em v-if="item.availability !== 'available'"> · {{ availabilityText[item.availability] }}</em>
-					<em v-else-if="item.file?.changed"> · file changed since it was attached</em>
+					<em v-else-if="item.file?.changed"> {{ t('maintenance_tracker', '· file changed since it was attached') }}</em>
 				</span>
 				<button
 					v-if="item.canChange"
 					type="button"
 					:disabled="busy"
-					title="Removes the evidence record; the file stays in Files"
+					:title="t('maintenance_tracker', 'Removes the evidence record; the file stays in Files')"
 					@click="run(() => archiveEvidence(item.uuid, item.revision))">
-					Remove
+					{{ t('maintenance_tracker', 'Remove') }}
 				</button>
 			</li>
 		</ul>
 		<div class="evidence-actions">
-			<select v-model="kind" aria-label="Evidence kind">
+			<select v-model="kind" :aria-label="t('maintenance_tracker', 'Evidence kind')">
 				<option v-for="k in kinds" :key="k" :value="k">
 					{{ k }}
 				</option>
 			</select>
 			<button type="button" :disabled="busy" @click="pickFromFiles">
-				Attach from Files
+				{{ t('maintenance_tracker', 'Attach from Files') }}
 			</button>
 			<label class="evidence-upload">
-				Upload
+				{{ t('maintenance_tracker', 'Upload') }}
 				<input
 					ref="fileInput"
 					type="file"

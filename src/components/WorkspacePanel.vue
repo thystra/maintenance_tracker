@@ -8,6 +8,8 @@ import type { OwnershipTransfer, WorkspaceMemberSummary, WorkspaceSummary } from
 
 import { computed, onMounted, reactive, ref } from 'vue'
 import ExportPanel from './ExportPanel.vue'
+import ImportPanel from './ImportPanel.vue'
+import { t } from '../l10n.ts'
 import { currentWorkspace, selectWorkspace } from '../services/api.ts'
 import { listMembers, listTransfers, listWorkspaces, ocsMessage, offerTransfer, transferAction } from '../services/workspaceApi.ts'
 
@@ -67,6 +69,11 @@ async function offer(): Promise<void> {
 	await act(() => offerTransfer(workspace.uuid, { toUid: draft.toUid, leaveAfter: draft.leaveAfter, expiresInDays: Number(draft.expiresInDays) }))
 }
 
+function restored(workspace: string): void {
+	selectWorkspace(workspace)
+	window.location.reload()
+}
+
 onMounted(load)
 defineExpose({ load })
 </script>
@@ -75,10 +82,10 @@ defineExpose({ load })
 	<section class="panel workspace-panel">
 		<div class="workspace-bar">
 			<label>
-				<span>Workspace</span>
+				<span>{{ t('maintenance_tracker', 'Workspace') }}</span>
 				<select v-model="selected" :disabled="workspaces.length < 2" @change="switchWorkspace">
 					<option v-for="workspace in workspaces" :key="workspace.uuid" :value="workspace.uuid">
-						{{ workspace.name }} ({{ workspace.role }}{{ workspace.kind === 'personal' ? ', personal' : '' }})
+						{{ workspace.kind === 'personal' ? t('maintenance_tracker', '{name} ({role}, personal)', { name: workspace.name, role: workspace.role }) : t('maintenance_tracker', '{name} ({role})', { name: workspace.name, role: workspace.role }) }}
 					</option>
 				</select>
 			</label>
@@ -88,7 +95,7 @@ defineExpose({ load })
 				aria-controls="workspace-settings"
 				:aria-expanded="open ? 'true' : 'false'"
 				@click="open = !open">
-				{{ open ? 'Hide workspace settings' : 'Workspace settings' }}
+				{{ open ? t('maintenance_tracker', 'Hide workspace settings') : t('maintenance_tracker', 'Workspace settings') }}
 			</button>
 			<button
 				v-if="active !== null"
@@ -96,71 +103,71 @@ defineExpose({ load })
 				aria-controls="workspace-export"
 				:aria-expanded="exportOpen ? 'true' : 'false'"
 				@click="exportOpen = !exportOpen">
-				{{ exportOpen ? 'Hide export' : 'Export data' }}
+				{{ exportOpen ? t('maintenance_tracker', 'Hide export and restore') : t('maintenance_tracker', 'Export or restore') }}
 			</button>
 		</div>
 		<p v-if="active?.orphaned" class="notice notice--error" role="status">
-			This workspace has no owner because the owner's account was deleted. A Nextcloud administrator can assign one with
+			{{ t('maintenance_tracker', 'This workspace has no owner because the owner\'s account was deleted. A Nextcloud administrator can assign one with') }}
 			<code>occ maintenance_tracker:workspace:assign-owner</code>.
 		</p>
 		<p v-if="error" class="notice notice--error" role="alert">
 			{{ error }}
 		</p>
 		<div v-if="open && active?.role === 'owner'" id="workspace-settings" class="workspace-settings">
-			<h2>Transfer ownership</h2>
+			<h2>{{ t('maintenance_tracker', 'Transfer ownership') }}</h2>
 			<template v-if="pending.length > 0">
 				<div v-for="transfer in pending" :key="transfer.uuid" class="transfer-status">
 					<p v-if="transfer.status === 'pending'">
-						Waiting for <strong>{{ transfer.toUid }}</strong> to accept (expires {{ transfer.expiresAt.slice(0, 10) }}).
+						{{ t('maintenance_tracker', 'Waiting for {user} to accept (expires {date}).', { user: transfer.toUid, date: transfer.expiresAt.slice(0, 10) }) }}
 					</p>
 					<p v-else>
-						Transfer to <strong>{{ transfer.toUid }}</strong> stopped at the “{{ transfer.step }}” step; it is safe to resume.
+						{{ t('maintenance_tracker', 'Transfer to {user} stopped at the “{step}” step; it is safe to resume.', { user: transfer.toUid, step: transfer.step }) }}
 					</p>
 					<button
 						v-if="transfer.status === 'pending'"
 						type="button"
 						:disabled="busy"
 						@click="act(() => transferAction(transfer.uuid, 'cancel'))">
-						Cancel offer
+						{{ t('maintenance_tracker', 'Cancel offer') }}
 					</button>
 					<button
 						v-if="transfer.resumable"
 						type="button"
 						:disabled="busy"
 						@click="act(() => transferAction(transfer.uuid, 'resume'))">
-						Resume
+						{{ t('maintenance_tracker', 'Resume') }}
 					</button>
 					<button
 						v-if="transfer.abortable"
 						type="button"
 						:disabled="busy"
 						@click="act(() => transferAction(transfer.uuid, 'abort'))">
-						Abort
+						{{ t('maintenance_tracker', 'Abort') }}
 					</button>
 				</div>
 			</template>
 			<p v-else-if="candidates.length === 0">
-				Add a member first; ownership can only go to an existing member, who must accept it.
+				{{ t('maintenance_tracker', 'Add a member first; ownership can only go to an existing member, who must accept it.') }}
 			</p>
 			<form v-else class="form-grid" @submit.prevent="offer">
-				<label><span>New owner</span>
+				<label><span>{{ t('maintenance_tracker', 'New owner') }}</span>
 					<select v-model="draft.toUid" required>
-						<option value="" disabled>Choose a member</option>
+						<option value="" disabled>{{ t('maintenance_tracker', 'Choose a member') }}</option>
 						<option v-for="member in candidates" :key="member.userUid" :value="member.userUid">{{ member.userUid }} ({{ member.role }})</option>
 					</select>
 				</label>
-				<label><span>Offer valid for (days)</span><input
+				<label><span>{{ t('maintenance_tracker', 'Offer valid for (days)') }}</span><input
 					v-model.number="draft.expiresInDays"
 					type="number"
 					min="1"
 					max="30"
 					required></label>
-				<label class="checkbox"><input v-model="draft.leaveAfter" type="checkbox"><span>Leave the workspace afterwards (otherwise you become a Manager)</span></label>
+				<label class="checkbox"><input v-model="draft.leaveAfter" type="checkbox"><span>{{ t('maintenance_tracker', 'Leave the workspace afterwards (otherwise you become a Manager)') }}</span></label>
 				<p class="hint">
-					When accepted, the workspace evidence folder moves into the new owner's Files and counts against their quota; member shares are re-created from the new owner.
+					{{ t('maintenance_tracker', 'When accepted, the workspace evidence folder moves into the new owner\'s Files and counts against their quota; member shares are re-created from the new owner.') }}
 				</p>
 				<button type="submit" :disabled="busy || draft.toUid === ''">
-					Offer ownership
+					{{ t('maintenance_tracker', 'Offer ownership') }}
 				</button>
 			</form>
 		</div>
@@ -169,6 +176,7 @@ defineExpose({ load })
 			id="workspace-export"
 			:workspace="active.uuid"
 			:role="active.role" />
+		<ImportPanel v-if="exportOpen" id="workspace-import" @imported="restored" />
 	</section>
 </template>
 

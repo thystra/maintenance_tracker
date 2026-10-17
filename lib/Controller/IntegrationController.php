@@ -11,6 +11,7 @@ namespace OCA\MaintenanceTracker\Controller;
 
 use OCA\MaintenanceTracker\Service\CurrentUser;
 use OCA\MaintenanceTracker\Service\IntegrationSettingsService;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataResponse;
@@ -35,18 +36,40 @@ final class IntegrationController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * Get integration
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/integrations/settings')]
 	public function show(): DataResponse {
 		return $this->mapErrors(fn (): DataResponse => new DataResponse($this->settings->get($this->currentUser->uid())));
 	}
 
+	/**
+	 * Update integration
+	 *
+	 * @param array<string, mixed> $settings Settings fields
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PUT', url: '/api/v1/integrations/settings')]
 	public function update(array $settings = []): DataResponse {
 		return $this->mapErrors(fn (): DataResponse => new DataResponse($this->settings->update($this->currentUser->uid(), $settings)));
 	}
 
+	/**
+	 * Calendars (integration)
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/integrations/calendars')]
 	public function calendars(): DataResponse {

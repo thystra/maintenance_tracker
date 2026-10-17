@@ -39,6 +39,19 @@ final class WorkDefinitionController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List work definitions
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param string|null $scheduled Scheduled
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/work-definitions')]
 	public function index(string $assetUuid, ?string $scheduled = null, ?string $workspace = null): DataResponse {
@@ -52,6 +65,18 @@ final class WorkDefinitionController extends OCSController {
 		);
 	}
 
+	/**
+	 * Get work definition
+	 *
+	 * @param string $uuid UUID of the work definition
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/work-definitions/{uuid}')]
 	public function show(string $uuid, ?string $workspace = null): DataResponse {
@@ -62,6 +87,19 @@ final class WorkDefinitionController extends OCSController {
 		);
 	}
 
+	/**
+	 * Create work definition
+	 *
+	 * @param string $assetUuid UUID of the asset
+	 * @param array<string, mixed> $definition Definition fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Work definition created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/work-definitions')]
 	public function create(string $assetUuid, array $definition, ?string $workspace = null): DataResponse {
@@ -75,6 +113,20 @@ final class WorkDefinitionController extends OCSController {
 		);
 	}
 
+	/**
+	 * Update work definition
+	 *
+	 * @param string $uuid UUID of the work definition
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param array<string, mixed> $definition Definition fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PATCH', url: '/api/v1/work-definitions/{uuid}')]
 	public function update(string $uuid, int $expectedRevision, array $definition, ?string $workspace = null): DataResponse {
@@ -85,6 +137,19 @@ final class WorkDefinitionController extends OCSController {
 		);
 	}
 
+	/**
+	 * Delete work definition
+	 *
+	 * @param string $uuid UUID of the work definition
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/work-definitions/{uuid}')]
 	public function destroy(string $uuid, int $expectedRevision, ?string $workspace = null): DataResponse {

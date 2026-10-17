@@ -39,6 +39,18 @@ final class ReadingController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List readings
+	 *
+	 * @param string $meterUuid UUID of the meter
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/meters/{meterUuid}/readings')]
 	public function index(string $meterUuid, ?string $workspace = null): DataResponse {
@@ -61,6 +73,19 @@ final class ReadingController extends OCSController {
 		}
 	}
 
+	/**
+	 * Create reading
+	 *
+	 * @param string $meterUuid UUID of the meter
+	 * @param array<string, mixed> $reading Reading fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Reading created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/meters/{meterUuid}/readings')]
 	public function create(string $meterUuid, array $reading, ?string $workspace = null): DataResponse {
@@ -85,6 +110,19 @@ final class ReadingController extends OCSController {
 		}
 	}
 
+	/**
+	 * Correct (reading)
+	 *
+	 * @param string $readingUuid UUID of the reading
+	 * @param array<string, mixed> $reading Reading fields
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 201: Reading created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/readings/{readingUuid}/corrections')]
 	public function correct(string $readingUuid, array $reading, ?string $workspace = null): DataResponse {

@@ -38,12 +38,28 @@ final class OwnershipTransferController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * List ownership transfers
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/ownership-transfers')]
 	public function index(): DataResponse {
 		return $this->mapErrors(fn (): DataResponse => new DataResponse($this->service->listForUser($this->currentUser->uid())));
 	}
 
+	/**
+	 * Create ownership transfer
+	 *
+	 * @param string $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @param array<string, mixed> $transfer Transfer fields
+	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
+	 *
+	 * 201: Ownership transfer created
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/workspaces/{workspace}/ownership-transfers')]
 	public function create(string $workspace, array $transfer): DataResponse {
@@ -62,36 +78,85 @@ final class OwnershipTransferController extends OCSController {
 		});
 	}
 
+	/**
+	 * Get ownership transfer
+	 *
+	 * @param string $uuid UUID of the ownership transfer
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/ownership-transfers/{uuid}')]
 	public function show(string $uuid): DataResponse {
 		return $this->mapErrors(fn (): DataResponse => new DataResponse($this->service->show($this->currentUser->uid(), $uuid)));
 	}
 
+	/**
+	 * Accept (ownership transfer)
+	 *
+	 * @param string $uuid UUID of the ownership transfer
+	 * @param bool $acknowledgeQuota Acknowledge quota
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/ownership-transfers/{uuid}/accept')]
 	public function accept(string $uuid, bool $acknowledgeQuota = false): DataResponse {
 		return $this->mapErrors(fn (): DataResponse => new DataResponse($this->service->accept($this->currentUser->uid(), $uuid, ['acknowledgeQuota' => $acknowledgeQuota])));
 	}
 
+	/**
+	 * Decline (ownership transfer)
+	 *
+	 * @param string $uuid UUID of the ownership transfer
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/ownership-transfers/{uuid}/decline')]
 	public function decline(string $uuid): DataResponse {
 		return $this->mapErrors(fn (): DataResponse => new DataResponse($this->service->decline($this->currentUser->uid(), $uuid)));
 	}
 
+	/**
+	 * Cancel (ownership transfer)
+	 *
+	 * @param string $uuid UUID of the ownership transfer
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/ownership-transfers/{uuid}')]
 	public function cancel(string $uuid): DataResponse {
 		return $this->mapErrors(fn (): DataResponse => new DataResponse($this->service->cancel($this->currentUser->uid(), $uuid)));
 	}
 
+	/**
+	 * Resume (ownership transfer)
+	 *
+	 * @param string $uuid UUID of the ownership transfer
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/ownership-transfers/{uuid}/resume')]
 	public function resume(string $uuid): DataResponse {
 		return $this->mapErrors(fn (): DataResponse => new DataResponse($this->service->resume($this->currentUser->uid(), $uuid)));
 	}
 
+	/**
+	 * Abort (ownership transfer)
+	 *
+	 * @param string $uuid UUID of the ownership transfer
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/ownership-transfers/{uuid}/abort')]
 	public function abort(string $uuid): DataResponse {

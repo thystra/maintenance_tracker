@@ -2,6 +2,15 @@
 
 The API is experimental until the offline/mobile synchronization contract is complete.
 
+The machine-readable contract is [`openapi.json`](../openapi.json), generated from the controller docblocks by Nextcloud's [openapi-extractor](https://github.com/nextcloud/openapi-extractor). After changing a route, its parameters, or its status codes, run:
+
+```sh
+composer openapi:install   # once
+composer openapi
+```
+
+and commit the result; CI fails when `openapi.json` is stale. Request bodies and parameters are fully described; response payloads are currently typed as generic objects (see the sections below for their fields).
+
 Base path:
 
 ```text
@@ -703,6 +712,19 @@ The JSON document (also `data.json` in the ZIP) has `format: "maintenance-tracke
 The ZIP contains `manifest.json` (format, CSV dialect `rfc4180`, UTF-8, `spreadsheetEscape: "leading-apostrophe-v1"`, sections, `files`, `skippedFiles`), `data.json`, `csv/<section>.csv` per included table, `csv/evidence.csv`, and with `includeFiles=1` the bytes of active evidence files you can open as `files/<evidenceUuid>-<sanitized name>`. Files over 100 MiB, or beyond 512 MiB in total, are listed in `skippedFiles` with `size_limit`. CSV cells starting with `= + - @ '`, tab, CR, LF or their full-width forms are prefixed with `'`.
 
 Each export records audit event `workspace.exported` with `format`, `includeFiles` and the included section count.
+
+## Workspace restore (1.0 prep)
+
+### `POST /import` (multipart: `file`, optional `name`)
+
+Restores a complete v0.1.13 export (`format=json` or `zip`) into a **new** shared workspace owned by the caller. Returns `201` with `{workspace, restored: {section: rows}, notRestored: ["members","audit"], evidence: {restored, skipped: [{evidenceUuid, reason}]}}`.
+
+- Only exports made by an Owner (`manifest.role = owner`, `formatVersion = 1`) are accepted, because other roles' exports are filtered.
+- Limits: upload 640 MiB, `data.json` 64 MiB, 250 000 rows, 20 000 ZIP entries; ZIP paths are checked and evidence must match its recorded size and SHA-256.
+- Every column is checked against the live schema; unknown sections or columns, type mismatches and dangling references reject the whole file (`400`) and nothing is written.
+- All workspace, asset, record and other identity UUIDs are regenerated and numeric IDs remapped; references in text columns are rewritten. Content hashes and source documents stay verbatim.
+- Database rows are written in one transaction. Evidence files are written afterwards to `Maintenance Tracker imports/<name> <date>/` in the caller's Files and attached; failures there are reported in `evidence.skipped` and do not undo the restore.
+- Members, the audit trail and the change journal are not restored. The event `workspace.imported` is audited in the new workspace.
 
 ## Integrations (v0.1.12)
 

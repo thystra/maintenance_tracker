@@ -498,11 +498,47 @@ expect(exportService.includes("unset($item['file']['filesUrl'], $item['file']['d
 expect(exportService.includes('ExportPolicy::MAX_FILE_BYTES') && exportService.includes('ExportPolicy::MAX_TOTAL_FILE_BYTES') && exportPolicy.includes('function fileEntry('), 'Evidence files in export ZIPs must be size-bounded and use sanitized entry names.')
 expect(exportController.includes('AuthorizationCatalog::WORKSPACE_EXPORT') && exportController.includes('->authorize(') && !exportController.includes('runWithCapability('), 'Export endpoint must authorize workspace.export and run outside an app transaction.')
 expect(exportController.includes("'Cache-Control', 'no-store'"), 'Export downloads must not be cached.')
+
+// 1.0 prep: OpenAPI contract.
+const openapi = JSON.parse(await read('openapi.json'))
+expect(openapi.openapi && Object.keys(openapi.paths ?? {}).some((path) => path.includes('/apps/maintenance_tracker/api/v1/import')), 'openapi.json must be the generated contract and include current routes.')
+expect(forgejoCi.includes('composer openapi') && forgejoCi.includes('git diff --exit-code -- openapi.json'), 'CI must regenerate openapi.json and fail when it is stale.')
+expect(nextcloudIgnore.split(/\r?\n/).includes('/vendor-bin'), '.nextcloudignore must exclude development tool installs.')
+
+// 1.0 prep: workspace restore.
+const importPolicy = await read('lib/Service/ImportPolicy.php')
+const importService = await read('lib/Service/ImportService.php')
+const importSections = new Set([...importPolicy.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]))
+for (const section of [...exportPolicy.matchAll(/^\t\t'([a-z_]+)' => AuthorizationCatalog::/gm)].map((m) => m[1])) {
+	expect(importSections.has(section), `Import policy must restore or explicitly skip export section ${section}.`)
+}
+expect(importPolicy.includes("'role'") && importPolicy.includes("!== 'owner'"), 'Import must accept only complete Owner exports.')
+expect(['MAX_UPLOAD_BYTES', 'MAX_DATA_BYTES', 'MAX_ROWS', 'MAX_ZIP_ENTRIES'].every((c) => importPolicy.includes(`const ${c}`) && (importService + importPolicy).includes(`::${c}`)), 'Import must keep its upload, data, row and ZIP-entry bounds.')
+const importTx = importService.slice(importService.indexOf('->runForActiveUser('), importService.indexOf('});', importService.indexOf('->runForActiveUser(')))
+expect(importTx.length > 0 && !/rootFolder|newFile|putContent|ZipArchive|evidenceService/.test(importTx), 'Import must not touch Files, archives or evidence attachment inside the database transaction.')
+expect(importPolicy.includes('function uuidMap(') && importPolicy.includes('function remap('), 'Import must regenerate UUIDs and remap numeric IDs.')
 expect(api.includes('GET /export') && security.includes('Export boundary') && agents.includes('v0.1.13 export invariant'), 'Docs must cover the export API, its security boundary, and the AGENTS invariant.')
 const a11yScript = await read('scripts/check-a11y.mjs')
 const ciWorkflow = await read('.forgejo/workflows/ci.yml')
 expect(packageJson.scripts?.['check:a11y'] === 'node scripts/check-a11y.mjs' && ciWorkflow.includes('npm run check:a11y') && a11yScript.includes('control-label'), 'Accessibility static checks must be wired into npm and CI.')
 expect(roadmap.includes('13. [x] v0.1.13') && changelog.includes('workspace export'), 'Roadmap/CHANGELOG must record the v0.1.13 export and accessibility increment.')
+
+// 1.0 prep: database matrix and upgrade migrations.
+const smokeHarness = await read('tests/integration/nextcloud-smoke.sh')
+const upgradeHarness = await read('tests/integration/upgrade-smoke.sh')
+expect(/database:\n\s+- sqlite\n\s+- pgsql\n\s+- mysql/.test(forgejoCi), 'CI must run the Nextcloud suite on SQLite, PostgreSQL, and MariaDB.')
+expect(smokeHarness.includes('sqlite|pgsql|mysql') && smokeHarness.includes('--transaction-isolation=READ-COMMITTED') && smokeHarness.includes('NC_SMOKE_NETWORK_MODE'), 'Smoke harness must support MariaDB with READ-COMMITTED isolation and the bridge network mode.')
+expect(forgejoCi.includes('tests/integration/upgrade-smoke.sh') && forgejoCi.includes('fetch-depth: 0') && upgradeHarness.includes('occ upgrade') && upgradeHarness.includes('expected_migrations'), 'CI must run the upgrade-migration test, which must verify every shipped migration ran.')
+
+// 1.0 prep: localization.
+const l10nScript = await read('scripts/l10n.mjs')
+const l10nIgnore = await read('.l10nignore')
+const adminTemplate = await read('templates/admin-settings.php')
+expect(packageJson.scripts?.['l10n:check'] === 'node scripts/l10n.mjs check' && packageJson.scripts?.['l10n:extract'] === 'node scripts/l10n.mjs extract' && forgejoCi.includes('npm run l10n:check'), 'Localization check and extraction must be wired into npm and CI.')
+expect(packageJson.dependencies?.['@nextcloud/l10n'] !== undefined && l10nScript.includes('template-text') && l10nScript.includes('script-string'), 'The frontend must translate through @nextcloud/l10n and the checker must cover template and script strings.')
+expect(['js/', 'vendor/', 'node_modules/'].every((path) => l10nIgnore.split(/\r?\n/).includes(path)), '.l10nignore must keep generated and third-party code out of translation extraction.')
+expect(adminTemplate.includes("$l->t('Outside links')") && !/<h2>[A-Za-z]/.test(adminTemplate), 'Admin settings template text must be translated.')
+expect(!/getName\(\): string \{\s*return '/.test(await read('lib/Settings/AdminSection.php')), 'Admin section name must be translated.')
 
 try {
 	await access('.github/workflows/ci.yml')
