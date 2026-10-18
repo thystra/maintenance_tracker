@@ -29,6 +29,19 @@ const error = ref('')
 const busy = ref(false)
 const group = ref<string | null>(null)
 const groupChoices = computed(() => groupOptions())
+// Copy setup from another item (new items only): the server copies its
+// components, meters, specs, task groups, tasks and fuel regimes, never history.
+const copyFrom = ref<string | null>(null)
+const copyChoices = computed(() => state.assets.map((asset) => ({ value: asset.uuid, label: asset.name })).sort((a, b) => a.label.localeCompare(b.label)))
+// One UUID per opened dialog, so a retried save after a lost response is idempotent.
+let attemptUuid = crypto.randomUUID()
+
+watch(copyFrom, (uuid) => {
+	const source = state.assets.find((asset) => asset.uuid === uuid)
+	if (source !== undefined) {
+		draft.category = source.category
+	}
+})
 
 const categoryOptions = computed(() => state.categories.map((category) => ({ value: category.key, label: category.name })))
 const title = computed(() => props.asset ? t('maintenance_tracker', 'Edit item') : t('maintenance_tracker', 'Add item'))
@@ -43,6 +56,8 @@ watch(() => props.open, (open) => {
 		? { name: asset.name, category: asset.category, manufacturer: asset.manufacturer ?? '', model: asset.model ?? '', modelYear: asset.modelYear === null ? '' : String(asset.modelYear), serialNumber: asset.serialNumber ?? '', notes: asset.notes ?? '' }
 		: blank())
 	group.value = asset ? state.groupOf[asset.uuid] ?? null : props.defaultGroup ?? null
+	copyFrom.value = null
+	attemptUuid = crypto.randomUUID()
 }, { immediate: true })
 
 async function submit(): Promise<void> {
@@ -69,7 +84,7 @@ async function submit(): Promise<void> {
 	try {
 		const saved = props.asset
 			? await updateAsset(props.asset.uuid, props.asset.revision, fields)
-			: await createAsset({ ...fields, uuid: crypto.randomUUID() })
+			: await createAsset({ ...fields, uuid: attemptUuid }, copyFrom.value)
 		if ((state.groupOf[saved.uuid] ?? null) !== group.value) {
 			await setItemGroup(saved.uuid, group.value)
 		}
@@ -120,6 +135,17 @@ const buttons = computed(() => [
 					:placeholder="t('maintenance_tracker', 'No group')"
 					clearable />
 			</div>
+			<div v-if="!asset && copyChoices.length > 0">
+				<SelectField
+					v-model="copyFrom"
+					:options="copyChoices"
+					:label="t('maintenance_tracker', 'Copy setup from')"
+					:placeholder="t('maintenance_tracker', 'Start empty')"
+					clearable />
+				<p class="hint">
+					{{ t('maintenance_tracker', 'Copies components, meters, specs, task groups, tasks and fuel regimes. History, readings, fill-ups, costs and files stay with the original.') }}
+				</p>
+			</div>
 			<div class="form-row">
 				<NcTextField v-model="draft.manufacturer" :label="t('maintenance_tracker', 'Make or manufacturer')" maxlength="255" />
 				<NcTextField v-model="draft.model" :label="t('maintenance_tracker', 'Model')" maxlength="255" />
@@ -142,6 +168,11 @@ const buttons = computed(() => [
 	display: grid;
 	gap: 12px;
 	padding-bottom: 8px;
+}
+
+.hint {
+	margin: 4px 0 0;
+	color: var(--color-text-maxcontrast);
 }
 
 .form-row {

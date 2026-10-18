@@ -47,6 +47,7 @@ export const can = reactive({
 	addCosts: computed(() => role.value !== 'viewer'),
 	addReadings: computed(() => role.value !== 'viewer'),
 	manageCatalog: computed(() => role.value === 'owner' || role.value === 'manager'),
+	manageProfiles: computed(() => role.value === 'owner' || role.value === 'manager'),
 	readAudit: computed(() => role.value === 'owner' || role.value === 'manager'),
 	ownWorkspace: computed(() => role.value === 'owner'),
 	readMembers: computed(() => role.value === 'owner' || role.value === 'manager'),

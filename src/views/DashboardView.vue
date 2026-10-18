@@ -354,6 +354,9 @@ onMounted(load)
 						<NcButton :to="{ name: 'vendors' }">
 							{{ t('maintenance_tracker', 'Vendors') }}
 						</NcButton>
+						<NcButton :to="{ name: 'profiles' }">
+							{{ t('maintenance_tracker', 'Profiles') }}
+						</NcButton>
 						<NcButton :to="{ name: 'settings', params: { section: 'reminders' } }">
 							{{ t('maintenance_tracker', 'Reminders and calendar') }}
 						</NcButton>

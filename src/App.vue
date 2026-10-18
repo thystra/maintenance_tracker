@@ -4,7 +4,7 @@
 -->
 
 <script setup lang="ts">
-import { mdiCogOutline, mdiFolderPlusOutline, mdiPackageVariantClosed, mdiStorefrontOutline, mdiViewDashboardOutline, mdiWrenchOutline } from '@mdi/js'
+import { mdiClipboardListOutline, mdiCogOutline, mdiFolderPlusOutline, mdiPackageVariantClosed, mdiStorefrontOutline, mdiViewDashboardOutline, mdiWrenchOutline } from '@mdi/js'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
@@ -142,6 +142,11 @@ onMounted(async () => {
 				<NcAppNavigationItem :name="t('maintenance_tracker', 'Vendors')" :to="{ name: 'vendors' }">
 					<template #icon>
 						<NcIconSvgWrapper :path="mdiStorefrontOutline" />
+					</template>
+				</NcAppNavigationItem>
+				<NcAppNavigationItem :name="t('maintenance_tracker', 'Profiles')" :to="{ name: 'profiles' }" :active="route.name === 'profiles' || route.name === 'profile'">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiClipboardListOutline" />
 					</template>
 				</NcAppNavigationItem>
 			</template>
