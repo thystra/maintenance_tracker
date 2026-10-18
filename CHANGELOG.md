@@ -99,9 +99,11 @@ preparation) that introduced them. The app version in `appinfo/info.xml` stays
   remaining 0.1-series core MVP.
 - Public documentation rewritten for users and administrators: a new README (features, limitations, requirements, installation, configuration, `occ` commands, privacy, export/restore), `CONTRIBUTING.md`, a refreshed `SECURITY.md`, `docs/development.md` for build/test/CI details, a `docs/README.md` index, and a user-facing App Store description in `appinfo/info.xml`.
 - Release packaging: `make appstore` (`scripts/build-appstore.sh`) builds a reproducible App Store archive with only runtime files, optionally signed with `APP_SIGNING_KEY` (and code-signed with `occ integrity:sign-app`). A tag-triggered Forgejo workflow checks the tag against the app version, runs the checks, builds and signs the archive, and creates a Forgejo release. See `docs/releasing.md`.
+- Added a privacy policy (`docs/privacy-policy.md`) describing what the app stores, where, who can see it, retention, account deletion, and how the GDPR rights are supported; linked from the README, the security policy, the documentation index, and the App Store description. `appinfo/info.xml` now points bug reports to GitHub issues and links the user and admin documentation.
 
 ### Fixed
 
+- Installing from `git archive` (or the CI install candidate) gave a blank page: `.gitattributes` export-ignored the committed `js/` and `css/` bundles, so Nextcloud loaded no app script and the stylesheet URL returned an HTML error page. Runtime paths are no longer export-ignored (the project validator enforces this), the CI candidate is built from `git archive` alone, and a headless browser check (`NC_SMOKE_BROWSER=1`, run in CI) asserts that the UI actually mounts.
 - Documentation no longer claims Activity delivery is at most once per audit row: a crash while one row is being projected re-projects that row and can duplicate its activities.
 - `appinfo/info.xml` elements are reordered so the file validates against Nextcloud's `info.xsd` (33–35).
 

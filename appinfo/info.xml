@@ -23,14 +23,20 @@ The app makes no outgoing network requests; your data stays on your server.
 
 This is a pre-release version: some features are available only through the API,
 and the interface is English only for now.
+
+Privacy policy: https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/src/branch/main/docs/privacy-policy.md
 	]]></description>
 	<version>0.1.10</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://forgejo.argentwolf.org/alan">Alan Johnson</author>
 	<namespace>MaintenanceTracker</namespace>
+	<documentation>
+		<user>https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/src/branch/main/README.md</user>
+		<admin>https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/src/branch/main/README.md#configuration</admin>
+	</documentation>
 	<category>organization</category>
 	<website>https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud</website>
-	<bugs>https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/issues</bugs>
+	<bugs>https://github.com/thystra/maintenance_tracker/issues</bugs>
 	<repository>https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud</repository>
 	<dependencies>
 		<php min-version="8.2" max-version="8.5" min-int-size="64"/>

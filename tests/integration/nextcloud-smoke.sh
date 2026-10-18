@@ -60,6 +60,7 @@ cleanup() {
 			docker logs --tail 120 "$db_container" 2>/dev/null || true
 		fi
 	fi
+	docker rm --force "${container}-browser" >/dev/null 2>&1 || true
 	docker rm --force "$container" >/dev/null 2>&1 || true
 	if [ "$started_database" -eq 1 ]; then
 		docker rm --force "$db_container" >/dev/null 2>&1 || true
@@ -2543,6 +2544,45 @@ app_errors=$(docker exec "$container" php -r '
 if [ "$app_errors" != '0' ]; then
 	echo "Nextcloud logged ${app_errors} app error(s)." >&2
 	exit 1
+fi
+
+# NC_SMOKE_BROWSER=1: open the app in headless Chromium (Playwright image on
+# the Nextcloud container's network) and assert that the Vue UI mounts with no
+# console errors. HTTP 200 alone does not prove the bundles load.
+if [ "${NC_SMOKE_BROWSER:-0}" = '1' ]; then
+	browser_image="${NC_SMOKE_BROWSER_IMAGE:-mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf}"
+	browser_container="${container}-browser"
+	if [ ! -f node_modules/playwright-core/package.json ]; then
+		echo 'NC_SMOKE_BROWSER=1 needs node_modules/playwright-core; run npm ci first.' >&2
+		exit 1
+	fi
+	docker exec --user www-data "$container" php occ app:disable firstrunwizard >/dev/null 2>&1 || true
+	docker rm --force "$browser_container" >/dev/null 2>&1 || true
+	docker create --name "$browser_container" \
+		--network "container:${container}" \
+		--workdir /check \
+		--env NC_BASE_URL=http://127.0.0.1 \
+		--env "NC_USER=$admin_user" \
+		--env "NC_PASSWORD=$admin_password" \
+		--env NC_SCREENSHOT=/check/app.png \
+		"$browser_image" node app-mount.mjs >/dev/null
+	browser_stage="$staging_root/browser"
+	mkdir -p "$browser_stage/node_modules"
+	cp tests/browser/app-mount.mjs "$browser_stage/"
+	printf '{"type":"module"}\n' > "$browser_stage/package.json"
+	cp -a node_modules/playwright-core "$browser_stage/node_modules/"
+	docker cp "$browser_stage/." "$browser_container:/check"
+	browser_status=0
+	docker start --attach "$browser_container" || browser_status=$?
+	if [ -n "${NC_SMOKE_ARTIFACTS:-}" ]; then
+		mkdir -p "$NC_SMOKE_ARTIFACTS"
+		docker cp "$browser_container:/check/app.png" "$NC_SMOKE_ARTIFACTS/app-${nc_label}-${database}.png" >/dev/null 2>&1 || true
+	fi
+	docker rm --force "$browser_container" >/dev/null 2>&1 || true
+	if [ "$browser_status" -ne 0 ]; then
+		echo 'Browser mount check failed.' >&2
+		exit 1
+	fi
 fi
 
 echo "Nextcloud ${nc_label} smoke test passed (${database})."

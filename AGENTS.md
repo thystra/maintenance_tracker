@@ -287,6 +287,10 @@ All user-facing UI text goes through l10n: PHP via `IL10N::t()/n()` (templates p
 Workspace export is a read-only, explicitly requested projection. `workspace.export` is granted explicitly to every role, but each section still needs its own read capability (`ExportPolicy::CAPABILITY`); never widen what a role can read through export. Every workspace-scoped table must be listed in `ExportPolicy` as exported or explicitly excluded (the project validator enforces this). Table reads and the `workspace.exported` audit event run inside `runLocked`; evidence projection, file reads, temp files, and ZIP building run after it, never inside an app transaction. Evidence goes through the viewer-scoped projection: never export another user's file name, path, or bytes without a share, and never export session-bound Files URLs. CSV uses the reversible `leading-apostrophe-v1` formula escaping, ZIP entry names are generated (never taken from user paths), and evidence bytes stay within the reviewed per-file and total bounds. Keep `npm run check:a11y` passing for UI changes.
 
 
+## Installability invariant
+
+`git archive` output must be installable: never export-ignore runtime paths (`appinfo`, `lib`, `templates`, `img`, `js`, `css`, `l10n`, `profiles`, `fitment/core-v1.json`). HTTP 200 does not prove the UI works; keep the `NC_SMOKE_BROWSER` mount check passing.
+
 ## Workspace restore invariant
 
 `POST /import` only ever creates a new workspace owned by the caller, from an Owner export with a known `formatVersion`. Every workspace-scoped table must be listed in `ImportPolicy::ORDER` or `NOT_RESTORED`, and each numeric or UUID reference in `REFERENCES`/`POLYMORPHIC`; never trust an ID, UUID, workspace, owner, or column name from the file. Keep the size bounds, schema-checked column whitelist, and single `runForActiveUser` transaction for database rows; Files writes and evidence attachment happen after commit and only in the caller's own folder.

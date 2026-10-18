@@ -145,7 +145,8 @@ expect(
 )
 expect(info.includes(`<website>${projectUrl}</website>`), 'Nextcloud app website must use the authoritative Forgejo repository.')
 expect(info.includes(`<repository>${projectUrl}</repository>`), 'Nextcloud app repository must use the authoritative Forgejo repository.')
-expect(info.includes(`<bugs>${projectUrl}/issues</bugs>`), 'Nextcloud app issue URL must use Forgejo.')
+expect(info.includes('<bugs>https://github.com/thystra/maintenance_tracker/issues</bugs>'), 'Nextcloud app issue URL must use the GitHub mirror issues, where bugs and support are handled.')
+expect(info.includes(`${projectUrl}/src/branch/main/docs/privacy-policy.md`) && (await read('docs/privacy-policy.md')).includes('does not receive'), 'The app description must link the privacy policy, which must state that the developer receives no data.')
 expect(genericProfile.provenance?.sourceUrl === projectUrl, 'Bundled first-party profile provenance must use the authoritative repository URL.')
 expect(profileSchema.$id === `${projectUrl}/src/branch/main/schemas/profile-v1.schema.json`, 'Profile schema identity must use the authoritative Forgejo repository URL.')
 expect(profileSchemaV2.$id === `${projectUrl}/src/branch/main/schemas/profile-v2.schema.json`, 'Profile-v2 schema identity must use the authoritative Forgejo repository URL.')
@@ -498,6 +499,12 @@ expect(exportService.includes("unset($item['file']['filesUrl'], $item['file']['d
 expect(exportService.includes('ExportPolicy::MAX_FILE_BYTES') && exportService.includes('ExportPolicy::MAX_TOTAL_FILE_BYTES') && exportPolicy.includes('function fileEntry('), 'Evidence files in export ZIPs must be size-bounded and use sanitized entry names.')
 expect(exportController.includes('AuthorizationCatalog::WORKSPACE_EXPORT') && exportController.includes('->authorize(') && !exportController.includes('runWithCapability('), 'Export endpoint must authorize workspace.export and run outside an app transaction.')
 expect(exportController.includes("'Cache-Control', 'no-store'"), 'Export downloads must not be cached.')
+
+// Installability: `git archive` must ship every runtime path.
+for (const runtime of ['appinfo', 'lib', 'templates', 'img', 'js', 'css', 'l10n', 'profiles', 'fitment', 'fitment/core-v1.json']) {
+	expect(!new RegExp(`^/?${runtime.replace('/', '\\/')}/?\\s+.*export-ignore`, 'm').test(attributes), `.gitattributes must not export-ignore the runtime path ${runtime}; git archive installs would miss it.`)
+}
+expect(forgejoCi.includes("NC_SMOKE_BROWSER: ${{ matrix.database == 'sqlite' && '1' || '0' }}") && (await read('tests/integration/nextcloud-smoke.sh')).includes('app-mount.mjs'), 'CI must run the headless browser check that the app UI mounts.')
 
 // 1.0 prep: OpenAPI contract.
 const openapi = JSON.parse(await read('openapi.json'))

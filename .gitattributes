@@ -1,21 +1,23 @@
 * text=auto eol=lf
 
+# `git archive` output must be installable: never export-ignore runtime files
+# (appinfo, lib, templates, img, js, css, l10n, profiles, fitment/core-v1.json).
+
 /.forgejo export-ignore
 /.github export-ignore
 /AGENTS.md export-ignore
 /ci export-ignore
 /.gitattributes export-ignore
 /.gitignore export-ignore
+/.l10nignore export-ignore
 /.nextcloudignore export-ignore
 /.nvmrc export-ignore
 /.php-cs-fixer.dist.php export-ignore
 /composer.json export-ignore
 /composer.lock export-ignore
-/css export-ignore
 /docs export-ignore
 /fitment/examples export-ignore
 /eslint.config.mjs export-ignore
-/js export-ignore
 /package.json export-ignore
 /package-lock.json export-ignore
 /psalm.xml export-ignore
@@ -24,4 +26,8 @@
 /stylelint.config.mjs export-ignore
 /tests export-ignore
 /tsconfig.json export-ignore
+/vendor-bin export-ignore
 /vite.config.ts export-ignore
+/CONTRIBUTING.md export-ignore
+/SECURITY.md export-ignore
+/Makefile export-ignore

@@ -175,7 +175,8 @@ receives due dates.
 - Exports can contain private notes, costs, and serial numbers. Store them
   carefully.
 
-More detail is in [docs/security.md](docs/security.md).
+See the [privacy policy](docs/privacy-policy.md) for details, and
+[docs/security.md](docs/security.md) for the security design.
 
 ## Export and restore
 
@@ -199,6 +200,7 @@ exist yet. See [docs/localization.md](docs/localization.md) if you want to help.
 
 - [Documentation index](docs/README.md)
 - [OCS API](docs/api.md) and the generated [OpenAPI contract](openapi.json)
+- [Privacy policy](docs/privacy-policy.md)
 - [Security and privacy](docs/security.md)
 - [Roadmap](docs/roadmap.md)
 - [Changelog](CHANGELOG.md)
