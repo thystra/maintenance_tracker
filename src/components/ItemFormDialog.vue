@@ -17,15 +17,18 @@ import SelectField from './SelectField.vue'
 import { errorMessage } from '../format.ts'
 import { t } from '../l10n.ts'
 import { createAsset, updateAsset } from '../services/api.ts'
-import { state } from '../store.ts'
+import { setItemGroup } from '../services/groupApi.ts'
+import { groupOptions, state } from '../store.ts'
 
-const props = defineProps<{ open: boolean, asset?: Asset | null }>()
+const props = defineProps<{ open: boolean, asset?: Asset | null, defaultGroup?: string | null }>()
 const emit = defineEmits<{ (event: 'update:open', value: boolean): void, (event: 'saved', asset: Asset): void }>()
 
 const blank = () => ({ name: '', category: state.categories[0]?.key ?? 'vehicle', manufacturer: '', model: '', modelYear: '', serialNumber: '', notes: '' })
 const draft = reactive(blank())
 const error = ref('')
 const busy = ref(false)
+const group = ref<string | null>(null)
+const groupChoices = computed(() => groupOptions())
 
 const categoryOptions = computed(() => state.categories.map((category) => ({ value: category.key, label: category.name })))
 const title = computed(() => props.asset ? t('maintenance_tracker', 'Edit item') : t('maintenance_tracker', 'Add item'))
@@ -39,6 +42,7 @@ watch(() => props.open, (open) => {
 	Object.assign(draft, asset
 		? { name: asset.name, category: asset.category, manufacturer: asset.manufacturer ?? '', model: asset.model ?? '', modelYear: asset.modelYear === null ? '' : String(asset.modelYear), serialNumber: asset.serialNumber ?? '', notes: asset.notes ?? '' }
 		: blank())
+	group.value = asset ? state.groupOf[asset.uuid] ?? null : props.defaultGroup ?? null
 }, { immediate: true })
 
 async function submit(): Promise<void> {
@@ -66,6 +70,9 @@ async function submit(): Promise<void> {
 		const saved = props.asset
 			? await updateAsset(props.asset.uuid, props.asset.revision, fields)
 			: await createAsset({ ...fields, uuid: crypto.randomUUID() })
+		if ((state.groupOf[saved.uuid] ?? null) !== group.value) {
+			await setItemGroup(saved.uuid, group.value)
+		}
 		emit('saved', saved)
 		emit('update:open', false)
 	} catch (reason) {
@@ -100,7 +107,16 @@ const buttons = computed(() => [
 				:helperText="t('maintenance_tracker', 'What you call it, for example “Family car” or “Furnace”.')"
 				maxlength="255"
 				required />
-			<SelectField v-model="draft.category" :options="categoryOptions" :label="t('maintenance_tracker', 'Category')" />
+			<div class="form-row">
+				<SelectField v-model="draft.category" :options="categoryOptions" :label="t('maintenance_tracker', 'Category')" />
+				<SelectField
+					v-if="groupChoices.length > 0"
+					v-model="group"
+					:options="groupChoices"
+					:label="t('maintenance_tracker', 'Group')"
+					:placeholder="t('maintenance_tracker', 'No group')"
+					clearable />
+			</div>
 			<div class="form-row">
 				<NcTextField v-model="draft.manufacturer" :label="t('maintenance_tracker', 'Make or manufacturer')" maxlength="255" />
 				<NcTextField v-model="draft.model" :label="t('maintenance_tracker', 'Model')" maxlength="255" />

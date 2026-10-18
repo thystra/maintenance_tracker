@@ -4,9 +4,10 @@
 -->
 
 <script setup lang="ts">
-import { mdiCogOutline, mdiPackageVariantClosed, mdiStorefrontOutline, mdiViewDashboardOutline, mdiWrenchOutline } from '@mdi/js'
+import { mdiCogOutline, mdiFolderPlusOutline, mdiPackageVariantClosed, mdiStorefrontOutline, mdiViewDashboardOutline, mdiWrenchOutline } from '@mdi/js'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
 import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
@@ -15,10 +16,13 @@ import NcCounterBubble from '@nextcloud/vue/components/NcCounterBubble'
 import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import GroupDialogs from './components/GroupDialogs.vue'
+import GroupNavItem from './components/GroupNavItem.vue'
 import SelectField from './components/SelectField.vue'
 import { errorMessage, roleLabel } from './format.ts'
+import { openGroupDialog } from './groupActions.ts'
 import { t } from './l10n.ts'
-import { activeWorkspace, loadAssets, loadCategories, loadWorkspaces, state, switchWorkspace } from './store.ts'
+import { activeWorkspace, can, childGroups, loadAssets, loadCategories, loadGroups, loadWorkspaces, state, switchWorkspace } from './store.ts'
 
 const route = useRoute()
 const router = useRouter()
@@ -57,6 +61,13 @@ async function changeWorkspace(uuid: string): Promise<void> {
 // Page titles and focus management: NcAppContent puts the page heading into the
 // document title and a visually hidden h1; after each navigation focus moves to the page heading so screen-reader and
 // keyboard users land at the start of the new content.
+const topGroups = computed(() => childGroups(null))
+const groupsOpen = ref(true)
+
+function groupsChanged(message: string): void {
+	announcement.value = message
+}
+
 const pageHeading = computed(() => state.pageTitle || (route.meta.title?.() ?? t('maintenance_tracker', 'Maintenance Tracker')))
 
 // Switching tabs inside a page keeps the heading and focus where they are.
@@ -75,7 +86,7 @@ watch(() => `${String(route.name)}|${String(route.params.uuid ?? '')}|${String(r
 onMounted(async () => {
 	try {
 		await loadWorkspaces()
-		await Promise.all([loadAssets(), loadCategories()])
+		await Promise.all([loadAssets(), loadCategories(), loadGroups()])
 	} catch (reason) {
 		error.value = errorMessage(reason)
 	}
@@ -100,13 +111,28 @@ onMounted(async () => {
 						<NcIconSvgWrapper :path="mdiViewDashboardOutline" />
 					</template>
 				</NcAppNavigationItem>
-				<NcAppNavigationItem :name="t('maintenance_tracker', 'Items')" :to="{ name: 'items' }" :active="route.name === 'items' || route.name === 'item'">
+				<NcAppNavigationItem
+					:name="t('maintenance_tracker', 'Items')"
+					:to="{ name: 'items' }"
+					:active="(route.name === 'items' && !route.query.group) || route.name === 'item'"
+					:allowCollapse="topGroups.length > 0"
+					:open="groupsOpen"
+					@update:open="groupsOpen = $event">
 					<template #icon>
 						<NcIconSvgWrapper :path="mdiWrenchOutline" />
 					</template>
 					<template #counter>
 						<NcCounterBubble v-if="state.assetsLoaded" :count="state.assets.length" />
 					</template>
+					<template v-if="can.manageInventory" #actions>
+						<NcActionButton closeAfterClick @click="openGroupDialog('create')">
+							<template #icon>
+								<NcIconSvgWrapper :path="mdiFolderPlusOutline" />
+							</template>
+							{{ t('maintenance_tracker', 'New group') }}
+						</NcActionButton>
+					</template>
+					<GroupNavItem v-for="group in topGroups" :key="group.uuid" :group="group" />
 				</NcAppNavigationItem>
 				<NcAppNavigationItem :name="t('maintenance_tracker', 'Parts')" :to="{ name: 'parts' }">
 					<template #icon>
@@ -144,6 +170,7 @@ onMounted(async () => {
 				<NcLoadingIcon v-if="!state.loaded && !error" :size="44" :name="t('maintenance_tracker', 'Loading')" />
 				<RouterView v-else-if="state.loaded" :key="state.generation" />
 			</main>
+			<GroupDialogs @changed="groupsChanged" />
 		</NcAppContent>
 	</NcContent>
 </template>

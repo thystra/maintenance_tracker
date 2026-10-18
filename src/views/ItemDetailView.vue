@@ -22,6 +22,7 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import CostsPanel from '../components/CostsPanel.vue'
 import EvidencePanel from '../components/EvidencePanel.vue'
+import GroupBreadcrumbs from '../components/GroupBreadcrumbs.vue'
 import HistoryPanel from '../components/HistoryPanel.vue'
 import ItemFormDialog from '../components/ItemFormDialog.vue'
 import LogMaintenanceDialog from '../components/LogMaintenanceDialog.vue'
@@ -33,7 +34,7 @@ import TasksPanel from '../components/TasksPanel.vue'
 import { dueText, errorMessage, forecastLabel, formatDate, scheduleLabel } from '../format.ts'
 import { t } from '../l10n.ts'
 import { deleteAsset, getActivities, getAsset, getComponents, getMaintenanceForecast, getMeters, getWorkDefinitions, getWorkGroups } from '../services/api.ts'
-import { can, categoryName, loadAssets, state } from '../store.ts'
+import { can, categoryName, loadAssets, loadGroups, state } from '../store.ts'
 
 const props = defineProps<{ uuid: string, tab?: string }>()
 const router = useRouter()
@@ -155,7 +156,7 @@ function log(definitionUuid: string | null = null): void {
 }
 
 async function saved(): Promise<void> {
-	await Promise.all([load(), loadAssets()])
+	await Promise.all([load(), loadAssets(), loadGroups()])
 }
 
 async function remove(): Promise<void> {
@@ -182,7 +183,12 @@ onMounted(load)
 
 <template>
 	<div class="item-detail">
-		<NcButton variant="tertiary" :to="{ name: 'items' }" class="back">
+		<GroupBreadcrumbs v-if="asset && state.groupOf[asset.uuid]" :groupUuid="state.groupOf[asset.uuid]" :current="asset.name" />
+		<NcButton
+			v-else
+			variant="tertiary"
+			:to="{ name: 'items' }"
+			class="back">
 			<template #icon>
 				<NcIconSvgWrapper :path="mdiArrowLeft" />
 			</template>

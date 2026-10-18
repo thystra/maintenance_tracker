@@ -6,17 +6,22 @@
 // Small shared state for the whole app: the active workspace, the caller's
 // role in it, and caches that several pages need (items, categories).
 
+import type { ItemGroup } from './groupTypes.ts'
 import type { Asset, Category } from './types.ts'
 import type { WorkspaceRole, WorkspaceSummary } from './workspaceTypes.ts'
 
 import { computed, reactive } from 'vue'
 import { currentWorkspace, getAssets, getCategories, selectWorkspace } from './services/api.ts'
+import { getItemGroups } from './services/groupApi.ts'
 import { listWorkspaces } from './services/workspaceApi.ts'
 
 export const state = reactive({
 	workspaces: [] as WorkspaceSummary[],
 	assets: [] as Asset[],
 	categories: [] as Category[],
+	/** Item groups (flat; parentUuid builds the tree) and asset UUID => group UUID. */
+	groups: [] as ItemGroup[],
+	groupOf: {} as Record<string, string>,
 	loaded: false,
 	assetsLoaded: false,
 	/** Bumped on every workspace switch so pages reload their data. */
@@ -96,6 +101,96 @@ export async function switchWorkspace(uuid: string): Promise<void> {
 	selectWorkspace(target === undefined || target.kind === 'personal' ? null : target.uuid)
 	state.assets = []
 	state.assetsLoaded = false
+	state.groups = []
+	state.groupOf = {}
 	state.generation++
-	await Promise.all([loadAssets(), loadCategories()])
+	await Promise.all([loadAssets(), loadCategories(), loadGroups()])
+}
+
+export async function loadGroups(): Promise<void> {
+	const list = await getItemGroups()
+	state.groups = list.items
+	state.groupOf = Object.fromEntries(list.assignments.map((entry) => [entry.assetUuid, entry.groupUuid]))
+}
+
+/**
+ * Child groups of a group (null: top-level groups), in display order.
+ *
+ * @param parentUuid Parent group UUID, or null for the top level.
+ */
+export function childGroups(parentUuid: string | null): ItemGroup[] {
+	return state.groups
+		.filter((group) => group.parentUuid === parentUuid)
+		.sort((left, right) => left.sort - right.sort || left.name.localeCompare(right.name))
+}
+
+/**
+ * The group and every group below it.
+ *
+ * @param uuid Group UUID.
+ */
+export function groupSubtree(uuid: string): Set<string> {
+	const out = new Set<string>([uuid])
+	let grew = true
+	while (grew) {
+		grew = false
+		for (const group of state.groups) {
+			if (group.parentUuid !== null && out.has(group.parentUuid) && !out.has(group.uuid)) {
+				out.add(group.uuid)
+				grew = true
+			}
+		}
+	}
+	return out
+}
+
+/**
+ * Ancestors of a group from the top level down to the group itself.
+ *
+ * @param uuid Group UUID.
+ */
+export function groupPath(uuid: string | null | undefined): ItemGroup[] {
+	const path: ItemGroup[] = []
+	const seen = new Set<string>()
+	let current = state.groups.find((group) => group.uuid === uuid)
+	while (current !== undefined && !seen.has(current.uuid)) {
+		seen.add(current.uuid)
+		path.unshift(current)
+		const parent = current.parentUuid
+		current = parent === null ? undefined : state.groups.find((group) => group.uuid === parent)
+	}
+	return path
+}
+
+/**
+ * Items in a group including its subgroups.
+ *
+ * @param uuid Group UUID.
+ */
+export function itemsInGroup(uuid: string): Asset[] {
+	const groups = groupSubtree(uuid)
+	return state.assets.filter((asset) => {
+		const group = state.groupOf[asset.uuid]
+		return group !== undefined && groups.has(group)
+	})
+}
+
+/**
+ * Group choices for pickers, labelled with their full path ("House › Basement").
+ *
+ * @param exclude Groups to leave out (a group being moved and its subgroups).
+ */
+export function groupOptions(exclude: Set<string> = new Set()): { value: string, label: string }[] {
+	const out: { value: string, label: string }[] = []
+	const walk = (parent: string | null): void => {
+		for (const group of childGroups(parent)) {
+			if (exclude.has(group.uuid)) {
+				continue
+			}
+			out.push({ value: group.uuid, label: groupPath(group.uuid).map((entry) => entry.name).join(' › ') })
+			walk(group.uuid)
+		}
+	}
+	walk(null)
+	return out
 }
