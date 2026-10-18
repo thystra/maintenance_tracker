@@ -91,6 +91,11 @@ result. It needs the full git history:
 NC_SMOKE_DATABASE=mysql bash tests/integration/upgrade-smoke.sh
 ```
 
+Add `NC_SMOKE_BROWSER=1` (after `npm ci`) to also open the app in headless
+Chromium from the pinned Playwright image and assert that the UI mounts without
+app errors in the console; CI does this on the SQLite jobs. HTTP 200 alone does
+not prove the bundles load.
+
 PostgreSQL and MariaDB run in a sibling container on a user-defined Docker
 network. On hosts whose firewall drops traffic on user-defined bridges (for
 example mixed iptables-legacy/nft rules), set `NC_SMOKE_NETWORK_MODE=bridge` to

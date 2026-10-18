@@ -57,7 +57,7 @@ stage() { # stage <tree-ish|WORKTREE> <dir>
 		mkdir -p "$target/fitment"; cp -a fitment/core-v1.json "$target/fitment/"
 	else
 		git rev-parse --verify --quiet "$1^{commit}" >/dev/null || fail "Upgrade base $1 is not in this checkout (fetch full history)."
-		git archive "$1" appinfo lib templates img js css profiles LICENSE fitment/core-v1.json | tar -xf - -C "$target"
+		git archive --worktree-attributes "$1" appinfo lib templates img js css profiles LICENSE fitment/core-v1.json | tar -xf - -C "$target"
 	fi
 }
 

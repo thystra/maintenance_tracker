@@ -141,10 +141,16 @@ jobs:
           test ! -S /var/run/docker.sock
           docker version
 
+      - name: Install the headless browser driver
+        if: matrix.database == 'sqlite'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Run disposable Nextcloud ${{ matrix.nextcloud }} integration suite
         env:
           NC_SMOKE_DATABASE: ${{ matrix.database }}
           NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+          # The UI mount check runs once per Nextcloud release (SQLite jobs).
+          NC_SMOKE_BROWSER: ${{ matrix.database == 'sqlite' && '1' || '0' }}
         run: bash tests/integration/nextcloud-smoke.sh
 
   upgrade:
@@ -201,7 +207,6 @@ jobs:
           mkdir -p build/stage
           git archive --format=tar --prefix=maintenance_tracker/ HEAD \
             | tar -xf - -C build/stage
-          cp -R js css build/stage/maintenance_tracker/
           tar -C build/stage -czf build/maintenance_tracker-unsigned.tar.gz maintenance_tracker
           (
             cd build
