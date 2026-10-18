@@ -152,8 +152,9 @@ e.g. `nextcloud:35.0.2-apache`, for other declared releases, and
 NC_SMOKE_DATABASE=sqlite bash tests/integration/nextcloud-smoke.sh
 NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
 NC_SMOKE_DATABASE=mysql bash tests/integration/nextcloud-smoke.sh   # MariaDB 11.4
-# Upgrade migration: install v0.1.10 (6fc011d, override with NC_UPGRADE_FROM),
-# add data, upgrade to the working tree, and verify. Needs full git history.
+# Upgrade migration from each base in NC_UPGRADE_FROM (default 6fc011d, v0.1.10;
+# CI keeps the list in ci.yml, see docs/development.md#upgrade-policy): add data,
+# upgrade to the working tree, and verify. Needs full git history and tags.
 NC_SMOKE_DATABASE=mysql bash tests/integration/upgrade-smoke.sh
 ```
 

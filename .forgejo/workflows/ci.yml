@@ -1,14 +1,30 @@
 name: CI
 
+# No paths filter on pull_request: a workflow skipped by a path filter leaves
+# its required checks pending. The upgrade job is gated by the `changes` job
+# instead, so it always reports and only does work when it has to.
 on:
   push:
     branches:
       - main
   pull_request:
+  schedule:
+    # Nightly, so the upgrade test also runs on main without a schema change.
+    - cron: '23 2 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Upgrade-test starting points (docs/development.md#upgrade-policy): the latest
+# tagged release plus the oldest supported release, as space-separated git refs.
+# After a release, add or replace its tag here. Until the first release tag,
+# 6fc011d (the v0.1.10 completion merge) is the only entry.
+# NC_UPGRADE_LATEST_TAG adds the newest vX.Y.Z tag automatically when it is
+# newer than every listed base; the list is the fallback.
+env:
+  NC_UPGRADE_FROM: '6fc011d'
+  NC_UPGRADE_LATEST_TAG: '1'
 
 jobs:
   php:
@@ -106,7 +122,10 @@ jobs:
   nextcloud:
     name: Nextcloud ${{ matrix.nextcloud }} / ${{ matrix.database }}
     runs-on: forgejo-workstation
-    timeout-minutes: 20
+    # Budget: image pre-pull (step limit 15) + up to two starts of
+    # NC_SMOKE_READY_TIMEOUT (10 min each) + the suite (about 10 min on a
+    # cold runner). Normal runs finish well inside 20 minutes.
+    timeout-minutes: 45
     container:
       image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud@sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c
     needs:
@@ -145,23 +164,64 @@ jobs:
         if: matrix.database == 'sqlite'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      # Pulling is its own retried step so a cold runner or a slow registry
+      # never counts against the Nextcloud readiness timeout.
+      - name: Pre-pull container images
+        timeout-minutes: 15
+        env:
+          NC_SMOKE_DATABASE: ${{ matrix.database }}
+          NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+          NC_SMOKE_BROWSER: ${{ matrix.database == 'sqlite' && '1' || '0' }}
+        run: bash tests/integration/pull-images.sh
+
       - name: Run disposable Nextcloud ${{ matrix.nextcloud }} integration suite
         env:
           NC_SMOKE_DATABASE: ${{ matrix.database }}
           NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
           # The UI mount check runs once per Nextcloud release (SQLite jobs).
           NC_SMOKE_BROWSER: ${{ matrix.database == 'sqlite' && '1' || '0' }}
+          # First install on a cold runner can take minutes; a start that
+          # never becomes ready is retried once with a diagnostics dump.
+          NC_SMOKE_READY_TIMEOUT: '600'
+          NC_SMOKE_START_ATTEMPTS: '2'
         run: bash tests/integration/nextcloud-smoke.sh
 
-  upgrade:
-    name: Upgrade from v0.1.10 on Nextcloud ${{ matrix.nextcloud }} / ${{ matrix.database }}
+  changes:
+    name: Detect upgrade-relevant changes
     runs-on: forgejo-workstation
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      upgrade: ${{ steps.detect.outputs.upgrade }}
+
+    steps:
+      - name: Check out repository with history for the diff
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # Pull requests: only schema, database layer, app version, upgrade
+      # harness or workflow changes. Push to main, schedule and
+      # workflow_dispatch always run the upgrade test.
+      - name: Decide whether the upgrade test runs
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/upgrade-needed.sh >> "$GITHUB_OUTPUT"
+
+  upgrade:
+    name: Upgrade on Nextcloud ${{ matrix.nextcloud }} / ${{ matrix.database }}
+    runs-on: forgejo-workstation
+    # Per starting point: pull + up to two readiness waits (10 min each) + the
+    # suite; the list plus the latest tag is at most two starting points.
+    timeout-minutes: 60
     container:
       image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud@sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c
     needs:
       - php
       - frontend
+      - changes
     strategy:
       fail-fast: false
       matrix:
@@ -174,17 +234,35 @@ jobs:
           - pgsql
           - mysql
 
+    # The job always runs so its check reports; without upgrade-relevant
+    # changes its steps are skipped and it passes in seconds.
     steps:
-      - name: Check out repository with history for the upgrade base
+      - name: Skip (no upgrade-relevant changes in this pull request)
+        if: needs.changes.outputs.upgrade != 'true'
+        run: echo 'No migration, database-layer, version, upgrade-harness or workflow changes; upgrade test skipped.'
+
+      - name: Check out repository with history and tags for the upgrade bases
+        if: needs.changes.outputs.upgrade == 'true'
         uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Run upgrade-migration test
+      - name: Pre-pull container images
+        if: needs.changes.outputs.upgrade == 'true'
+        timeout-minutes: 15
         env:
           NC_SMOKE_DATABASE: ${{ matrix.database }}
           NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+        run: bash tests/integration/pull-images.sh
+
+      - name: Run upgrade-migration test from every listed base
+        if: needs.changes.outputs.upgrade == 'true'
+        env:
+          NC_SMOKE_DATABASE: ${{ matrix.database }}
+          NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+          NC_SMOKE_READY_TIMEOUT: '600'
+          NC_SMOKE_START_ATTEMPTS: '2'
         run: bash tests/integration/upgrade-smoke.sh
 
   package:

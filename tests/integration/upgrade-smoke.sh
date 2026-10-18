@@ -3,12 +3,16 @@
 # SPDX-FileCopyrightText: 2026 Alan Johnson
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# Upgrade-migration test: install an earlier released app state (default: the
-# v0.1.10 completion merge), create data through its API, replace the code with
-# the working tree, run `occ upgrade`, and check that every migration ran, the
-# old data survived, and features added since then work on the upgraded data.
+# Upgrade-migration test: install an earlier released app state, create data
+# through its API, replace the code with the working tree, run `occ upgrade`,
+# and check that every migration ran, the old data survived, and features added
+# since then work on the upgraded data. Runs once per starting point from
+# NC_UPGRADE_FROM (space-separated refs, default the v0.1.10 completion merge
+# 6fc011d) plus, with NC_UPGRADE_LATEST_TAG=1, the newest release tag; see
+# tests/integration/upgrade-bases.sh and docs/development.md#upgrade-policy.
 # Same environment knobs as nextcloud-smoke.sh (NC_SMOKE_DATABASE,
-# NC_SMOKE_IMAGE, NC_SMOKE_NETWORK_MODE). Needs git history for the old commit.
+# NC_SMOKE_IMAGE, NC_SMOKE_NETWORK_MODE, NC_SMOKE_READY_TIMEOUT). Needs git
+# history and tags.
 
 set -Eeuo pipefail
 
@@ -22,25 +26,45 @@ case "$network_mode" in
 	network|bridge) ;;
 	*) echo "Unsupported NC_SMOKE_NETWORK_MODE: $network_mode" >&2; exit 2 ;;
 esac
-from_commit="${NC_UPGRADE_FROM:-6fc011d}"
+# One run per starting point; each child run tests a single resolved commit.
+if [ -z "${NC_UPGRADE_SINGLE:-}" ]; then
+	bases=$(bash "$(dirname "${BASH_SOURCE[0]}")/upgrade-bases.sh")
+	failed=()
+	for base in $bases; do
+		NC_UPGRADE_SINGLE=1 NC_UPGRADE_FROM="$base" bash "${BASH_SOURCE[0]}" || failed+=("${base:0:12}")
+	done
+	if [ "${#failed[@]}" -gt 0 ]; then
+		echo "Upgrade test failed from: ${failed[*]}" >&2
+		exit 1
+	fi
+	exit 0
+fi
+from_commit="${NC_UPGRADE_FROM}"
+from_label=$(git describe --tags --exact-match "$from_commit" 2>/dev/null || git rev-parse --short "$from_commit")
 image="${NC_SMOKE_IMAGE:-nextcloud:34.0.5-apache}"
 nc_label="${image##*:}"; nc_label="${nc_label%%-*}"
-container="${NC_SMOKE_CONTAINER:-maintenance-tracker-nc${nc_label%%.*}-${database}-upgrade}"
-network="${container}-network"
-db_container="${container}-db"
+# shellcheck source=tests/integration/lib/docker-ready.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/docker-ready.sh"
+# Unique per run (NC_SMOKE_RUN_ID) so parallel jobs never collide.
+# Kept short: names double as DNS names, limited to 63 characters.
+container="${NC_SMOKE_CONTAINER:-mt-${NC_SMOKE_RUN_ID}-nc${nc_label%%.*}-${database}-up}"
+network="${NC_SMOKE_NETWORK:-${container}-net}"
+db_container="${NC_SMOKE_DB_CONTAINER:-${container}-db}"
+assert_dns_name "$container" "$network" "$db_container" "$NC_SMOKE_DB_ALIAS" || exit 2
 admin="upgrade_admin:upgrade-test-only"
 db_name=nextcloud; db_user=nextcloud; db_password=integration-db-only
 staging_root="$(mktemp -d)"
-created_network=0; started_database=0
+created_network=0; started_database=0; diagnosed=0
 
 cleanup() {
 	status=$?
-	if [ "$status" -ne 0 ]; then
+	if [ "$status" -ne 0 ] && [ "$diagnosed" -eq 0 ]; then
 		docker exec --user www-data "$container" sh -c 'grep -E "\"level\":[34]" /var/www/html/data/nextcloud.log 2>/dev/null | tail -n 20 | cut -c1-600' >&2 || true
 	fi
-	docker rm --force "$container" >/dev/null 2>&1 || true
-	[ "$started_database" -eq 0 ] || docker rm --force "$db_container" >/dev/null 2>&1 || true
-	[ "$created_network" -eq 0 ] || docker network rm "$network" >/dev/null 2>&1 || true
+	if [ "$status" -ne 0 ] && [ "$diagnosed" -eq 0 ]; then
+		if [ "$started_database" -eq 1 ]; then dump_nextcloud_diagnostics "$container" "$db_container"; else dump_nextcloud_diagnostics "$container"; fi
+	fi
+	remove_run_resources # only this run's labelled containers, volumes and network
 	rm -rf "$staging_root"
 }
 trap cleanup EXIT
@@ -68,52 +92,72 @@ new_version=$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' "$staging_root/new/m
 # Intermediate states share a version string; Nextcloud only migrates when the
 # version increases, so the old install is labelled as a lower version.
 if [ "$old_version" = "$new_version" ]; then
-	sed -i "s:<version>${old_version}</version>:<version>${old_version%.*}.0</version>:" "$staging_root/old/maintenance_tracker/appinfo/info.xml"
+	lower_version="${old_version%.*}.0"
+	[ "$lower_version" != "$old_version" ] || lower_version=0.0.0
+	sed -i "s:<version>${old_version}</version>:<version>${lower_version}</version>:" "$staging_root/old/maintenance_tracker/appinfo/info.xml"
 fi
 
-docker rm --force "$container" "$db_container" >/dev/null 2>&1 || true
-run_args=(--rm --detach --name "$container" --env "NEXTCLOUD_ADMIN_USER=${admin%%:*}" --env "NEXTCLOUD_ADMIN_PASSWORD=${admin#*:}")
-if [ "$database" = sqlite ]; then
-	run_args+=(--env SQLITE_DATABASE=nextcloud)
-else
-	db_args=(--rm --detach --name "$db_container")
-	if [ "$network_mode" = network ]; then
-		docker network create "$network" >/dev/null; created_network=1
-		db_args+=(--network "$network"); run_args+=(--network "$network")
-	fi
-	if [ "$database" = pgsql ]; then
-		docker run "${db_args[@]}" --env "POSTGRES_DB=$db_name" --env "POSTGRES_USER=$db_user" --env "POSTGRES_PASSWORD=$db_password" \
-			"${NC_SMOKE_POSTGRES_IMAGE:-postgres:17-alpine}" >/dev/null
+# Pull first (retried) so registry time never counts against readiness, then
+# start; a start that never becomes ready is retried once on fresh containers.
+remove_stack() {
+	remove_run_resources
+	created_network=0; started_database=0
+}
+start_stack() {
+	run_args=(--detach --label "$smoke_label" --label "${smoke_label_key}-ci=${smoke_ci_context}" --name "$container" --env "NEXTCLOUD_ADMIN_USER=${admin%%:*}" --env "NEXTCLOUD_ADMIN_PASSWORD=${admin#*:}")
+	if [ "$database" = sqlite ]; then
+		run_args+=(--env SQLITE_DATABASE=nextcloud)
 	else
-		docker run "${db_args[@]}" --env "MARIADB_DATABASE=$db_name" --env "MARIADB_USER=$db_user" --env "MARIADB_PASSWORD=$db_password" \
-			--env "MARIADB_ROOT_PASSWORD=${db_password}-root" "${NC_SMOKE_MARIADB_IMAGE:-mariadb:11.4}" \
-			--transaction-isolation=READ-COMMITTED --binlog-format=ROW --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci >/dev/null
-	fi
-	started_database=1
-	for _ in $(seq 1 90); do
-		if [ "$database" = pgsql ]; then
-			docker exec "$db_container" pg_isready --quiet --username "$db_user" --dbname "$db_name" && break
-		else
-			docker exec "$db_container" mariadb --user="$db_user" --password="$db_password" --execute='SELECT 1' "$db_name" >/dev/null 2>&1 && break
+		db_args=(--detach --label "$smoke_label" --label "${smoke_label_key}-ci=${smoke_ci_context}" --name "$db_container")
+		if [ "$network_mode" = network ]; then
+			ensure_run_network "$network" || return 1; created_network=1
+			db_args+=(--network "$network" --network-alias "$NC_SMOKE_DB_ALIAS"); run_args+=(--network "$network")
 		fi
-		sleep 1
-	done
-	db_host=$db_container
-	[ "$network_mode" = network ] || db_host=$(docker inspect --format '{{.NetworkSettings.IPAddress}}' "$db_container")
-	if [ "$database" = pgsql ]; then
-		run_args+=(--env "POSTGRES_DB=$db_name" --env "POSTGRES_USER=$db_user" --env "POSTGRES_PASSWORD=$db_password" --env "POSTGRES_HOST=$db_host")
-	else
-		run_args+=(--env "MYSQL_DATABASE=$db_name" --env "MYSQL_USER=$db_user" --env "MYSQL_PASSWORD=$db_password" --env "MYSQL_HOST=$db_host")
+		if [ "$database" = pgsql ]; then
+			docker run "${db_args[@]}" --env "POSTGRES_DB=$db_name" --env "POSTGRES_USER=$db_user" --env "POSTGRES_PASSWORD=$db_password" \
+				"$NC_SMOKE_POSTGRES_IMAGE" >/dev/null || return 1
+		else
+			docker run "${db_args[@]}" --env "MARIADB_DATABASE=$db_name" --env "MARIADB_USER=$db_user" --env "MARIADB_PASSWORD=$db_password" \
+				--env "MARIADB_ROOT_PASSWORD=${db_password}-root" "$NC_SMOKE_MARIADB_IMAGE" \
+				--transaction-isolation=READ-COMMITTED --binlog-format=ROW --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci >/dev/null || return 1
+		fi
+		started_database=1
+		for _ in $(seq 1 90); do
+			if [ "$database" = pgsql ]; then
+				docker exec "$db_container" pg_isready --quiet --username "$db_user" --dbname "$db_name" && break
+			else
+				docker exec "$db_container" mariadb --user="$db_user" --password="$db_password" --execute='SELECT 1' "$db_name" >/dev/null 2>&1 && break
+			fi
+			sleep 1
+		done
+		db_host=$NC_SMOKE_DB_ALIAS # short alias on this run's own network
+		[ "$network_mode" = network ] || db_host=$(docker inspect --format '{{.NetworkSettings.IPAddress}}' "$db_container")
+		if [ "$database" = pgsql ]; then
+			run_args+=(--env "POSTGRES_DB=$db_name" --env "POSTGRES_USER=$db_user" --env "POSTGRES_PASSWORD=$db_password" --env "POSTGRES_HOST=$db_host")
+		else
+			run_args+=(--env "MYSQL_DATABASE=$db_name" --env "MYSQL_USER=$db_user" --env "MYSQL_PASSWORD=$db_password" --env "MYSQL_HOST=$db_host")
+		fi
 	fi
-fi
-docker run "${run_args[@]}" "$image" >/dev/null
-
-ready=0
-for _ in $(seq 1 120); do
-	if docker exec "$container" curl -s http://127.0.0.1/status.php 2>/dev/null | grep -q '"installed":true'; then ready=1; break; fi
-	sleep 2
+	if ! docker run "${run_args[@]}" "$image" >/dev/null; then
+		ready_log "could not start the Nextcloud container ${container}"
+		dump_nextcloud_diagnostics "$container"
+		return 1
+	fi
+	if [ "$started_database" -eq 1 ]; then wait_for_nextcloud "$container" "$db_container"; else wait_for_nextcloud "$container"; fi
+}
+case "$database" in
+	pgsql) pull_image "$NC_SMOKE_POSTGRES_IMAGE" ;;
+	mysql) pull_image "$NC_SMOKE_MARIADB_IMAGE" ;;
+esac
+pull_image "$image"
+remove_stack
+start_attempt=1
+until start_stack; do
+	[ "$start_attempt" -lt "$NC_SMOKE_START_ATTEMPTS" ] || { diagnosed=1; fail "Nextcloud did not start and become ready in ${start_attempt} attempt(s) (readiness timeout ${NC_SMOKE_READY_TIMEOUT}s each); see the diagnostics above."; }
+	start_attempt=$((start_attempt + 1))
+	ready_log "retrying the container start (attempt ${start_attempt}/${NC_SMOKE_START_ATTEMPTS}) on fresh containers"
+	remove_stack
 done
-[ "$ready" -eq 1 ] || fail 'Nextcloud did not become ready.'
 
 occ() { docker exec --user www-data "$container" php occ "$@"; }
 install_app() {
@@ -151,7 +195,13 @@ executed_migrations() {
 }
 expected_migrations=$(ls "$staging_root/new/maintenance_tracker/lib/Migration" | sed -n 's/^Version\([0-9]*Date[0-9]*\)\.php$/\1/p' | sort)
 before=$(executed_migrations)
-[ "$before" != "$expected_migrations" ] || fail 'Upgrade base already has every migration; pick an older NC_UPGRADE_FROM.'
+# A recent base (typically the latest release tag) may already have every
+# migration; that is still a valid version-only upgrade. Set
+# NC_UPGRADE_REQUIRE_MIGRATIONS=1 to insist on pending migrations.
+if [ "$before" = "$expected_migrations" ]; then
+	[ "${NC_UPGRADE_REQUIRE_MIGRATIONS:-0}" != '1' ] || fail 'Upgrade base already has every migration; pick an older NC_UPGRADE_FROM.'
+	echo "Upgrade base ${from_label} already has every migration; checking a version-only upgrade." >&2
+fi
 
 install_app "$staging_root/new"
 occ upgrade --no-interaction >/dev/null
@@ -179,4 +229,4 @@ occ app:disable maintenance_tracker >/dev/null
 occ app:enable maintenance_tracker >/dev/null
 assert_contains "$(ocs GET /assets)" 'After upgrade' 'data survives disable/enable'
 
-echo "Upgrade ${from_commit} (${old_version}) -> working tree (${new_version}) passed on Nextcloud ${nc_label} (${database})."
+echo "Upgrade ${from_label} (${old_version}) -> working tree (${new_version}) passed on Nextcloud ${nc_label} (${database})."

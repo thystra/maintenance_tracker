@@ -151,6 +151,16 @@ permission, and add it as a second secret named `RELEASE_TOKEN`.
    The App Store downloads the archive, verifies the signature against your
    certificate, and reads the version and compatibility from `appinfo/info.xml`.
 
+7. **Add the new tag to the upgrade test.** In `.forgejo/workflows/ci.yml`,
+   update the `NC_UPGRADE_FROM` line so it holds the tag you just pushed plus the
+   oldest supported release (see
+   [development.md](development.md#upgrade-policy)), for example
+   `NC_UPGRADE_FROM: 'v1.0.0 v1.2.0'`. Replace the previous latest tag rather
+   than appending. On the first release, the tag replaces `6fc011d` unless
+   upgrades from v0.1.10 are still supported. Commit it
+   as its own pull request; it is a one-line change. CI already tests the newest
+   tag automatically, so this only keeps the list honest.
+
 ## The archive
 
 `make appstore` (or `bash scripts/build-appstore.sh`) writes
