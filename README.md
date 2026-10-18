@@ -49,6 +49,13 @@ Nextcloud database and Files.
   from the bundled generic profile or your own JSON file) to create
   work definitions and parts in one step, with a preview before anything is
   written.
+- **Profile builder** – build your own profiles on the Profiles page
+  (components, specs, meters, task groups, tasks with schedules, parts, fuel
+  settings and driving regimes), duplicate a bundled one, import or export a
+  profile as JSON, or *Save as profile* from an item you have already set up.
+  When adding an item you can *Copy setup from* another item: its setup comes
+  along, its history does not. Profiles are validated strictly and nothing is
+  fetched from the internet.
 - **Parts, vendors, and fitment** – a parts catalog (usual vendor, typical price,
   which items a part fits), vendors with website, address, phone, e-mail and
   contact person, compatible parts per item, and portable fitment compatibility packs in JSON or a spreadsheet-

@@ -15,7 +15,7 @@ Each profile declares:
 - a globally stable reverse-DNS-style `id`;
 - semantic `version`;
 - `name`, `category`, and description;
-- data license, author, source URL, and optional source revision;
+- data license, author, optional source URL, and optional source revision;
 - applicability metadata;
 - meter, component, part, work-group, and common work-definition templates. Meter templates map to `distance`, `runtime`, or `usage_count`.
 
@@ -134,6 +134,29 @@ label, SKU, and HTTPS URL. The server does not request that URL in v1.
 
 Part compatibility is informational. Users must verify fitment and maintenance
 intervals against the manufacturer, qualified technician, or clinician.
+
+## Workspace profiles and optional sections — v0.1.17
+
+Workspaces can build, import, export and edit their own profiles (Profiles
+page, or `POST /profile-library`). They use this same format, are validated with
+the same bounds, and are classified `local`; a workspace profile may not use the
+id of a bundled profile. Two optional top-level sections were added; documents
+without them are unchanged and keep their content hash:
+
+- `specifications`: up to 512 entries `{ "key": "engine_oil.capacity", "label":
+  "Engine oil capacity", "value": "4.5", "unit": "l", "componentKey": "engine",
+  "regime": "towing" }`. Keys are lowercase (dots allowed); values are a string
+  (at most 1000 characters), number or boolean; `key` + `componentKey` is unique.
+- `fuel`: `{ "settings": { "distanceUnit": "mi|km", "volumeUnit": "gal|l",
+  "economyUnit": "mpg|km_l|l_100km", "fuelType": "gasoline|diesel|e85|lpg|cng|other" },
+  "regimes": [ { "key": "towing", "name": "Towing", "isDefault": false } ] }`.
+  At most 50 regimes with case-insensitively unique names and exactly one
+  default. Settings apply only to items still on default fuel settings; regimes are
+  added by name.
+
+`provenance.sourceUrl` is optional (workspace-built profiles have none). When
+present it must be HTTPS and is never requested. An empty `applicability` is
+written as `{}`.
 
 ## Trust and licensing
 

@@ -58,7 +58,7 @@ final class ProfileRepository {
 			'content_json'=>$q->createNamedParameter($canonicalJson,IQueryBuilder::PARAM_STR),
 			'data_license'=>$q->createNamedParameter($profile['dataLicense'],IQueryBuilder::PARAM_STR),
 			'author_name'=>$q->createNamedParameter($profile['provenance']['author'],IQueryBuilder::PARAM_STR),
-			'source_url'=>$q->createNamedParameter($profile['provenance']['sourceUrl'],IQueryBuilder::PARAM_STR),
+			'source_url'=>$q->createNamedParameter($profile['provenance']['sourceUrl']??'',IQueryBuilder::PARAM_STR),
 			'source_revision'=>$q->createNamedParameter($sourceRevision,$sourceRevision===null?IQueryBuilder::PARAM_NULL:IQueryBuilder::PARAM_STR),
 			'created_at'=>$q->createNamedParameter($createdAt,IQueryBuilder::PARAM_INT),
 		]);$q->executeStatement();return $q->getLastInsertId();

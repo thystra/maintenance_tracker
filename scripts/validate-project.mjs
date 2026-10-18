@@ -589,6 +589,21 @@ for (const eventType of ['fuel.created', 'fuel.archived', 'fuel_regime.created',
 }
 expect(api.includes('## Fuel log (0.1.16)') && api.includes('/assets/{assetUuid}/fuel-stats') && (await read('docs/privacy-policy.md')).includes('**station**'), 'API and privacy documentation must cover the fuel log.')
 
+// 0.1.17 profile builder.
+const profileLibrary = await read('lib/Service/ProfileLibraryService.php')
+const setupCopy = await read('lib/Service/SetupCopyService.php')
+const profileBuilderSources = [profileLibrary, setupCopy, await read('lib/Service/ProfileSnapshotBuilder.php'), await read('lib/Controller/ProfileLibraryController.php')]
+expect(profileLibrary.includes('$this->validator->validate($document)') && setupCopy.includes('$this->validator->validate($document)'), 'Workspace profiles and copied setups must pass the same ProfileValidator as bundled profiles.')
+expect(profileLibrary.includes('belongs to a bundled profile'), 'Workspace profiles must not reuse the id of a bundled (first-party) profile.')
+expect(profileBuilderSources.every((source) => !/IClientService|file_get_contents\(|curl_|fopen\(/.test(source)), 'The profile builder must never fetch anything remote; imports are local JSON only.')
+expect(managerMatch?.[1].includes('self::PROFILE_MANAGE') && !contributorMatch?.[1].includes('self::PROFILE_MANAGE'), 'Workspace profiles must be managed by owners and managers only (profile.manage).')
+expect(!/FuelService|ReadingService|CostService|ActivityService|EvidenceService/.test(setupCopy), 'Copying an item setup must not copy history (fill-ups, readings, costs, activities, files).')
+expect(exportPolicy.includes("'workspace_profiles'") && importPolicy.includes("'workspace_profiles'") && userLifecycle.includes("'maint_ws_profiles'"), 'Workspace profiles must be exported, restored and purged with the workspace.')
+for (const eventType of ['workspace_profile.created', 'workspace_profile.updated', 'workspace_profile.archived', 'asset.setup_copied']) {
+	expect(auditEvents.includes(`'${eventType}'`), `Audit event vocabulary must include ${eventType}.`)
+}
+expect(api.includes('## Profile builder (0.1.17)') && api.includes('/profile-library') && api.includes('/save-as-profile') && api.includes('copySetupFrom') && (await read('docs/privacy-policy.md')).includes('Workspace profiles'), 'API and privacy documentation must cover the profile builder.')
+
 try {
 	await access('.github/workflows/ci.yml')
 	failures.push('GitHub mirror must not retain a competing automatic CI workflow.')

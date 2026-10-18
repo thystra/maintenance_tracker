@@ -32,6 +32,7 @@ final class AuthorizationCatalog {
 	public const REMINDER_POLICY_MANAGE = 'reminder_policy.manage';
 	public const PROFILE_READ = 'profile.read';
 	public const PROFILE_INSTALL = 'profile.install';
+	public const PROFILE_MANAGE = 'profile.manage';
 	public const FITMENT_READ = 'fitment.read';
 	public const FITMENT_IMPORT = 'fitment.import';
 	public const FITMENT_MAP = 'fitment.map';
@@ -78,6 +79,7 @@ final class AuthorizationCatalog {
 		self::REMINDER_POLICY_MANAGE => ['implemented' => true, 'write' => true],
 		self::PROFILE_READ => ['implemented' => true, 'write' => false],
 		self::PROFILE_INSTALL => ['implemented' => true, 'write' => true],
+		self::PROFILE_MANAGE => ['implemented' => true, 'write' => true],
 		self::FITMENT_READ => ['implemented' => true, 'write' => false],
 		self::FITMENT_IMPORT => ['implemented' => true, 'write' => true],
 		self::FITMENT_MAP => ['implemented' => true, 'write' => true],
@@ -137,6 +139,7 @@ final class AuthorizationCatalog {
 			self::REMINDER_POLICY_MANAGE,
 			self::PROFILE_READ,
 			self::PROFILE_INSTALL,
+			self::PROFILE_MANAGE,
 			self::FITMENT_READ,
 			self::FITMENT_IMPORT,
 			self::FITMENT_MAP,
@@ -176,6 +179,7 @@ final class AuthorizationCatalog {
 			self::REMINDER_POLICY_MANAGE,
 			self::PROFILE_READ,
 			self::PROFILE_INSTALL,
+			self::PROFILE_MANAGE,
 			self::FITMENT_READ,
 			self::FITMENT_IMPORT,
 			self::FITMENT_MAP,

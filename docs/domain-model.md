@@ -98,6 +98,23 @@ by identity, keep `part` source bindings for provenance, and record `compatibleP
 as informational `maint_part_compat` facts per component instance or work definition.
 There is no parallel profile-only parts model.
 
+## Workspace profile library (v0.1.17)
+
+`maint_ws_profiles` (migration `Version1170`)
+: A workspace's own profile documents: UUID, `profile_key`/`profile_version`,
+  name, category, canonical JSON (`content_json`) and its SHA-256
+  `content_hash`, revision and timestamps, tombstoned on delete. Documents are
+  validated with the same rules as bundled profiles; bundled ids are reserved.
+  Installing one goes through the normal installation path, so the item still
+  points at an immutable `maint_prof_revs` snapshot with origin `local`.
+  Exported, restored (content kept verbatim, UUID remapped) and purged with the
+  workspace.
+
+"Copy setup from" reuses the snapshot builder and the installation
+materializer without writing `maint_asset_prof`, so the copy is an ordinary set
+of components, meters, specifications, groups, definitions, compatibility facts
+and fuel regimes with no link back to the source item.
+
 ## Meters and readings
 
 > Implementation status: v0.1.4 materializes these tables and the corresponding OCS/service layer.

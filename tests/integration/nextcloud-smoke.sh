@@ -2543,6 +2543,85 @@ assert_contains "$fuel_audit" 'fuel.created' 'fill-up audited'
 assert_contains "$fuel_audit" 'fuel_regime.created' 'regime audited'
 assert_contains "$fuel_audit" 'fuel.archived' 'fill-up deletion audited'
 
+# Profile builder (0.1.17): workspace profile library CRUD with idempotent
+# retries and stale revisions, strict validation (bundled ids reserved, size
+# cap, unknown fields, https-only provenance, nothing fetched), role
+# boundaries, "save as profile" from the fuel test pickup (specs, regimes and
+# fuel settings but no fill-ups), installing a workspace profile on another
+# vehicle, and "copy setup from" when adding an item. Restore is checked below.
+pb_profile='a1b2c3d4-0000-4000-8000-0000000fb001'
+pb_saved='a1b2c3d4-0000-4000-8000-0000000fb002'
+pb_target='a1b2c3d4-0000-4000-8000-0000000fb003'
+pb_copy='a1b2c3d4-0000-4000-8000-0000000fb004'
+pb_install='a1b2c3d4-0000-4000-8000-0000000fb005'
+pb_doc() { # name [extra top-level json]
+	printf '{"schemaVersion":2,"id":"workspace.trailer","version":"1.0.0","name":"%s","category":"vehicle","description":"Synthetic trailer profile","dataLicense":"NOASSERTION","provenance":{"author":"Smoke test"},"applicability":{},"meters":[{"key":"odometer","name":"Odometer","dimension":"distance","displayUnit":"mi","monotonic":true}],"components":[{"key":"axle","name":"Axle","quantity":1,"enabledByDefault":true,"compatiblePartKeys":[]}],"parts":[],"workGroups":[],"workDefinitions":[{"key":"bearings","title":"Repack bearings","kind":"maintenance","componentKey":"axle","enabledByDefault":true,"schedule":{"combination":"any","rules":[{"type":"meter","meterKey":"odometer","interval":{"value":"12000","unit":"mi"}}]},"compatiblePartKeys":[]}],"specifications":[{"key":"tyre.pressure","label":"Tyre pressure","value":"50","unit":"psi","componentKey":"axle"}]%s}' "$1" "${2:-}"
+}
+pb_created=$(ocs_as "$na" POST "/profile-library?${nws}" "{\"uuid\":\"${pb_profile}\",\"profile\":$(pb_doc 'Trailer basics')}")
+assert_contains "$pb_created" '"statuscode":201' 'workspace profile created'
+assert_contains "$pb_created" '"origin":"workspace"' 'workspace profile origin'
+assert_contains "$pb_created" '"trustState":"local"' 'workspace profile is not first-party'
+assert_contains "$pb_created" '"specifications":1' 'workspace profile summary counts specs'
+assert_contains "$(ocs_as "$na" POST "/profile-library?${nws}" "{\"uuid\":\"${pb_profile}\",\"profile\":$(pb_doc 'Trailer basics')}")" '"statuscode":201' 'workspace profile create retry is idempotent'
+assert_contains "$(ocs_as "$na" POST "/profile-library?${nws}" "{\"uuid\":\"${pb_profile}\",\"profile\":$(pb_doc 'Different')}")" '"statuscode":412' 'workspace profile UUID reuse with other data refused'
+assert_contains "$(ocs_as "$nb" POST "/profile-library?${nws}" "{\"profile\":$(pb_doc 'Nope')}")" '"statuscode":403' 'contributor cannot create workspace profiles'
+assert_contains "$(ocs_as "$na" POST "/profile-library?${nws}" "{\"profile\":$(pb_doc 'Fake' | sed 's/"workspace.trailer"/"org.argentwolf.maintenance.generic-car"/')}")" 'belongs to a bundled profile' 'bundled profile id reserved'
+assert_contains "$(ocs_as "$na" POST "/profile-library?${nws}" "{\"profile\":$(pb_doc 'Script' ',"script":"alert(1)"')}")" 'unknown fields' 'unknown profile field refused'
+assert_contains "$(ocs_as "$na" POST "/profile-library?${nws}" "{\"profile\":$(pb_doc 'Remote' | sed 's/"author":"Smoke test"/"author":"Smoke test","sourceUrl":"http:\/\/example.invalid\/p.json"/')}")" '"statuscode":400' 'non-https profile source refused'
+assert_contains "$(ocs_as "$na" POST "/profile-library?${nws}" "{\"profile\":$(pb_doc 'Trailer basics')}")" 'already has profile workspace.trailer version 1.0.0' 'duplicate profile id and version refused'
+python3 -c 'import json,sys;print(json.dumps({"profile":{"schemaVersion":2,"id":"workspace.big","version":"1.0.0","name":"Big","description":"x"*1100000}}))' > "$staging_root/pb-big.json"
+docker cp "$staging_root/pb-big.json" "$container:/tmp/pb-big.json" >/dev/null
+pb_big=$(docker exec "$container" curl --silent --show-error --user "$na" --request POST --header 'OCS-APIRequest: true' --header 'Accept: application/json' --header 'Content-Type: application/json' --data @/tmp/pb-big.json "http://127.0.0.1/ocs/v2.php/apps/maintenance_tracker/api/v1/profile-library?${nws}&format=json")
+assert_contains "$pb_big" '"statuscode":400' 'profile over 1 MiB refused'
+docker exec "$container" rm -f /tmp/pb-big.json
+assert_contains "$(ocs_as "$nb" GET "/profiles?${nws}")" '"name":"Trailer basics"' 'workspace profiles listed with bundled ones'
+assert_contains "$(ocs_as "$nb" GET "/profile-library/${pb_profile}?${nws}")" '"revision":1' 'workspace profile read'
+assert_contains "$(ocs_as "$na" PUT "/profile-library/${pb_profile}?${nws}" "{\"expectedRevision\":1,\"profile\":$(pb_doc 'Trailer care')}")" '"revision":2' 'workspace profile updated'
+assert_contains "$(ocs_as "$na" PUT "/profile-library/${pb_profile}?${nws}" "{\"expectedRevision\":1,\"profile\":$(pb_doc 'Stale')}")" '"statuscode":412' 'workspace profile stale revision'
+# Save as profile: a spec on the pickup, then a snapshot of its setup.
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/specifications?${nws}" '{"specification":{"key":"oil.capacity","label":"Oil capacity","value":"6.5","unit":"qt"}}')" '"statuscode":201' 'spec on the pickup'
+pb_saved_json=$(ocs_as "$na" POST "/assets/${fuel_asset}/save-as-profile?${nws}" "{\"uuid\":\"${pb_saved}\",\"name\":\"Pickup setup\"}")
+assert_contains "$pb_saved_json" '"statuscode":201' 'item saved as a profile'
+assert_contains "$pb_saved_json" '"id":"workspace.pickup_setup"' 'saved profile id from its name'
+assert_contains "$pb_saved_json" '"fuelRegimes":2' 'saved profile carries the fuel regimes'
+assert_contains "$pb_saved_json" '"fuelType":"diesel"' 'saved profile carries the fuel settings'
+assert_contains "$pb_saved_json" '"oil.capacity"' 'saved profile carries specs'
+assert_not_contains "$pb_saved_json" 'Synthetic station' 'saved profile carries no fill-ups'
+assert_not_contains "$pb_saved_json" '45.50' 'saved profile carries no costs'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/save-as-profile?${nws}" "{\"uuid\":\"${pb_saved}\",\"name\":\"Pickup setup\"}")" '"statuscode":201' 'save as profile retry is idempotent'
+assert_contains "$(ocs_as "$nb" POST "/assets/${fuel_asset}/save-as-profile?${nws}" '{"name":"Nope"}')" '"statuscode":403' 'contributor cannot save profiles'
+# Install the saved workspace profile on another vehicle.
+assert_contains "$(ocs_as "$na" POST "/assets?${nws}" "{\"asset\":{\"uuid\":\"${pb_target}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Second pickup\"}}")" '"statuscode":201' 'second pickup created'
+pb_profile_doc=$(printf '%s' "$pb_saved_json" | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)["ocs"]["data"]["profile"]))')
+pb_preview=$(ocs_as "$na" POST "/assets/${pb_target}/profiles/preview?${nws}" "{\"profile\":${pb_profile_doc}}")
+assert_contains "$pb_preview" '"installable":true' 'workspace profile installable on another vehicle'
+assert_contains "$(ocs_as "$na" POST "/assets/${pb_target}/profiles/install?${nws}" "{\"installationUuid\":\"${pb_install}\",\"profile\":${pb_profile_doc}}")" '"statuscode":201' 'workspace profile installed'
+assert_contains "$(ocs_as "$na" GET "/assets/${pb_target}/fuel-regimes?${nws}")" '"name":"Towing"' 'installed profile created the fuel regimes'
+assert_contains "$(ocs_as "$na" GET "/assets/${pb_target}/fuel-settings?${nws}")" '"fuelType":"diesel"' 'installed profile applied fuel settings to an item with defaults'
+assert_contains "$(ocs_as "$na" GET "/assets/${pb_target}/specifications?${nws}")" '"oil.capacity"' 'installed profile created the specs'
+assert_contains "$(ocs_as "$na" GET "/assets/${pb_target}/profile-installation?${nws}")" '"sourceType":"fuel_regime"' 'fuel regimes bound to the installation'
+assert_contains "$(ocs_as "$na" POST "/assets/${pb_target}/profiles/preview?${nws}" "{\"profile\":$(pb_doc 'Trailer care' ',"fuel":{"regimes":[{"key":"towing","name":"towing","isDefault":true}]}' | sed 's/workspace.trailer/workspace.trailer2/')}")" 'Fuel regime' 'regime name clash reported as a conflict'
+# Copy setup from an existing item when adding one: setup only, no history.
+pb_copied=$(ocs_as "$na" POST "/assets?${nws}" "{\"asset\":{\"uuid\":\"${pb_copy}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Third pickup\"},\"copySetupFrom\":\"${fuel_asset}\"}")
+assert_contains "$pb_copied" '"statuscode":201' 'item added with a copied setup'
+assert_contains "$pb_copied" '"setupCopied"' 'copy counts reported'
+assert_contains "$(ocs_as "$na" POST "/assets?${nws}" "{\"asset\":{\"uuid\":\"${pb_copy}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Third pickup\"},\"copySetupFrom\":\"${fuel_asset}\"}")" '"statuscode":201' 'copy retry is idempotent'
+pb_copy_regimes=$(ocs_as "$na" GET "/assets/${pb_copy}/fuel-regimes?${nws}" | python3 -c 'import json,sys;print("regimes=%d" % len(json.load(sys.stdin)["ocs"]["data"]["items"]))')
+assert_contains "$pb_copy_regimes" 'regimes=2' 'copied regimes exactly once'
+assert_contains "$(ocs_as "$na" GET "/assets/${pb_copy}/fuel?${nws}")" '"items":[]' 'copy carries no fill-ups'
+assert_contains "$(ocs_as "$na" GET "/assets/${pb_copy}/costs?${nws}")" '"items":[]' 'copy carries no costs'
+pb_copy_meter=$(ocs_as "$na" GET "/assets/${pb_copy}/meters?${nws}" | python3 -c 'import json,sys;print([m["uuid"] for m in json.load(sys.stdin)["ocs"]["data"]["items"] if m["key"]=="odometer"][0])')
+assert_contains "$(ocs_as "$na" GET "/meters/${pb_copy_meter}/readings?${nws}")" '"items":[]' 'copy carries no readings'
+assert_contains "$(ocs_as "$na" GET "/assets/${pb_copy}/specifications?${nws}")" '"oil.capacity"' 'copy carries the specs'
+assert_contains "$(ocs_as "$nb" POST "/assets?${nws}" "{\"asset\":{\"category\":\"vehicle\",\"name\":\"Nope\"},\"copySetupFrom\":\"${fuel_asset}\"}")" '"statuscode":403' 'contributor cannot add items with a copied setup'
+assert_contains "$(ocs_as "$na" DELETE "/profile-library/${pb_profile}?${nws}&expectedRevision=2")" '"statuscode":200' 'workspace profile deleted'
+assert_not_contains "$(ocs_as "$na" GET "/profiles?${nws}")" 'Trailer care' 'deleted workspace profile no longer listed'
+pb_audit=$(ocs_as "$na" GET "/audit?${nws}&limit=60")
+assert_contains "$pb_audit" 'workspace_profile.created' 'workspace profile creation audited'
+assert_contains "$pb_audit" 'workspace_profile.updated' 'workspace profile update audited'
+assert_contains "$pb_audit" 'workspace_profile.archived' 'workspace profile deletion audited'
+assert_contains "$pb_audit" 'asset.setup_copied' 'setup copy audited'
+
 # Workspace export: role-filtered sections, viewer-scoped evidence privacy,
 # ZIP layout with CSV formula escaping, optional evidence bytes from the
 # caller's own Files, and the export audit event. Data is synthetic.
@@ -2669,6 +2748,19 @@ imp_fuel_t1=$(printf '%s' "$imp_fuel" | python3 -c 'import json,sys;print([t["uu
 assert_contains "$(ocs_as "$na" GET "/evidence?${iws}&targetType=fuel&targetUuid=${imp_fuel_t1}")" '"availability":"available"' 'restored fill-up receipt follows the remapped ticket'
 assert_contains "$(ocs_as "$na" GET "/assets/${imp_fuel_asset}/fuel-settings?${iws}")" '"fuelType":"diesel"' 'restored fuel settings'
 assert_contains "$(ocs_as "$na" GET "/assets/${imp_fuel_asset}/fuel-stats?${iws}&period=all")" '"mixedSegments":1' 'restored fuel statistics'
+imp_fuel_t1_json=$(ocs_as "$na" GET "/fuel/${imp_fuel_t1}?${iws}")
+imp_fuel_t1_rev=$(printf '%s' "$imp_fuel_t1_json" | json_field revision)
+imp_fuel_t1_reading=$(printf '%s' "$imp_fuel_t1_json" | json_field readingUuid)
+assert_contains "$imp_fuel_t1_reading" '-' 'restored fill-up keeps its odometer reading'
+imp_fuel_fix=$(ocs_as "$na" PATCH "/fuel/${imp_fuel_t1}?${iws}" "{\"expectedRevision\":${imp_fuel_t1_rev},\"ticket\":{\"odometer\":\"10010\"}}")
+assert_contains "$imp_fuel_fix" '"odometer":"10010"' 'restored fill-up odometer edited'
+assert_not_contains "$imp_fuel_fix" '"meterUuid":null' 'restored fill-up stays on its odometer meter'
+assert_not_contains "$imp_fuel_fix" "\"readingUuid\":\"${imp_fuel_t1_reading}\"" 'restored fill-up reading corrected, not detached'
+assert_not_contains "$imp_fuel_fix" '"readingUuid":null' 'restored fill-up still linked to a reading'
+imp_profiles=$(ocs_as "$na" GET "/profiles?${iws}")
+assert_contains "$imp_profiles" '"name":"Pickup setup"' 'restored workspace profiles'
+assert_not_contains "$imp_profiles" "$pb_saved" 'restored workspace profiles get new UUIDs'
+assert_not_contains "$imp_profiles" 'Trailer care' 'deleted workspace profiles are not restored as active'
 assert_contains "$(ocs_as "$na" GET "/assets?${nws}")" "$ntf_asset" 'original workspace untouched'
 assert_contains "$(import_as "$na" exp-owner.zip)" '"statuscode":201' 'same export can be restored twice'
 assert_contains "$(ocs_as "$nb" GET "/assets?${iws}")" '"statuscode":403' 'other members do not get access to the restored workspace'

@@ -12,6 +12,21 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.17] - 2026-10-18
+
+### Added
+
+- Profile builder: workspaces keep their own maintenance profiles in the new table `maint_ws_profiles` (migration `Version1170`), listed by `GET /profiles` next to the bundled ones with `origin: workspace` and `trustState: local`. OCS endpoints `GET/PUT/DELETE /profile-library/{uuid}` and `POST /profile-library` (idempotent per UUID, optimistic revisions) and `POST /assets/{assetUuid}/save-as-profile`. Every document passes the same `ProfileValidator` as bundled profiles (1 MiB, depth and list bounds, unknown fields rejected, HTTPS-only URLs that are never fetched); ids of bundled profiles are reserved so a workspace profile cannot pose as first-party. New capability `profile.manage` (Owner, Manager). Audit events `workspace_profile.created/updated/archived` and `asset.setup_copied`. Export, restore and the account-deletion purge carry the new table.
+- Profile v2 gains optional `specifications` and `fuel` (settings and driving regimes) sections; documents without them keep their content hash, and `provenance.sourceUrl` is now optional. Installation creates the specs per component instance, adds regimes by name (a name clash is a preview conflict, the default is applied only to items without regimes) and applies fuel settings only to items still on default settings (otherwise the preview shows a notice).
+- *Save as profile* (item → Setup) snapshots an item's components, meters, specs, compatible parts, task groups, tasks with schedules and fuel settings/regimes into a workspace profile. It never copies readings, activities, fill-ups, costs, files, serial numbers or store links.
+- *Copy setup from* when adding an item (`POST /assets` with `copySetupFrom`): the new item gets the source item's setup in the same transaction, without an installation record and without any history (regimes yes, fill-ups no). A retry with the same item UUID does not copy twice.
+- Interface: a *Profiles* page (workspace and bundled profiles; new, duplicate, import a local JSON file up to 1 MiB, export JSON, delete) and a profile editor with sections for details and applicability, meters, components, specs, parts (imported store links are kept), task groups, tasks with a schedule editor (time, business days, meter) and fuel settings and regimes. Keys are derived from names until edited, and server validation errors stay visible above the save bar. The Setup tab lists workspace profiles in the profile picker and shows install notices.
+
+### Changed
+
+- The dashboard's fuel card labels its right-hand figure *Latest tank: …*.
+- A smoke check after restore now edits a restored fill-up's odometer and asserts that its reading is corrected (superseded) rather than detached. Restore already remaps the reading's back-reference to the new fill-up UUID, so no code change was needed.
+
 ## [0.1.16] - 2026-10-18
 
 ### Added

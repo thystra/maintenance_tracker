@@ -127,8 +127,16 @@ export async function getAssets(cursor: string | null = null): Promise<AssetList
 	}))
 }
 
-export async function createAsset(asset: CreateAsset): Promise<Asset> {
-	return data(await axios.post<OcsEnvelope<Asset>>(endpoint('/assets'), { asset }, requestOptions))
+/**
+ * Create an item; with copySetupFrom the server copies that item's setup
+ * (no history) in the same transaction.
+ *
+ * @param asset New item fields.
+ * @param copySetupFrom UUID of an item whose setup is copied.
+ */
+export async function createAsset(asset: CreateAsset, copySetupFrom: string | null = null): Promise<Asset> {
+	const body = copySetupFrom === null ? { asset } : { asset, copySetupFrom }
+	return data(await axios.post<OcsEnvelope<Asset>>(endpoint('/assets'), body, requestOptions))
 }
 
 export async function getCategories(): Promise<CategoryList> {

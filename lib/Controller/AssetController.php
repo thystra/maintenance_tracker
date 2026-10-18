@@ -15,6 +15,7 @@ use OCA\MaintenanceTracker\Exception\RevisionConflictException;
 use OCA\MaintenanceTracker\Exception\ValidationException;
 use OCA\MaintenanceTracker\Service\AssetService;
 use OCA\MaintenanceTracker\Service\CurrentUser;
+use OCA\MaintenanceTracker\Service\SetupCopyService;
 use OCA\MaintenanceTracker\Service\WorkspaceService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
@@ -34,6 +35,7 @@ final class AssetController extends OCSController {
 		private CurrentUser $currentUser,
 		private WorkspaceService $workspaceService,
 		private AssetService $assetService,
+		private SetupCopyService $setupCopy,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -117,7 +119,13 @@ final class AssetController extends OCSController {
 	/**
 	 * Create an asset. The optional client UUID makes offline retries safe.
 	 *
+	 * With copySetupFrom, the new item gets the setup of that item in the same
+	 * transaction: meters, components, specifications, parts that fit, task
+	 * groups, tasks with schedules, and fuel regimes and settings, but no
+	 * history. A retry of an already created item does not copy again.
+	 *
 	 * @param array<string, mixed> $asset Asset fields
+	 * @param string|null $copySetupFrom UUID of an item whose setup is copied
 	 * @param string|null $workspace Workspace UUID; defaults to the personal workspace
 	 *
 	 * @return DataResponse<Http::STATUS_CREATED, array<string, mixed>, array{}>
@@ -126,20 +134,35 @@ final class AssetController extends OCSController {
 	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/assets')]
-	public function create(array $asset, ?string $workspace = null): DataResponse {
+	public function create(array $asset, ?string $copySetupFrom = null, ?string $workspace = null): DataResponse {
 		try {
 			return $this->workspaceService->runWithCapability(
 				$this->currentUser->uid(),
 				$workspace,
 				'inventory.manage',
-				function ($context) use ($asset): DataResponse {
+				function ($context) use ($asset, $copySetupFrom): DataResponse {
+					$existed = false;
+					if ($copySetupFrom !== null && is_string($asset['uuid'] ?? null)) {
+						try {
+							$this->assetService->find($context, strtolower($asset['uuid']));
+							$existed = true;
+						} catch (NotFoundException) {
+							// A new item.
+						}
+					}
 					$created = $this->assetService->create($context, $asset);
+					$data = $created->toApi();
+					if ($copySetupFrom !== null && !$existed) {
+						$data['setupCopied'] = $this->setupCopy->copy($context, $created->getUuid(), $copySetupFrom);
+					}
 
-					return new DataResponse($created->toApi(), Http::STATUS_CREATED);
+					return new DataResponse($data, Http::STATUS_CREATED);
 				},
 			);
 		} catch (AccessDeniedException $exception) {
 			throw new OCSForbiddenException($exception->getMessage(), $exception);
+		} catch (NotFoundException $exception) {
+			throw new OCSNotFoundException($exception->getMessage(), $exception);
 		} catch (ValidationException $exception) {
 			throw new OCSBadRequestException($exception->getMessage(), $exception);
 		} catch (RevisionConflictException $exception) {

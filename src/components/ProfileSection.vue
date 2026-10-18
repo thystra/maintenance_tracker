@@ -11,12 +11,15 @@ import type { Asset, BundledProfile, ProfileDocument, ProfileInstallation, Profi
 import { computed, onMounted, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import SelectField from './SelectField.vue'
 import { errorMessage, formatDate } from '../format.ts'
 import { t } from '../l10n.ts'
 import { getProfileInstallation, getProfiles, installProfile, previewProfile, validateProfile } from '../services/api.ts'
+import { saveAssetAsProfile } from '../services/profileApi.ts'
 import { can } from '../store.ts'
 
 const props = defineProps<{ asset: Asset }>()
@@ -33,7 +36,58 @@ const error = ref('')
 const message = ref('')
 const busy = ref(false)
 
-const options = computed(() => catalog.value.map((profile) => ({ value: profile.contentHash, label: `${profile.name} (${profile.version})` })))
+const options = computed(() => catalog.value.map((profile) => ({
+	value: profile.contentHash,
+	label: profile.origin === 'workspace'
+		? t('maintenance_tracker', '{name} ({version}, this workspace)', { name: profile.name, version: profile.version })
+		: `${profile.name} (${profile.version})`,
+})))
+
+// "Save as profile": snapshot of this item's setup into the workspace library.
+const saveOpen = ref(false)
+const saveName = ref('')
+const saveVersion = ref('1.0.0')
+const saveError = ref('')
+const saveUuid = ref('')
+const saved = ref<{ uuid: string, name: string } | null>(null)
+
+function openSave(): void {
+	saveName.value = t('maintenance_tracker', '{name} setup', { name: props.asset.name }).slice(0, 255)
+	saveVersion.value = '1.0.0'
+	saveError.value = ''
+	saveUuid.value = crypto.randomUUID()
+	saveOpen.value = true
+}
+
+async function doSave(): Promise<void> {
+	if (saveName.value.trim() === '') {
+		saveError.value = t('maintenance_tracker', 'Give the profile a name.')
+		return
+	}
+	busy.value = true
+	saveError.value = ''
+	try {
+		const profile = await saveAssetAsProfile(props.asset.uuid, { uuid: saveUuid.value, name: saveName.value.trim(), version: saveVersion.value.trim() || '1.0.0' })
+		saved.value = { uuid: profile.uuid ?? saveUuid.value, name: profile.name }
+		catalog.value = [...catalog.value.filter((entry) => entry.uuid !== profile.uuid), profile]
+		saveOpen.value = false
+	} catch (reason) {
+		saveError.value = errorMessage(reason)
+	} finally {
+		busy.value = false
+	}
+}
+
+const saveButtons = computed(() => [
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		saveOpen.value = false
+		return false
+	} },
+	{ label: t('maintenance_tracker', 'Save profile'), variant: 'primary' as const, disabled: busy.value, callback: () => {
+		void doSave()
+		return false
+	} },
+])
 const selected = computed(() => catalog.value.find((profile) => profile.contentHash === selectedHash.value) ?? null)
 
 function documentToInstall(): ProfileDocument {
@@ -160,6 +214,9 @@ onMounted(load)
 				<p>
 					{{ t('maintenance_tracker', 'Adds {tasks} tasks, {meters} meters, {components} components and {groups} task groups.', { tasks: preview.materializes.workDefinitions, meters: preview.materializes.meters, components: preview.materializes.components, groups: preview.materializes.workGroups }) }}
 				</p>
+				<p v-if="(preview.materializes.specifications ?? 0) > 0 || (preview.materializes.fuelRegimes ?? 0) > 0">
+					{{ t('maintenance_tracker', 'Also adds {specs} specs and {regimes} fuel regimes.', { specs: preview.materializes.specifications ?? 0, regimes: preview.materializes.fuelRegimes ?? 0 }) }}
+				</p>
 				<NcNoteCard v-if="!preview.applicable" type="warning">
 					<p>{{ t('maintenance_tracker', 'This profile is not meant for this kind of item.') }}</p>
 				</NcNoteCard>
@@ -171,8 +228,45 @@ onMounted(load)
 						{{ warning }}
 					</li>
 				</ul>
+				<ul v-if="preview.notices && preview.notices.length > 0" class="muted">
+					<li v-for="notice in preview.notices" :key="`n-${notice}`">
+						{{ notice }}
+					</li>
+				</ul>
 			</div>
 		</template>
+		<div v-if="can.manageProfiles" class="actions">
+			<NcButton variant="secondary" @click="openSave">
+				{{ t('maintenance_tracker', 'Save as profile') }}
+			</NcButton>
+		</div>
+		<NcNoteCard v-if="saved" type="success">
+			<p>
+				{{ t('maintenance_tracker', 'Saved this item\'s setup as the profile “{name}”.', { name: saved.name }) }}
+				<RouterLink class="link" :to="{ name: 'profile', params: { uuid: saved.uuid } }">
+					{{ t('maintenance_tracker', 'Open in the profile editor') }}
+				</RouterLink>
+			</p>
+		</NcNoteCard>
+		<NcDialog
+			:open="saveOpen"
+			:name="t('maintenance_tracker', 'Save as profile')"
+			:buttons="saveButtons"
+			size="small"
+			@update:open="saveOpen = $event">
+			<p class="muted">
+				{{ t('maintenance_tracker', 'Saves components, meters, specs, compatible parts, task groups, tasks and fuel regimes. History, readings, fill-ups, costs and files are not included.') }}
+			</p>
+			<NcNoteCard v-if="saveError" type="error">
+				<p role="alert">
+					{{ saveError }}
+				</p>
+			</NcNoteCard>
+			<div class="dialog-fields">
+				<NcTextField v-model="saveName" required :label="t('maintenance_tracker', 'Profile name')" />
+				<NcTextField v-model="saveVersion" :label="t('maintenance_tracker', 'Version')" />
+			</div>
+		</NcDialog>
 	</div>
 </template>
 
@@ -192,6 +286,17 @@ onMounted(load)
 	padding: 8px 12px;
 	border-radius: var(--border-radius-large);
 	background: var(--color-background-dark);
+}
+
+.dialog-fields {
+	display: grid;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.link {
+	color: var(--color-primary-element);
+	text-decoration: underline;
 }
 
 .muted {

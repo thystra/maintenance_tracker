@@ -46,6 +46,7 @@ otherwise.
 | Costs | Amounts, currencies, dates, and descriptions |
 | Evidence references | Which Nextcloud file is attached to which item, record, or cost, with its type (photo, receipt, invoice, ...) |
 | Profiles and fitment packs | Maintenance profiles and parts-compatibility data that members install or import |
+| Workspace profiles | Profiles a workspace builds, imports or saves from an item: component, meter, task, spec, part and fuel-regime templates. *Save as profile* records the **workspace name as the author** and copies no history, readings, fill-ups, costs, files, serial numbers or VINs; free-text notes and spec values from the item are copied, so check them before you export or share a profile file. Exported, restored and deleted with the workspace. |
 | Audit trail | An append-only log of changes: what changed, when, and the Nextcloud user ID of who changed it. It contains identifiers, not notes or file names. |
 | Ownership transfers | Pending and completed workspace ownership offers between members |
 | Reminder and calendar settings and delivery log | Each user's reminder choice and selected calendar, and which reminders and calendar entries were already delivered, so they are not sent twice |

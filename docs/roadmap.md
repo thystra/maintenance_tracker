@@ -125,6 +125,11 @@ to decide eligibility or guarantee IRS compliance.
 
 ## 0.3 — Catalog and collaboration
 
+- Workspace profile builder. *(0.1.17: profile editor for components, specs,
+  meters, task groups, tasks with schedules, parts and fuel regimes/settings;
+  save an item's setup as a profile; copy an item's setup when adding an item;
+  strictly validated local JSON import/export. Sharing profiles between
+  workspaces other than by file is planned.)*
 - Signed/versioned model-specific profile bundles.
 - Profile upgrade diff and merge.
 - Vendor catalog, equivalent parts, offers, and reorder workflows.

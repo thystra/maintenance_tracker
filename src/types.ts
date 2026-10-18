@@ -249,7 +249,7 @@ export interface CreateActivityPart { uuid: string, partUuid: string, quantity: 
 export interface CreateActivity { uuid: string, performedAt: string, summary?: string | null, notes?: string | null, items: CreateActivityItem[], meters?: CreateActivityMeter[], parts?: CreateActivityPart[] }
 
 export type ProfileDocument = Record<string, unknown>
-export interface ProfileSummary { meters: number, components: number, componentTemplates: number, parts: number, workGroups: number, workDefinitions: number }
+export interface ProfileSummary { meters: number, components: number, componentTemplates: number, parts: number, workGroups: number, workDefinitions: number, specifications?: number, fuelRegimes?: number }
 export interface ProfileMetadata {
 	id: string
 	version: string
@@ -257,14 +257,20 @@ export interface ProfileMetadata {
 	category: string
 	description: string
 	dataLicense: string
-	provenance: { author: string, sourceUrl: string, sourceRevision?: string }
+	provenance: { author: string, sourceUrl?: string, sourceRevision?: string }
 	applicability: Record<string, unknown>
 	contentHash: string
 	summary: ProfileSummary
-	origin: 'bundled' | 'local'
+	origin: 'bundled' | 'local' | 'workspace'
 	trustState: 'first_party' | 'local'
 }
-export interface BundledProfile extends ProfileMetadata { profile: ProfileDocument }
+export interface BundledProfile extends ProfileMetadata {
+	profile: ProfileDocument
+	/** Workspace profiles (origin workspace) only. */
+	uuid?: string
+	revision?: number
+	updatedAt?: string
+}
 export interface ProfileCatalogList { workspace: string, items: BundledProfile[] }
 export interface ProfileValidationResult { valid: true, profile: ProfileMetadata }
 export interface ProfilePreview {
@@ -274,9 +280,10 @@ export interface ProfilePreview {
 	installable: boolean
 	conflicts: string[]
 	warnings: string[]
+	notices?: string[]
 	materializes: ProfileSummary
 }
-export interface ProfileBinding { sourceType: 'component' | 'meter' | 'work_group' | 'work_definition', sourceKey: string, ordinal: number, targetUuid: string }
+export interface ProfileBinding { sourceType: 'component' | 'meter' | 'work_group' | 'work_definition' | 'part' | 'offer' | 'specification' | 'fuel_regime', sourceKey: string, ordinal: number, targetUuid: string }
 export interface ProfileInstallation {
 	installationUuid: string
 	assetUuid: string
@@ -287,7 +294,7 @@ export interface ProfileInstallation {
 		origin: 'bundled' | 'local'
 		trustState: 'first_party' | 'local'
 		dataLicense: string
-		provenance: { author: string, sourceUrl: string, sourceRevision: string | null }
+		provenance: { author: string, sourceUrl: string | null, sourceRevision: string | null }
 	}
 	installedAt: string
 	bindings: ProfileBinding[]
