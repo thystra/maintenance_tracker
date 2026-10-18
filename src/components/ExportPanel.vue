@@ -7,6 +7,9 @@
 import type { ExportFormat } from '../services/workspaceApi.ts'
 
 import { ref } from 'vue'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import { t } from '../l10n.ts'
 import { downloadExport } from '../services/workspaceApi.ts'
 
@@ -44,36 +47,53 @@ async function run(): Promise<void> {
 
 <template>
 	<section class="export-panel" aria-labelledby="export-heading">
-		<h2 id="export-heading">
+		<h3 id="export-heading">
 			{{ t('maintenance_tracker', 'Export data') }}
-		</h2>
-		<p class="hint">
+		</h3>
+		<p class="muted">
 			{{ t('maintenance_tracker', 'Download what your role ({role}) can read in this workspace. Exports can contain private notes, costs, serial numbers and locations; store them carefully. Evidence lists only files your own Files can open.', { role: role }) }}
 		</p>
-		<form class="form-grid" @submit.prevent="run">
+		<form class="inline-form" @submit.prevent="run">
 			<fieldset>
 				<legend>{{ t('maintenance_tracker', 'Format') }}</legend>
-				<label class="choice"><input v-model="format" type="radio" value="zip"><span>{{ t('maintenance_tracker', 'ZIP (JSON plus one CSV per table)') }}</span></label>
-				<label class="choice"><input v-model="format" type="radio" value="json"><span>{{ t('maintenance_tracker', 'Single JSON document') }}</span></label>
+				<NcCheckboxRadioSwitch
+					v-model="format"
+					type="radio"
+					value="zip"
+					name="export-format">
+					{{ t('maintenance_tracker', 'ZIP (JSON plus one CSV per table)') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch
+					v-model="format"
+					type="radio"
+					value="json"
+					name="export-format">
+					{{ t('maintenance_tracker', 'Single JSON document') }}
+				</NcCheckboxRadioSwitch>
 			</fieldset>
-			<label class="choice">
-				<input
-					v-model="includeFiles"
-					type="checkbox"
-					:disabled="format !== 'zip'"
-					aria-describedby="export-files-hint">
-				<span>{{ t('maintenance_tracker', 'Include evidence files') }}</span>
-			</label>
-			<p id="export-files-hint" class="hint">
+			<NcCheckboxRadioSwitch
+				v-model="includeFiles"
+				type="switch"
+				:disabled="format !== 'zip'"
+				aria-describedby="export-files-hint">
+				{{ t('maintenance_tracker', 'Include evidence files') }}
+			</NcCheckboxRadioSwitch>
+			<p id="export-files-hint" class="muted">
 				{{ t('maintenance_tracker', 'Only files you can open are added, up to 100 MiB each and 512 MiB in total; skipped files are listed in manifest.json.') }}
 			</p>
-			<button type="submit" :disabled="busy" :aria-busy="busy ? 'true' : 'false'">
+			<NcButton
+				type="submit"
+				variant="primary"
+				:disabled="busy"
+				:aria-busy="busy ? 'true' : 'false'">
 				{{ busy ? t('maintenance_tracker', 'Exporting…') : t('maintenance_tracker', 'Download export') }}
-			</button>
+			</NcButton>
 		</form>
-		<p v-if="error" class="notice notice--error" role="alert">
-			{{ error }}
-		</p>
+		<NcNoteCard v-if="error" type="error">
+			<p role="alert">
+				{{ error }}
+			</p>
+		</NcNoteCard>
 		<p class="export-status" role="status" aria-live="polite">
 			{{ status }}
 		</p>
@@ -81,23 +101,17 @@ async function run(): Promise<void> {
 </template>
 
 <style scoped>
-.choice {
-	display: flex;
-	gap: 8px;
-	align-items: center;
-}
-
 fieldset {
-	border: 0;
 	margin: 0;
 	padding: 0;
+	border: 0;
 }
 
 legend {
 	font-weight: bold;
 }
 
-.hint {
+.muted {
 	color: var(--color-text-maxcontrast);
 }
 </style>

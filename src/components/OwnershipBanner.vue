@@ -7,6 +7,9 @@
 import type { OwnershipTransfer } from '../workspaceTypes.ts'
 
 import { onMounted, reactive, ref } from 'vue'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import { t } from '../l10n.ts'
 import { acceptTransfer, listTransfers, ocsMessage, transferAction } from '../services/workspaceApi.ts'
 
@@ -20,7 +23,7 @@ const notice = ref('')
 
 function bytes(value: number | null | undefined): string {
 	if (value === null || value === undefined) {
-		return 'unlimited'
+		return t('maintenance_tracker', 'unlimited')
 	}
 	const units = ['B', 'KB', 'MB', 'GB', 'TB']
 	let size = value
@@ -46,7 +49,7 @@ async function act(operation: () => Promise<OwnershipTransfer>, done: string): P
 	notice.value = ''
 	try {
 		const result = await operation()
-		notice.value = result.status === 'completed' ? done : `Transfer ${result.status}.`
+		notice.value = result.status === 'completed' ? done : t('maintenance_tracker', 'Transfer status: {status}.', { status: result.status })
 		emit('changed')
 	} catch (reason) {
 		error.value = ocsMessage(reason)
@@ -62,19 +65,23 @@ defineExpose({ load })
 
 <template>
 	<div v-if="incoming.length > 0 || notice || error" class="ownership-banner">
-		<p v-if="notice" class="notice" role="status">
-			{{ notice }}
-		</p>
-		<p v-if="error" class="notice notice--error" role="alert">
-			{{ error }}
-		</p>
+		<NcNoteCard v-if="notice" type="success">
+			<p role="status">
+				{{ notice }}
+			</p>
+		</NcNoteCard>
+		<NcNoteCard v-if="error" type="error">
+			<p role="alert">
+				{{ error }}
+			</p>
+		</NcNoteCard>
 		<section
 			v-for="transfer in incoming"
 			:key="transfer.uuid"
-			class="panel ownership-offer"
+			class="ownership-offer"
 			aria-live="polite">
 			<template v-if="transfer.status === 'pending'">
-				<h2>{{ t('maintenance_tracker', 'Workspace ownership offered to you') }}</h2>
+				<h3>{{ t('maintenance_tracker', 'Workspace ownership offered to you') }}</h3>
 				<p>
 					{{ transfer.leaveAfter
 						? t('maintenance_tracker', '{user} wants to make you the owner of {workspace} (offer expires {date}). They will leave the workspace.', { user: transfer.fromUid, workspace: transfer.workspace?.name ?? t('maintenance_tracker', 'a workspace'), date: transfer.expiresAt.slice(0, 10) })
@@ -83,46 +90,44 @@ defineExpose({ load })
 				<p v-if="transfer.quota">
 					{{ t('maintenance_tracker', 'Accepting moves the workspace evidence folder ({folderBytes}) into your Files. Uploads by every member will count against your storage quota; you have {recipientFreeBytes} free.', { folderBytes: bytes(transfer.quota.folderBytes), recipientFreeBytes: bytes(transfer.quota.recipientFreeBytes) }) }}
 				</p>
-				<p v-if="transfer.quota && transfer.quota.fits === false" class="notice notice--error" role="alert">
-					{{ t('maintenance_tracker', 'The folder does not fit in your remaining quota. Free up space or ask an administrator before accepting.') }}
-				</p>
-				<label class="checkbox">
-					<input v-model="acknowledged[transfer.uuid]" type="checkbox">
-					<span>{{ t('maintenance_tracker', 'I understand the evidence counts against my quota and I become responsible for this workspace.') }}</span>
-				</label>
+				<NcNoteCard v-if="transfer.quota && transfer.quota.fits === false" type="error">
+					<p role="alert">
+						{{ t('maintenance_tracker', 'The folder does not fit in your remaining quota. Free up space or ask an administrator before accepting.') }}
+					</p>
+				</NcNoteCard>
+				<NcCheckboxRadioSwitch v-model="acknowledged[transfer.uuid]">
+					{{ t('maintenance_tracker', 'I understand the evidence counts against my quota and I become responsible for this workspace.') }}
+				</NcCheckboxRadioSwitch>
 				<div class="actions">
-					<button
-						type="button"
-						class="primary"
+					<NcButton
+						variant="primary"
 						:disabled="busy || !acknowledged[transfer.uuid] || transfer.quota?.fits === false"
 						@click="act(() => acceptTransfer(transfer.uuid), t('maintenance_tracker', 'You now own the workspace.'))">
 						{{ t('maintenance_tracker', 'Accept ownership') }}
-					</button>
-					<button type="button" :disabled="busy" @click="act(() => transferAction(transfer.uuid, 'decline'), t('maintenance_tracker', 'Offer declined.'))">
+					</NcButton>
+					<NcButton :disabled="busy" @click="act(() => transferAction(transfer.uuid, 'decline'), t('maintenance_tracker', 'Offer declined.'))">
 						{{ t('maintenance_tracker', 'Decline') }}
-					</button>
+					</NcButton>
 				</div>
 			</template>
 			<template v-else>
-				<h2>{{ t('maintenance_tracker', 'Ownership transfer not finished') }}</h2>
+				<h3>{{ t('maintenance_tracker', 'Ownership transfer not finished') }}</h3>
 				<p>
 					{{ t('maintenance_tracker', 'The transfer of {workspace} stopped at the “{step}” step. It is safe to resume; nothing is half-moved.', { workspace: transfer.workspace?.name ?? t('maintenance_tracker', 'a workspace'), step: transfer.step }) }}
 				</p>
 				<div class="actions">
-					<button
-						type="button"
-						class="primary"
+					<NcButton
+						variant="primary"
 						:disabled="busy"
 						@click="act(() => transferAction(transfer.uuid, 'resume'), t('maintenance_tracker', 'Transfer finished.'))">
 						{{ t('maintenance_tracker', 'Resume transfer') }}
-					</button>
-					<button
+					</NcButton>
+					<NcButton
 						v-if="transfer.abortable"
-						type="button"
 						:disabled="busy"
 						@click="act(() => transferAction(transfer.uuid, 'abort'), t('maintenance_tracker', 'Transfer aborted.'))">
 						{{ t('maintenance_tracker', 'Abort') }}
-					</button>
+					</NcButton>
 				</div>
 			</template>
 		</section>
@@ -130,19 +135,26 @@ defineExpose({ load })
 </template>
 
 <style scoped>
+.ownership-banner {
+	display: grid;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
 .ownership-offer {
+	padding: 12px 16px;
+	border: 1px solid var(--color-border);
 	border-inline-start: 4px solid var(--color-primary-element);
+	border-radius: var(--border-radius-large);
+}
+
+.ownership-offer h3 {
+	margin-top: 0;
 }
 
 .actions {
 	display: flex;
 	gap: 8px;
 	margin-top: 8px;
-}
-
-.checkbox {
-	display: flex;
-	gap: 8px;
-	align-items: flex-start;
 }
 </style>
