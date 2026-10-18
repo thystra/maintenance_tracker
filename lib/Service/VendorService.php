@@ -33,6 +33,11 @@ final class VendorService {
 		return array_map(fn (array $row): array => $this->toApi($row), $this->repository->listVendors($context->workspace()->getId(), $includeArchived));
 	}
 
+	/** Whether vendor websites are shown and accepted (the administrator's outside-links setting). */
+	public function websitesEnabled(): bool {
+		return $this->outsideLinks->enabled();
+	}
+
 	/** @return array<string,mixed> */
 	public function findRow(WorkspaceContext $context, string $uuid, bool $includeArchived = false): array {
 		$row = $this->repository->findVendorByUuid($context->workspace()->getId(), CatalogInput::uuid($uuid, 'vendorUuid'), $includeArchived);
