@@ -5,11 +5,12 @@
 
 <script setup lang="ts">
 // One item: an overview of what is due, then tabs for tasks, history,
-// readings, costs, files and the less common setup (components, specs,
+// readings, fuel (vehicles), costs, files and the less common setup (components, specs,
 // profiles, relationships).
+import type { FuelSettings } from '../fuelTypes.ts'
 import type { Activity, Asset, Component, MaintenanceForecastItem, Meter, WorkDefinition, WorkGroup } from '../types.ts'
 
-import { mdiArrowLeft, mdiDeleteOutline, mdiPencilOutline, mdiWrenchOutline } from '@mdi/js'
+import { mdiArrowLeft, mdiDeleteOutline, mdiGasStationOutline, mdiPencilOutline, mdiWrenchOutline } from '@mdi/js'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
@@ -22,6 +23,7 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import CostsPanel from '../components/CostsPanel.vue'
 import EvidencePanel from '../components/EvidencePanel.vue'
+import FuelPanel from '../components/FuelPanel.vue'
 import GroupBreadcrumbs from '../components/GroupBreadcrumbs.vue'
 import HistoryPanel from '../components/HistoryPanel.vue'
 import ItemFormDialog from '../components/ItemFormDialog.vue'
@@ -34,6 +36,7 @@ import TasksPanel from '../components/TasksPanel.vue'
 import { dueText, errorMessage, forecastLabel, formatDate, scheduleLabel } from '../format.ts'
 import { t } from '../l10n.ts'
 import { deleteAsset, getActivities, getAsset, getComponents, getMaintenanceForecast, getMeters, getWorkDefinitions, getWorkGroups } from '../services/api.ts'
+import { getFuelSettings, updateFuelSettings } from '../services/fuelApi.ts'
 import { can, categoryName, loadAssets, loadGroups, state } from '../store.ts'
 
 const props = defineProps<{ uuid: string, tab?: string }>()
@@ -54,12 +57,14 @@ const logOpen = ref(false)
 const logDefinition = ref<string | null>(null)
 const confirmDelete = ref(false)
 const busy = ref(false)
+const fuel = ref<FuelSettings | null>(null)
 
 const tabs = computed(() => [
 	{ id: 'overview', label: t('maintenance_tracker', 'Overview') },
 	{ id: 'tasks', label: t('maintenance_tracker', 'Tasks') },
 	{ id: 'history', label: t('maintenance_tracker', 'History') },
 	{ id: 'readings', label: t('maintenance_tracker', 'Readings') },
+	...(fuel.value?.shown ? [{ id: 'fuel', label: t('maintenance_tracker', 'Fuel') }] : []),
 	{ id: 'costs', label: t('maintenance_tracker', 'Costs') },
 	{ id: 'files', label: t('maintenance_tracker', 'Files') },
 	{ id: 'setup', label: t('maintenance_tracker', 'Setup') },
@@ -102,14 +107,16 @@ async function load(): Promise<void> {
 	try {
 		asset.value = await getAsset(props.uuid)
 		state.pageTitle = asset.value.name
-		const [forecastList, definitionList, meterList, componentList, groupList, activityList] = await Promise.all([
+		const [forecastList, definitionList, meterList, componentList, groupList, activityList, fuelSettings] = await Promise.all([
 			getMaintenanceForecast(props.uuid),
 			getWorkDefinitions(props.uuid),
 			getMeters(props.uuid),
 			getComponents(props.uuid),
 			getWorkGroups(props.uuid),
 			getActivities(props.uuid),
+			getFuelSettings(props.uuid).catch(() => null),
 		])
+		fuel.value = fuelSettings
 		forecast.value = forecastList.items
 		definitions.value = definitionList.items
 		meters.value = meterList.items
@@ -157,6 +164,22 @@ function log(definitionUuid: string | null = null): void {
 
 async function saved(): Promise<void> {
 	await Promise.all([load(), loadAssets(), loadGroups()])
+}
+
+/** Show or hide the Fuel tab for this item (overrides the automatic choice). */
+async function toggleFuel(): Promise<void> {
+	const current = fuel.value
+	if (current === null) {
+		return
+	}
+	try {
+		fuel.value = await updateFuelSettings(props.uuid, current.revision, { fuelTab: current.shown ? 'off' : 'on' })
+		if (fuel.value.shown) {
+			selectTab('fuel')
+		}
+	} catch (reason) {
+		error.value = errorMessage(reason)
+	}
 }
 
 async function remove(): Promise<void> {
@@ -219,6 +242,12 @@ onMounted(load)
 								<NcIconSvgWrapper :path="mdiPencilOutline" />
 							</template>
 							{{ t('maintenance_tracker', 'Edit item') }}
+						</NcActionButton>
+						<NcActionButton v-if="fuel" closeAfterClick @click="toggleFuel">
+							<template #icon>
+								<NcIconSvgWrapper :path="mdiGasStationOutline" />
+							</template>
+							{{ fuel.shown ? t('maintenance_tracker', 'Hide the Fuel tab') : t('maintenance_tracker', 'Show the Fuel tab') }}
 						</NcActionButton>
 						<NcActionButton closeAfterClick @click="confirmDelete = true">
 							<template #icon>
@@ -345,6 +374,7 @@ onMounted(load)
 					:meters="meters"
 					:components="components"
 					@changed="load" />
+				<FuelPanel v-else-if="activeTab === 'fuel'" :assetUuid="asset.uuid" @settings="fuel = $event" />
 				<CostsPanel v-else-if="activeTab === 'costs'" :assetUuid="asset.uuid" />
 				<EvidencePanel v-else-if="activeTab === 'files'" targetType="asset" :targetUuid="asset.uuid" />
 				<SetupPanel

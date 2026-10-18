@@ -95,13 +95,26 @@ Not in the 0.1 series:
 
 ## 0.2 — Vehicle and business mileage
 
-- Vehicle extension and odometer reconciliation.
-- Fuel/energy entries with full/partial and missed-fill handling.
-- Simple fuel mode.
+Partly delivered in 0.1.16 (the fuel log): fuel entries, per-item operating
+regimes, fuel units and economy/spend statistics. Items marked *(0.1.16)* are
+delivered in that form; the rest is still planned.
+
+- Vehicle extension and odometer reconciliation. *(0.1.16: per-item fuel
+  settings and units only; VIN/plate data and annual odometer reconciliation
+  are planned.)*
+- Fuel/energy entries with full/partial and missed-fill handling. *(0.1.16:
+  liquid fuels; electric charging is planned.)*
+- Simple fuel mode. *(0.1.16: fill-ups need only date, odometer and volume;
+  regimes are optional.)*
 - Advanced operating contexts: empty, hauling, towing a named trailer.
+  *(0.1.16: user-defined regimes per item with a default; linking a regime to
+  a related item such as a trailer is planned.)*
 - Context-tagged trip/odometer segments for meaningful economy comparisons.
+  *(0.1.16: stretches between full fills that mix regimes are marked mixed and
+  left out of per-regime figures; trip segments are planned.)*
 - Complete cost ledger categories.
-- Tracked-cost, TCO-coverage, and cost-per-distance reports.
+- Tracked-cost, TCO-coverage, and cost-per-distance reports. *(0.1.16: fuel
+  spend and fuel cost per distance on the Fuel tab.)*
 - Manual trip logging separated into business, commuting, personal, medical,
   charitable, and other.
 - Effective-dated mileage rates with primary-source URLs.

@@ -12,7 +12,10 @@ const props = withDefaults(defineProps<{ open: boolean, name: string, message: s
 const emit = defineEmits<{ (event: 'update:open', value: boolean): void, (event: 'confirm'): void }>()
 
 const buttons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => emit('update:open', false) },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		emit('update:open', false)
+		return false
+	} },
 	{ label: props.confirmLabel || t('maintenance_tracker', 'Delete'), variant: 'error' as const, disabled: props.busy, callback: () => {
 		emit('confirm')
 		return false

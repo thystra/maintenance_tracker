@@ -34,6 +34,7 @@ final class ImportPolicy {
 		'fitment_slots', 'fitment_offers', 'fitments', 'asset_fitments',
 		'activities', 'activity_items', 'activity_meters', 'activity_parts',
 		'occurrences', 'reminder_policy', 'cost_settings', 'costs',
+		'fuel_settings', 'fuel_regimes', 'fuel',
 	];
 
 	/**
@@ -60,6 +61,7 @@ final class ImportPolicy {
 		'fitment_imports' => ['revision_id' => 'fitment_revisions'],
 		'fitments' => ['target_id' => 'fitment_targets'],
 		'asset_fitments' => ['target_id' => 'fitment_targets'],
+		'fuel' => ['context_id' => 'fuel_regimes', 'cost_id' => 'costs'],
 	];
 
 	/** Polymorphic references: section => [type column, id column, type => section]. */

@@ -573,6 +573,22 @@ for (const eventType of ['item_group.created', 'item_group.moved', 'item_group.a
 }
 expect(api.includes('/item-groups/{uuid}/move') && api.includes('PUT /assets/{assetUuid}/group'), 'API documentation must cover the item group endpoints.')
 
+// 0.1.16 fuel log.
+const fuelService = await read('lib/Service/FuelService.php')
+const fuelEconomy = await read('lib/Service/FuelEconomy.php')
+expect(!/OCP\\Files|IRootFolder|EvidenceService \$/.test(fuelService), 'The fuel service must not call Files; receipts attach through the evidence API outside fuel transactions.')
+expect(fuelService.includes("'category' => 'fuel'") && fuelService.includes("'cost_id'") && !/'(amount|price)_minor'/.test(await read('lib/Migration/Version1160Date20261018180000.php')), 'Fuel prices must live in a linked maint_costs entry, not on the fuel ticket.')
+expect(fuelService.includes("'source' => ['type' => 'fuel'"), 'Fuel odometer values must be recorded as meter readings with source type fuel.')
+expect(fuelEconomy.includes("'mixed' => $mixed") && fuelEconomy.includes('missed_fill'), 'Fuel economy must mark mixed-regime stretches and skip stretches with a missed fill-up.')
+expect(importPolicy.includes("'fuel' => ['context_id' => 'fuel_regimes', 'cost_id' => 'costs']"), 'Restore must remap fuel ticket regimes and cost entries.')
+for (const table of ['maint_fuel', 'maint_contexts', 'maint_vehicle']) {
+	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < userLifecycle.indexOf("'maint_costs'"), `${table} must be purged before maint_costs.`)
+}
+for (const eventType of ['fuel.created', 'fuel.archived', 'fuel_regime.created', 'fuel_settings.updated']) {
+	expect(auditEvents.includes(`'${eventType}'`), `Audit event vocabulary must include ${eventType}.`)
+}
+expect(api.includes('## Fuel log (0.1.16)') && api.includes('/assets/{assetUuid}/fuel-stats') && (await read('docs/privacy-policy.md')).includes('**station**'), 'API and privacy documentation must cover the fuel log.')
+
 try {
 	await access('.github/workflows/ci.yml')
 	failures.push('GitHub mirror must not retain a competing automatic CI workflow.')

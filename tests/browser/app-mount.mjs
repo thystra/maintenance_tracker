@@ -4,7 +4,7 @@
  *
  * Headless browser check: log in, open the app, visit every page, run the
  * main create/delete flows (vendor, part, item with a task, item deletion,
- * item groups),
+ * item groups, fuel log with regimes and fill-ups),
  * and assert that nothing from this app logs a console error, throws, or
  * gets an HTTP error. Run by tests/integration/nextcloud-smoke.sh when
  * NC_SMOKE_BROWSER=1, inside the Playwright image on the Nextcloud
@@ -226,6 +226,64 @@ try {
 		await shot('24-delete-group')
 		await dialog().getByRole('button', { name: 'Delete' }).click()
 		await page.locator('.app-navigation').getByText(subgroup, { exact: true }).waitFor({ state: 'detached', timeout: 10000 })
+	})
+
+	await step('fuel log', async () => {
+		const name = `Fuel van ${stamp}`
+		const local = (daysAgo) => {
+			const date = new Date(Date.now() - daysAgo * 86400000)
+			const pad = (value) => String(value).padStart(2, '0')
+			return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T09:00`
+		}
+		await nav('Items').click()
+		await heading('Items').waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main').getByRole('button', { name: 'Add item' }).first().click()
+		await dialog().getByLabel('Name', { exact: true }).fill(name)
+		await dialog().getByRole('button', { name: 'Add item' }).click()
+		await heading(name).waitFor({ state: 'visible', timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		// Vehicles get the Fuel tab automatically; other items switch it on.
+		await page.getByRole('button', { name: `More actions for ${name}` }).click()
+		await page.getByRole('menuitem', { name: 'Edit item' }).waitFor({ timeout: 10000 })
+		const showFuel = page.getByRole('menuitem', { name: 'Show the Fuel tab' })
+		if (await showFuel.count() > 0) {
+			await showFuel.click()
+		} else {
+			await page.keyboard.press('Escape')
+		}
+		await page.getByRole('tab', { name: 'Fuel', exact: true }).click()
+		await page.getByText('No fill-ups yet').waitFor({ timeout: 10000 })
+		await page.getByRole('button', { name: 'Fuel options' }).click()
+		await page.getByRole('menuitem', { name: 'Operating regimes' }).click()
+		for (const regime of ['Empty', 'Towing']) {
+			await dialog().getByLabel('New regime', { exact: true }).fill(regime)
+			await dialog().getByRole('button', { name: 'Add regime' }).click()
+			await dialog().getByLabel(`Name of regime ${regime}`).waitFor({ timeout: 10000 })
+		}
+		await shot('33-fuel-regimes')
+		await dialog().getByRole('button', { name: 'Close' }).last().click()
+		await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 })
+		const fills = [[6, '1000', '12', '45.00'], [1, '1330', '11', '42.35']]
+		for (const [daysAgo, odometer, volume, total] of fills) {
+			await page.locator('#maintenance-main').getByRole('button', { name: 'Add fill-up' }).click()
+			await dialog().locator('input[type=datetime-local]').fill(local(daysAgo))
+			await dialog().getByLabel('Odometer', { exact: true }).fill(odometer)
+			await dialog().getByLabel('Fuel added', { exact: true }).fill(volume)
+			await dialog().getByLabel('Total price (optional)').fill(total)
+			if (odometer === '1330') {
+				await shot('32-add-fill-up')
+			}
+			await dialog().getByRole('button', { name: 'Add fill-up' }).click()
+			await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 })
+			await page.locator('#maintenance-main', { hasText: `at ${odometer}` }).waitFor({ timeout: 10000 })
+		}
+		await page.locator('#maintenance-main', { hasText: '30.0 MPG' }).first().waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('31-fuel-tab')
+		await nav('Dashboard').click()
+		await page.locator('#fuel-heading').waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('34-dashboard-fuel')
 	})
 
 	await step('settings sections', async () => {

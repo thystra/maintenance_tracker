@@ -44,7 +44,7 @@ has *New group*.
 
 | Page | Route | Purpose |
 |------|-------|---------|
-| Dashboard | `#/` | Landing page: counts (items by kind, overdue, due), *By group* (each top-level group and *Ungrouped* with item, overdue and due-soon counts; shown once groups exist), *Needs attention* (overdue/due/due soon/needs a first log), *Coming up* in the next 60 days, recent activity (Owner/Manager, from the audit trail), quick links. Empty workspace: one call to action, *Add your first item*. |
+| Dashboard | `#/` | Landing page: counts (items by kind, overdue, due), *By group* (each top-level group and *Ungrouped* with item, overdue and due-soon counts; shown once groups exist), *Needs attention* (overdue/due/due soon/needs a first log), *Coming up* in the next 60 days, *Fuel economy* (items with fill-ups: 90-day and latest economy, linking to the Fuel tab), recent activity (Owner/Manager, from the audit trail), quick links. Empty workspace: one call to action, *Add your first item*. |
 | Items | `#/items` | Search and category filter; each row opens the item and has *Log maintenance*, *Edit*, *Delete*. *Add item* and *New group* in the header; top-level groups and *Ungrouped* as shortcuts above the list. |
 | Items in a group | `#/items?group=<uuid>` | Breadcrumbs (Items › House › Basement), the group's items including its subgroups, shortcuts to subgroups, *Add subgroup*, *Add item* (lands in this group), and *Rename/Move/Delete group* in the actions menu. `?group=none` lists ungrouped items. |
 | Item | `#/items/<uuid>/<tab>` | Breadcrumbs when the item is in a group. Header: *Log maintenance*, and *Edit*/*Delete* in the actions menu. Tabs below. |
@@ -60,6 +60,7 @@ Item tabs:
 | Tasks | Recurring work: add/edit/delete; repeat by time, by meter, or whichever comes first; optional component, group and instructions. |
 | History | Maintenance records (newest first) with readings, parts used and notes; files per record; delete. |
 | Readings | Meters with their latest reading, *Add reading*, reading history, add/delete meter. |
+| Fuel | Shown for items whose category or profile is a vehicle or that have a distance (odometer) meter; *Show/Hide the Fuel tab* in the item's actions menu overrides that per item. Period (30/90/365 days, this year, all time, custom range) and economy unit (MPG, km/L, L/100 km) filters; *Fuel economy* (average, best, worst, measured distance) and *Fuel spend* (spend, volume, cost per distance) cards; *By operating regime* table; *Economy over time* chart (hollow dots mark mixed stretches; a data table follows for screen readers); fill-ups with economy, price and receipts, edit/delete. *Add fill-up* (Contributor and up) and *Fuel options* → *Operating regimes* / *Fuel settings* (Owner, Manager). |
 | Costs | Totals per currency, entries with receipts, add/delete. |
 | Files | Evidence linked to the item (upload into the workspace folder or attach from Files). |
 | Setup | Maintenance profile (choose → preview → apply; paste JSON as an advanced option), components and specifications, linked items (lasting relationships or time-bound assignments), task groups, parts that fit, work queue. |
@@ -107,6 +108,18 @@ administration settings.
    *Delete* asks for confirmation and moves the group's subgroups and items up
    one level, so no item is ever deleted with a group.
 
+10. **Log a fill-up.** Item → Fuel → *Add fill-up*: date and time, odometer,
+   amount of fuel, full or partial fill, *A previous fill-up was not recorded*
+   when one was missed, regime, price (per unit or total), station and notes.
+   The odometer is also saved as a reading, the price as a fuel cost entry;
+   attach the receipt in the fill-up's files right after saving. *Fuel
+   options* → *Operating regimes* adds, renames, deletes and picks the default
+   regime (for example Empty, Loaded, Towing); *Fuel settings* sets units, the
+   default fuel type and whether the tab is shown.
+
+Dialogs close only after a successful save or on *Cancel*; if saving fails the
+dialog stays open with the error.
+
 ## Known limits
 
 - The dashboard and item pages read the live forecast. The materialized work
@@ -118,3 +131,6 @@ administration settings.
 - Relationship type labels come from the server in English.
 - Item groups are re-arranged with *Move* dialogs; there is no drag and drop
   in the sidebar yet.
+- Deleting a fill-up between two others merges their stretches; mark the next
+  fill-up *A previous fill-up was not recorded* instead when a fill-up is
+  genuinely missing.

@@ -95,8 +95,11 @@ async function save(): Promise<false | void> {
 }
 
 const buttons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => { dialog.value = null } },
-	{ label: t('maintenance_tracker', 'Add'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		dialog.value = null
+		return false
+	} },
+	{ label: t('maintenance_tracker', 'Add'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
 ])
 
 onMounted(load)

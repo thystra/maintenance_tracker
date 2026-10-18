@@ -4,7 +4,7 @@
  */
 
 export type EvidenceKind = 'photo' | 'video' | 'receipt' | 'invoice' | 'document' | 'other'
-export type EvidenceTargetType = 'asset' | 'activity' | 'cost'
+export type EvidenceTargetType = 'asset' | 'activity' | 'cost' | 'fuel'
 
 export interface EvidenceFile {
 	fileId: number

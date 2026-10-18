@@ -6,9 +6,10 @@
 <script setup lang="ts">
 // Landing page: what needs attention now, what is coming up, and the quick
 // actions people use most (log maintenance, add an item).
+import type { FuelSummaryItem } from '../fuelTypes.ts'
 import type { AuditEntry, WorkspaceForecast, WorkspaceForecastItem } from '../types.ts'
 
-import { mdiCalendarClock, mdiFolderOutline, mdiPlus, mdiWrenchOutline } from '@mdi/js'
+import { mdiCalendarClock, mdiFolderOutline, mdiGasStationOutline, mdiPlus, mdiWrenchOutline } from '@mdi/js'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -23,13 +24,16 @@ import OwnershipBanner from '../components/OwnershipBanner.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StateBadge from '../components/StateBadge.vue'
 import { assetClassLabel, dueText, errorMessage, forecastLabel, formatDate } from '../format.ts'
+import { formatEconomy } from '../fuelFormat.ts'
 import { n, t } from '../l10n.ts'
 import { getAudit, getWorkspaceForecast } from '../services/api.ts'
+import { getFuelSummary } from '../services/fuelApi.ts'
 import { activeWorkspace, assetName, can, childGroups, groupSubtree, loadAssets, loadGroups, loadWorkspaces, state } from '../store.ts'
 
 const router = useRouter()
 const forecast = ref<WorkspaceForecast | null>(null)
 const audit = ref<AuditEntry[]>([])
+const fuel = ref<FuelSummaryItem[]>([])
 const loading = ref(true)
 const error = ref('')
 const addOpen = ref(false)
@@ -111,6 +115,7 @@ const auditLabels: Record<string, () => string> = {
 	'workspace.renamed': () => t('maintenance_tracker', 'Workspace renamed'),
 	'item_group.created': () => t('maintenance_tracker', 'Group created'),
 	'asset.group_changed': () => t('maintenance_tracker', 'Item group changed'),
+	'fuel.created': () => t('maintenance_tracker', 'Fill-up added'),
 }
 const recent = computed(() => audit.value.filter((entry) => auditLabels[entry.eventType] !== undefined).slice(0, 8))
 
@@ -121,6 +126,11 @@ async function load(): Promise<void> {
 		forecast.value = await getWorkspaceForecast()
 	} catch (reason) {
 		error.value = errorMessage(reason)
+	}
+	try {
+		fuel.value = (await getFuelSummary()).items
+	} catch {
+		fuel.value = []
 	}
 	if (can.readAudit) {
 		try {
@@ -286,6 +296,30 @@ onMounted(load)
 							</template>
 							<template v-if="row.overdue > 0 || row.due > 0" #details>
 								<StateBadge :state="row.overdue > 0 ? 'overdue' : 'due_soon'" :label="row.overdue > 0 ? forecastLabel('overdue') : forecastLabel('due_soon')" />
+							</template>
+						</NcListItem>
+					</ul>
+				</section>
+
+				<section v-if="fuel.length > 0" class="card" aria-labelledby="fuel-heading">
+					<h3 id="fuel-heading">
+						<NcIconSvgWrapper :path="mdiGasStationOutline" :size="20" inline />
+						{{ t('maintenance_tracker', 'Fuel economy') }}
+					</h3>
+					<ul class="list">
+						<NcListItem
+							v-for="row in fuel"
+							:key="row.assetUuid"
+							:name="row.name"
+							:to="{ name: 'item', params: { uuid: row.assetUuid, tab: 'fuel' } }"
+							compact>
+							<template #subname>
+								{{ row.economy90d === null
+									? t('maintenance_tracker', 'Last fill-up {date}', { date: formatDate(row.lastFilledAt) })
+									: t('maintenance_tracker', '{economy} over 90 days · last fill-up {date}', { economy: formatEconomy(row.economy90d, row.economyUnit), date: formatDate(row.lastFilledAt) }) }}
+							</template>
+							<template v-if="row.lastEconomy !== null" #details>
+								<span :title="t('maintenance_tracker', 'Last measured tank')">{{ formatEconomy(row.lastEconomy, row.economyUnit) }}</span>
 							</template>
 						</NcListItem>
 					</ul>

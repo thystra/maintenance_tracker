@@ -49,6 +49,7 @@ fixture_paths=(
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 	lib/Service/VendorService.php src/App.vue src/router.ts src/views/VendorsView.vue
 	lib/Migration/Version1130Date20261018000000.php lib/Migration/Version1150Date20261018120000.php lib/Service/ItemGroupService.php lib/Service/ItemGroupTree.php
+	lib/Migration/Version1160Date20261018180000.php lib/Service/FuelService.php lib/Service/FuelEconomy.php
 )
 
 copy_fixture() {
@@ -672,5 +673,17 @@ expect_rejected 'item group moves without cycle checks' 'Item group moves must b
 copy_fixture
 sed -i "s/'maint_asset_grp',//" "$tmp/fixture/lib/Service/UserLifecycleService.php"
 expect_rejected 'item group membership missing from the purge registry' 'Account deletion purge registry must cover workspace-scoped table maint_asset_grp.' "$tmp/group-purge.out"
+
+copy_fixture
+sed -i "s/'category' => 'fuel'/'category' => 'other'/" "$tmp/fixture/lib/Service/FuelService.php"
+expect_rejected 'fuel prices outside the cost ledger' 'Fuel prices must live in a linked maint_costs entry, not on the fuel ticket.' "$tmp/fuel-cost.out"
+
+copy_fixture
+sed -i "s/'mixed' => \$mixed/'mixed' => false/" "$tmp/fixture/lib/Service/FuelEconomy.php"
+expect_rejected 'fuel economy without mixed-regime stretches' 'Fuel economy must mark mixed-regime stretches and skip stretches with a missed fill-up.' "$tmp/fuel-mixed.out"
+
+copy_fixture
+sed -i "s/'maint_fuel', //; s/'maint_fuel',//" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+expect_rejected 'fuel tickets missing from the purge registry' 'maint_fuel' "$tmp/fuel-purge.out"
 
 echo 'Project validator self-tests passed.'

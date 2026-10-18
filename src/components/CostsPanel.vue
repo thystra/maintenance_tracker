@@ -43,12 +43,13 @@ const categoryLabels: Record<CostCategory, string> = {
 	parts: t('maintenance_tracker', 'Parts'),
 	labor: t('maintenance_tracker', 'Labor'),
 	fluids: t('maintenance_tracker', 'Fluids'),
+	fuel: t('maintenance_tracker', 'Fuel'),
 	service: t('maintenance_tracker', 'Service'),
 	fees: t('maintenance_tracker', 'Fees'),
 	tax: t('maintenance_tracker', 'Tax'),
 	other: t('maintenance_tracker', 'Other'),
 }
-const categoryOptions = (['parts', 'labor', 'fluids', 'service', 'fees', 'other'] as CostCategory[]).map((value) => ({ value, label: categoryLabels[value] }))
+const categoryOptions = (['parts', 'labor', 'fluids', 'fuel', 'service', 'fees', 'other'] as CostCategory[]).map((value) => ({ value, label: categoryLabels[value] }))
 const lineOptions = [
 	{ value: 'charge', label: t('maintenance_tracker', 'Charge') },
 	{ value: 'tax', label: t('maintenance_tracker', 'Tax') },
@@ -126,8 +127,11 @@ async function remove(): Promise<void> {
 }
 
 const buttons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => { addOpen.value = false } },
-	{ label: t('maintenance_tracker', 'Add cost'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		addOpen.value = false
+		return false
+	} },
+	{ label: t('maintenance_tracker', 'Add cost'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
 ])
 
 onMounted(load)

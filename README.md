@@ -30,6 +30,12 @@ Nextcloud database and Files.
 - **Meters and readings** – distance, runtime hours, and usage counts. Readings are
   never edited in place; a mistake is corrected by a superseding reading, so the
   history stays intact.
+- **Fuel log** – record fill-ups with odometer, amount, full or partial fill,
+  station, price and receipt; define operating regimes per vehicle (empty,
+  loaded, towing) and see fuel economy overall and per regime (MPG, km/L or
+  L/100 km), best and worst, fuel spend and cost per distance, with a chart and
+  a dashboard card. Economy is measured only between full tanks; a stretch with
+  a missed fill-up is left out.
 - **Maintenance schedules** – work groups and work definitions scheduled by
   calendar interval, business days, or meter interval, or left unscheduled for
   ad-hoc work.
