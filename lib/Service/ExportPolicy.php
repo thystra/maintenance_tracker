@@ -29,6 +29,8 @@ final class ExportPolicy {
 	public const TABLES = [
 		'categories' => 'maint_categories',
 		'assets' => 'maint_assets',
+		'item_groups' => 'maint_item_groups',
+		'asset_groups' => 'maint_asset_grp',
 		'components' => 'maint_components',
 		'specifications' => 'maint_specs',
 		'relationships' => 'maint_relationships',
@@ -71,6 +73,8 @@ final class ExportPolicy {
 	public const CAPABILITY = [
 		'categories' => AuthorizationCatalog::INVENTORY_READ,
 		'assets' => AuthorizationCatalog::INVENTORY_READ,
+		'item_groups' => AuthorizationCatalog::INVENTORY_READ,
+		'asset_groups' => AuthorizationCatalog::INVENTORY_READ,
 		'components' => AuthorizationCatalog::INVENTORY_READ,
 		'specifications' => AuthorizationCatalog::INVENTORY_READ,
 		'relationships' => AuthorizationCatalog::INVENTORY_READ,

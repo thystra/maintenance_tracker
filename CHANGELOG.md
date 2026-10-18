@@ -7,10 +7,23 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Development since the `v0.1.0` foundation preview. Nothing here has been
-released yet; entries name the development milestone (v0.1.1–v0.1.13 and 1.0
-preparation) that introduced them. The app version in `appinfo/info.xml` stays
-0.1.10 until the next release.
+Every change set now bumps the app version by one patch level (in
+`appinfo/info.xml`, `Application::APP_VERSION`, `package.json` and
+`package-lock.json`, checked by `npm run validate:project`) and gets its own
+section below, so upgrades run new migrations. Versions are not tagged.
+
+## [0.1.15] - 2026-10-18
+
+### Added
+
+- Item groups: arbitrary, nested organisational containers for items (for example Vehicles › Fleet 1; House › Upstairs/Downstairs/Basement; Shop; Small engines). New tables `maint_item_groups` (tree through a nullable parent, revisioned, tombstoned) and `maint_asset_grp` (at most one group per item, a link table so moving an item never rewrites the item) in migration `Version1150`. OCS endpoints `GET/POST /item-groups`, `PATCH/DELETE /item-groups/{uuid}`, `POST /item-groups/{uuid}/move` (refuses cycles) and `PUT /assets/{assetUuid}/group`; reads need `inventory.read`, changes `inventory.manage` (Owner, Manager). Deleting a group moves its subgroups and items up to its parent. Audit events `item_group.created`, `item_group.updated`, `item_group.moved`, `item_group.archived` and `asset.group_changed`. Export and restore carry the groups (parents restored before children) and memberships; account-deletion purge covers both tables.
+- Interface: a group tree under Items in the sidebar (expand/collapse, item counts including subgroups, add subgroup/rename/move/delete), group filtering on the Items page with breadcrumbs and subgroup shortcuts (`#/items?group=<uuid>`, `?group=none` for ungrouped items), a group picker in the add/edit item dialog (new items added from a group page land in that group), breadcrumbs on item pages, and a *By group* dashboard card with item, overdue and due-soon counts per top-level group.
+
+## [0.1.14] - 2026-10-18
+
+Development since the `v0.1.0` foundation preview, first versioned as 0.1.14
+so upgrades run the new migrations. Entries name the development milestone
+(v0.1.1–v0.1.13 and 1.0 preparation) that introduced them.
 
 ### Added
 

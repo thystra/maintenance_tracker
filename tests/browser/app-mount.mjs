@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Headless browser check: log in, open the app, visit every page, run the
- * main create/delete flows (vendor, part, item with a task, item deletion),
+ * main create/delete flows (vendor, part, item with a task, item deletion,
+ * item groups),
  * and assert that nothing from this app logs a console error, throws, or
  * gets an HTTP error. Run by tests/integration/nextcloud-smoke.sh when
  * NC_SMOKE_BROWSER=1, inside the Playwright image on the Nextcloud
@@ -73,6 +74,7 @@ try {
 		} catch (error) {
 			steps.push(`FAIL ${name}`)
 			note(`${name}: ${error.message.split('\n')[0]}`)
+			await shot(`fail-${name.replace(/[^a-z0-9]+/gi, '-')}`).catch(() => {})
 		}
 	}
 	const nav = (name) => page.locator('.app-navigation').getByRole('link', { name, exact: true })
@@ -180,6 +182,50 @@ try {
 		if (await page.locator('#maintenance-main .list-item', { hasText: name }).count() !== 0) {
 			throw new Error('the deleted item is still listed')
 		}
+	})
+
+	await step('item groups', async () => {
+		const group = `Browser group ${stamp}`
+		const subgroup = `Browser subgroup ${stamp}`
+		const item = `Grouped item ${stamp}`
+		await nav('Items').click()
+		await heading('Items').waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main').getByRole('button', { name: 'New group' }).click()
+		await dialog().getByLabel('Group name', { exact: true }).fill(group)
+		await dialog().getByRole('button', { name: 'Create group' }).click()
+		const sidebarGroup = page.locator('.app-navigation').getByText(group, { exact: true })
+		await sidebarGroup.waitFor({ timeout: 10000 })
+		await sidebarGroup.click()
+		await heading(group).waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main').getByRole('button', { name: 'Add subgroup' }).click()
+		await dialog().getByLabel('Group name', { exact: true }).fill(subgroup)
+		await dialog().getByRole('button', { name: 'Create group' }).click()
+		await page.locator('#maintenance-main').getByRole('link', { name: new RegExp(subgroup) }).waitFor({ timeout: 10000 })
+		// A new item added from a group page lands in that group.
+		await page.locator('#maintenance-main').getByRole('button', { name: 'Add item' }).first().click()
+		await dialog().getByLabel('Name', { exact: true }).fill(item)
+		await dialog().getByRole('button', { name: 'Add item' }).click()
+		await heading(item).waitFor({ state: 'visible', timeout: 10000 })
+		await page.getByRole('navigation', { name: 'Breadcrumbs' }).getByRole('link', { name: group }).waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('21-item-in-group')
+		await page.getByRole('navigation', { name: 'Breadcrumbs' }).getByRole('link', { name: group }).click()
+		await heading(group).waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main .list-item', { hasText: item }).waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('22-group-items')
+		await nav('Dashboard').click()
+		await page.locator('#groups-heading').waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('23-dashboard-by-group')
+		// Deleting a group keeps its items: they move up to the parent.
+		await page.locator('.app-navigation').getByText(subgroup, { exact: true }).click()
+		await heading(subgroup).waitFor({ state: 'visible', timeout: 10000 })
+		await page.getByRole('button', { name: `More actions for group ${subgroup}` }).click()
+		await page.getByRole('menuitem', { name: 'Delete group' }).click()
+		await shot('24-delete-group')
+		await dialog().getByRole('button', { name: 'Delete' }).click()
+		await page.locator('.app-navigation').getByText(subgroup, { exact: true }).waitFor({ state: 'detached', timeout: 10000 })
 	})
 
 	await step('settings sections', async () => {

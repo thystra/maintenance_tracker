@@ -38,7 +38,7 @@ otherwise.
 |------|----------|
 | Workspaces | Name, type (personal or shared), owner |
 | Members and roles | Nextcloud user IDs of members and their role (Owner, Manager, Contributor, Viewer) |
-| Maintained items | Names, categories, manufacturer and model, components, specifications such as serial numbers or VINs, notes, relationships and assignments between items |
+| Maintained items | Names, categories, manufacturer and model, components, specifications such as serial numbers or VINs, notes, relationships and assignments between items, and the item groups they are organised in (group names such as a room or a fleet) |
 | Meters and readings | Distance, runtime hours, usage counts, with reading dates |
 | Maintenance plans and history | Work groups, work definitions and schedules, completed maintenance records with notes, parts used, and meter values |
 | Parts, vendors, and links | Part numbers, typical prices, vendor names, addresses, phone numbers, e-mail addresses, contact person names, and store or vendor web addresses entered by users. A vendor's contact person, phone number and e-mail address can identify a person and are personal data. |

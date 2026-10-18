@@ -36,13 +36,18 @@ workspace, role, shared caches), `views/` (one per page) and `components/`.
 
 ## Information architecture
 
-Left navigation (with the workspace switcher at the top):
+Left navigation (with the workspace switcher at the top). Under *Items* the
+sidebar shows the item group tree: each group expands to its subgroups, shows
+how many items it holds (including subgroups), and has *Add subgroup*,
+*Rename*, *Move* and *Delete* in its menu (Owner, Manager). *Items* itself
+has *New group*.
 
 | Page | Route | Purpose |
 |------|-------|---------|
-| Dashboard | `#/` | Landing page: counts (items by kind, overdue, due), *Needs attention* (overdue/due/due soon/needs a first log), *Coming up* in the next 60 days, recent activity (Owner/Manager, from the audit trail), quick links. Empty workspace: one call to action, *Add your first item*. |
-| Items | `#/items` | Search and category filter; each row opens the item and has *Log maintenance*, *Edit*, *Delete*. *Add item* in the header. |
-| Item | `#/items/<uuid>/<tab>` | Header: *Log maintenance*, and *Edit*/*Delete* in the actions menu. Tabs below. |
+| Dashboard | `#/` | Landing page: counts (items by kind, overdue, due), *By group* (each top-level group and *Ungrouped* with item, overdue and due-soon counts; shown once groups exist), *Needs attention* (overdue/due/due soon/needs a first log), *Coming up* in the next 60 days, recent activity (Owner/Manager, from the audit trail), quick links. Empty workspace: one call to action, *Add your first item*. |
+| Items | `#/items` | Search and category filter; each row opens the item and has *Log maintenance*, *Edit*, *Delete*. *Add item* and *New group* in the header; top-level groups and *Ungrouped* as shortcuts above the list. |
+| Items in a group | `#/items?group=<uuid>` | Breadcrumbs (Items › House › Basement), the group's items including its subgroups, shortcuts to subgroups, *Add subgroup*, *Add item* (lands in this group), and *Rename/Move/Delete group* in the actions menu. `?group=none` lists ungrouped items. |
+| Item | `#/items/<uuid>/<tab>` | Breadcrumbs when the item is in a group. Header: *Log maintenance*, and *Edit*/*Delete* in the actions menu. Tabs below. |
 | Parts | `#/parts` | Part catalog: name, manufacturer and part number, usual vendor, typical price, what it fits. A row expands to fitment (add/remove) and store links. |
 | Vendors | `#/vendors` | Shops and service providers with website, address, phone, e-mail, contact person and notes; a row expands to the details and extra links. |
 | Settings | `#/settings/<section>` | Sections listed below. |
@@ -96,6 +101,11 @@ administration settings.
    then Members → *Add member* with a role. Ownership can be offered to an
    existing member, who accepts from the banner on their dashboard.
 8. **Back up or move.** Settings → Export and restore.
+9. **Organise items into groups.** Items → *New group* (or a group's menu →
+   *Add subgroup*). Put an item in a group from its *Edit* dialog, or add it
+   from the group's page. *Move* re-parents a group with everything in it;
+   *Delete* asks for confirmation and moves the group's subgroups and items up
+   one level, so no item is ever deleted with a group.
 
 ## Known limits
 
@@ -106,3 +116,5 @@ administration settings.
   (public Calendar API limitation).
 - Fitment-pack import, mapping and community export are API-only for now.
 - Relationship type labels come from the server in English.
+- Item groups are re-arranged with *Move* dialogs; there is no drag and drop
+  in the sidebar yet.

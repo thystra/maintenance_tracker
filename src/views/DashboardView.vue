@@ -8,7 +8,7 @@
 // actions people use most (log maintenance, add an item).
 import type { AuditEntry, WorkspaceForecast, WorkspaceForecastItem } from '../types.ts'
 
-import { mdiCalendarClock, mdiPlus, mdiWrenchOutline } from '@mdi/js'
+import { mdiCalendarClock, mdiFolderOutline, mdiPlus, mdiWrenchOutline } from '@mdi/js'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -25,7 +25,7 @@ import StateBadge from '../components/StateBadge.vue'
 import { assetClassLabel, dueText, errorMessage, forecastLabel, formatDate } from '../format.ts'
 import { n, t } from '../l10n.ts'
 import { getAudit, getWorkspaceForecast } from '../services/api.ts'
-import { activeWorkspace, assetName, can, loadAssets, loadWorkspaces, state } from '../store.ts'
+import { activeWorkspace, assetName, can, childGroups, groupSubtree, loadAssets, loadGroups, loadWorkspaces, state } from '../store.ts'
 
 const router = useRouter()
 const forecast = ref<WorkspaceForecast | null>(null)
@@ -53,6 +53,38 @@ const byClass = computed(() => {
 		.map(([assetClass, count]) => `${assetClassLabel(assetClass as never)} ${count}`).join(' · ')
 })
 
+/** Per top-level group: items in it (with subgroups) and their overdue / due tasks. */
+const byGroup = computed(() => {
+	if (state.groups.length === 0) {
+		return []
+	}
+	const summarize = (inGroup: (assetUuid: string) => boolean) => {
+		const items = state.assets.filter((asset) => inGroup(asset.uuid)).length
+		const tasks = attention.value.filter((item) => inGroup(item.asset.uuid))
+		return { items, overdue: tasks.filter((item) => item.state === 'overdue').length, due: tasks.filter((item) => item.state !== 'overdue').length }
+	}
+	const rows = childGroups(null).map((group) => {
+		const subtree = groupSubtree(group.uuid)
+		return { key: group.uuid, name: group.name, query: group.uuid, ...summarize((uuid) => subtree.has(state.groupOf[uuid] ?? '')) }
+	})
+	const ungrouped = summarize((uuid) => state.groupOf[uuid] === undefined)
+	if (ungrouped.items > 0) {
+		rows.push({ key: 'none', name: t('maintenance_tracker', 'Ungrouped'), query: 'none', ...ungrouped })
+	}
+	return rows
+})
+
+function groupDetail(row: { items: number, overdue: number, due: number }): string {
+	const parts = [n('maintenance_tracker', '%n item', '%n items', row.items)]
+	if (row.overdue > 0) {
+		parts.push(n('maintenance_tracker', '%n overdue', '%n overdue', row.overdue))
+	}
+	if (row.due > 0) {
+		parts.push(n('maintenance_tracker', '%n due soon', '%n due soon', row.due))
+	}
+	return parts.join(' · ')
+}
+
 function detail(item: WorkspaceForecastItem): string {
 	if (item.dueOn) {
 		return dueText(item.dueOn, item.remainingDays)
@@ -77,6 +109,8 @@ const auditLabels: Record<string, () => string> = {
 	'workspace.member.added': () => t('maintenance_tracker', 'Member added'),
 	'workspace.created': () => t('maintenance_tracker', 'Workspace created'),
 	'workspace.renamed': () => t('maintenance_tracker', 'Workspace renamed'),
+	'item_group.created': () => t('maintenance_tracker', 'Group created'),
+	'asset.group_changed': () => t('maintenance_tracker', 'Item group changed'),
 }
 const recent = computed(() => audit.value.filter((entry) => auditLabels[entry.eventType] !== undefined).slice(0, 8))
 
@@ -105,7 +139,7 @@ function log(assetUuid: string | null = null, definitionUuid: string | null = nu
 }
 
 async function added(asset: { uuid: string }): Promise<void> {
-	await loadAssets()
+	await Promise.all([loadAssets(), loadGroups()])
 	await router.push({ name: 'item', params: { uuid: asset.uuid } })
 }
 
@@ -230,6 +264,28 @@ onMounted(load)
 							compact>
 							<template #subname>
 								{{ item.asset.name }} · {{ detail(item) }}
+							</template>
+						</NcListItem>
+					</ul>
+				</section>
+
+				<section v-if="byGroup.length > 0" class="card" aria-labelledby="groups-heading">
+					<h3 id="groups-heading">
+						<NcIconSvgWrapper :path="mdiFolderOutline" :size="20" inline />
+						{{ t('maintenance_tracker', 'By group') }}
+					</h3>
+					<ul class="list">
+						<NcListItem
+							v-for="row in byGroup"
+							:key="row.key"
+							:name="row.name"
+							:to="{ name: 'items', query: { group: row.query } }"
+							compact>
+							<template #subname>
+								{{ groupDetail(row) }}
+							</template>
+							<template v-if="row.overdue > 0 || row.due > 0" #details>
+								<StateBadge :state="row.overdue > 0 ? 'overdue' : 'due_soon'" :label="row.overdue > 0 ? forecastLabel('overdue') : forecastLabel('due_soon')" />
 							</template>
 						</NcListItem>
 					</ul>

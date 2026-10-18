@@ -22,6 +22,11 @@ Nextcloud database and Files.
   asset classes, nested components, structured specifications, typed
   relationships between items (for example a trailer towed by a truck), and
   effective-dated assignments.
+- **Item groups** – organise items into your own nested groups (for example
+  Vehicles › Fleet 1, or House › Upstairs, Downstairs, Basement). The group tree
+  sits in the sidebar with item counts; the Items page filters by a group and
+  its subgroups, and the dashboard summarises what is due per group. Deleting a
+  group never deletes items: they move up a level.
 - **Meters and readings** – distance, runtime hours, and usage counts. Readings are
   never edited in place; a mistake is corrected by a superseding reading, so the
   history stays intact.

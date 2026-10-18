@@ -6,10 +6,11 @@
 <script setup lang="ts">
 import type { Asset } from '../types.ts'
 
-import { mdiDeleteOutline, mdiPencilOutline, mdiPlus, mdiWrenchOutline } from '@mdi/js'
+import { mdiArrowRightBold, mdiDeleteOutline, mdiFolderOutline, mdiFolderPlusOutline, mdiPencilOutline, mdiPlus, mdiWrenchOutline } from '@mdi/js'
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcActions from '@nextcloud/vue/components/NcActions'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
@@ -17,16 +18,27 @@ import NcListItem from '@nextcloud/vue/components/NcListItem'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import GroupBreadcrumbs from '../components/GroupBreadcrumbs.vue'
 import ItemFormDialog from '../components/ItemFormDialog.vue'
 import LogMaintenanceDialog from '../components/LogMaintenanceDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import SelectField from '../components/SelectField.vue'
 import { assetClassIcons, errorMessage } from '../format.ts'
-import { t } from '../l10n.ts'
+import { openGroupDialog } from '../groupActions.ts'
+import { n, t } from '../l10n.ts'
 import { deleteAsset } from '../services/api.ts'
-import { can, categoryName, loadAssets, state } from '../store.ts'
+import { can, categoryName, childGroups, groupPath, groupSubtree, itemsInGroup, loadAssets, loadGroups, state } from '../store.ts'
 
+const route = useRoute()
 const router = useRouter()
+/** Group filter from the URL (#/items?group=<uuid>), including its subgroups; 'none' shows ungrouped items. */
+const selectedGroup = computed(() => {
+	const value = route.query.group
+	return typeof value === 'string' && (value === 'none' || state.groups.some((group) => group.uuid === value)) ? value : null
+})
+const groupInfo = computed(() => selectedGroup.value === null || selectedGroup.value === 'none' ? null : groupPath(selectedGroup.value).at(-1) ?? null)
+const subgroups = computed(() => groupInfo.value === null ? [] : childGroups(groupInfo.value.uuid))
+const ungroupedCount = computed(() => state.assets.filter((asset) => state.groupOf[asset.uuid] === undefined).length)
 const query = ref('')
 const category = ref<string | null>(null)
 const formOpen = ref(false)
@@ -42,14 +54,31 @@ const categoryOptions = computed(() => [...new Set(state.assets.map((asset) => a
 	.map((key) => ({ value: key, label: categoryName(key) }))
 	.sort((left, right) => left.label.localeCompare(right.label)))
 
+const inGroup = computed(() => {
+	if (selectedGroup.value === null) {
+		return null
+	}
+	if (selectedGroup.value === 'none') {
+		return new Set<string>()
+	}
+	return groupSubtree(selectedGroup.value)
+})
+
 const visible = computed(() => {
 	const needle = query.value.trim().toLowerCase()
-	return state.assets.filter((asset) => (category.value === null || asset.category === category.value)
+	const groups = inGroup.value
+	return state.assets.filter((asset) => (groups === null || (groups.size === 0 ? state.groupOf[asset.uuid] === undefined : groups.has(state.groupOf[asset.uuid] ?? '')))
+		&& (category.value === null || asset.category === category.value)
 		&& (needle === '' || [asset.name, asset.manufacturer, asset.model, asset.serialNumber].some((value) => value?.toLowerCase().includes(needle))))
 })
 
+const pageTitle = computed(() => groupInfo.value?.name ?? (selectedGroup.value === 'none' ? t('maintenance_tracker', 'Ungrouped items') : t('maintenance_tracker', 'Items')))
+
 function describe(asset: Asset): string {
-	return [categoryName(asset.category), [asset.modelYear, asset.manufacturer, asset.model].filter((part) => part !== null && part !== '').join(' ')].filter((part) => part !== '').join(' · ')
+	const group = state.groupOf[asset.uuid]
+	// Inside a group, name the subgroup an item sits in; otherwise its full group path.
+	const where = group === undefined || group === selectedGroup.value ? '' : groupPath(group).filter((entry) => groupInfo.value === null || !groupPath(groupInfo.value.uuid).some((parent) => parent.uuid === entry.uuid)).map((entry) => entry.name).join(' › ')
+	return [categoryName(asset.category), [asset.modelYear, asset.manufacturer, asset.model].filter((part) => part !== null && part !== '').join(' '), where].filter((part) => part !== '').join(' · ')
 }
 
 function openAdd(): void {
@@ -69,7 +98,7 @@ function openLog(asset: Asset): void {
 
 async function saved(asset: Asset): Promise<void> {
 	const wasNew = editing.value === null
-	await loadAssets()
+	await Promise.all([loadAssets(), loadGroups()])
 	if (wasNew) {
 		await router.push({ name: 'item', params: { uuid: asset.uuid } })
 	}
@@ -98,14 +127,49 @@ async function confirmDelete(): Promise<void> {
 
 <template>
 	<div>
-		<PageHeader :title="t('maintenance_tracker', 'Items')" :subtitle="t('maintenance_tracker', 'Everything you maintain in this workspace')">
+		<GroupBreadcrumbs v-if="groupInfo" :groupUuid="groupInfo.uuid" />
+		<PageHeader
+			:title="pageTitle"
+			:subtitle="groupInfo ? n('maintenance_tracker', '%n item in this group and its subgroups', '%n items in this group and its subgroups', itemsInGroup(groupInfo.uuid).length) : t('maintenance_tracker', 'Everything you maintain in this workspace')">
 			<template v-if="can.manageInventory" #actions>
+				<NcButton v-if="groupInfo" @click="openGroupDialog('create', null, groupInfo.uuid)">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiFolderPlusOutline" />
+					</template>
+					{{ t('maintenance_tracker', 'Add subgroup') }}
+				</NcButton>
+				<NcButton v-else @click="openGroupDialog('create')">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiFolderPlusOutline" />
+					</template>
+					{{ t('maintenance_tracker', 'New group') }}
+				</NcButton>
 				<NcButton variant="primary" @click="openAdd">
 					<template #icon>
 						<NcIconSvgWrapper :path="mdiPlus" />
 					</template>
 					{{ t('maintenance_tracker', 'Add item') }}
 				</NcButton>
+				<NcActions v-if="groupInfo" :aria-label="t('maintenance_tracker', 'More actions for group {name}', { name: groupInfo.name })">
+					<NcActionButton closeAfterClick @click="openGroupDialog('rename', groupInfo)">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiPencilOutline" />
+						</template>
+						{{ t('maintenance_tracker', 'Rename group') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="openGroupDialog('move', groupInfo)">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiArrowRightBold" />
+						</template>
+						{{ t('maintenance_tracker', 'Move group') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="openGroupDialog('delete', groupInfo)">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiDeleteOutline" />
+						</template>
+						{{ t('maintenance_tracker', 'Delete group') }}
+					</NcActionButton>
+				</NcActions>
 			</template>
 		</PageHeader>
 		<p class="hidden-visually" role="status">
@@ -117,6 +181,29 @@ async function confirmDelete(): Promise<void> {
 			</p>
 		</NcNoteCard>
 
+		<div
+			v-if="subgroups.length > 0 || (selectedGroup === null && state.groups.length > 0)"
+			class="group-chips"
+			role="group"
+			:aria-label="groupInfo ? t('maintenance_tracker', 'Subgroups') : t('maintenance_tracker', 'Groups')">
+			<NcButton
+				v-for="group in (groupInfo ? subgroups : childGroups(null))"
+				:key="group.uuid"
+				size="small"
+				:to="{ name: 'items', query: { group: group.uuid } }">
+				<template #icon>
+					<NcIconSvgWrapper :path="mdiFolderOutline" :size="18" />
+				</template>
+				{{ t('maintenance_tracker', '{name} ({count})', { name: group.name, count: itemsInGroup(group.uuid).length }) }}
+			</NcButton>
+			<NcButton
+				v-if="selectedGroup === null && ungroupedCount > 0"
+				size="small"
+				variant="tertiary"
+				:to="{ name: 'items', query: { group: 'none' } }">
+				{{ t('maintenance_tracker', 'Ungrouped ({count})', { count: ungroupedCount }) }}
+			</NcButton>
+		</div>
 		<NcEmptyContent
 			v-if="state.assetsLoaded && state.assets.length === 0"
 			:name="t('maintenance_tracker', 'No items yet')"
@@ -148,7 +235,7 @@ async function confirmDelete(): Promise<void> {
 					clearable />
 			</div>
 			<p v-if="visible.length === 0" class="muted">
-				{{ t('maintenance_tracker', 'No items match the filter.') }}
+				{{ groupInfo && query === '' && category === null ? t('maintenance_tracker', 'No items in this group yet. Use “Add item” to add one here.') : t('maintenance_tracker', 'No items match the filter.') }}
 			</p>
 			<ul class="item-list" :aria-label="t('maintenance_tracker', 'Items')">
 				<NcListItem
@@ -187,7 +274,11 @@ async function confirmDelete(): Promise<void> {
 			</ul>
 		</template>
 
-		<ItemFormDialog v-model:open="formOpen" :asset="editing" @saved="saved" />
+		<ItemFormDialog
+			v-model:open="formOpen"
+			:asset="editing"
+			:defaultGroup="groupInfo?.uuid ?? null"
+			@saved="saved" />
 		<LogMaintenanceDialog v-model:open="logOpen" :assetUuid="logAsset" />
 		<ConfirmDialog
 			:open="deleting !== null"
@@ -205,6 +296,13 @@ async function confirmDelete(): Promise<void> {
 	grid-template-columns: minmax(200px, 2fr) minmax(180px, 1fr);
 	gap: 12px;
 	align-items: end;
+	margin-bottom: 12px;
+}
+
+.group-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 	margin-bottom: 12px;
 }
 

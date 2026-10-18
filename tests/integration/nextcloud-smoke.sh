@@ -2443,6 +2443,33 @@ assert_contains "$(ocs_as "$na" GET "/ownership-transfers/${ntf_expiring_uuid}")
 assert_contains "$(notifications_of "$na")" 'expired' 'offerer told about expiry'
 assert_not_contains "$(notifications_of "$nb")" 'offered you ownership' 'expired offer notification withdrawn'
 
+# Item groups (0.1.15): a tree with cycle prevention, membership, delete that
+# moves contents up, role boundaries, and audit. Fleet 1 is created before
+# Vehicles and then moved under it, so restore must order parents first.
+grp_fleet='a1b2c3d4-0000-4000-8000-00000000f001'
+grp_vehicles='a1b2c3d4-0000-4000-8000-00000000f002'
+grp_temp='a1b2c3d4-0000-4000-8000-00000000f003'
+grp_inner='a1b2c3d4-0000-4000-8000-00000000f004'
+assert_contains "$(ocs_as "$na" POST "/item-groups?${nws}" "{\"group\":{\"uuid\":\"${grp_fleet}\",\"name\":\"Fleet 1\"}}")" '"statuscode":201' 'item group created'
+assert_contains "$(ocs_as "$na" POST "/item-groups?${nws}" "{\"group\":{\"uuid\":\"${grp_fleet}\",\"name\":\"Fleet 1\"}}")" '"statuscode":201' 'item group create retry is idempotent'
+assert_contains "$(ocs_as "$na" POST "/item-groups?${nws}" "{\"group\":{\"uuid\":\"${grp_vehicles}\",\"name\":\"Vehicles\"}}")" '"statuscode":201' 'second item group created'
+grp_moved=$(ocs_as "$na" POST "/item-groups/${grp_fleet}/move?${nws}" "{\"expectedRevision\":1,\"parentUuid\":\"${grp_vehicles}\"}")
+assert_contains "$grp_moved" "\"parentUuid\":\"${grp_vehicles}\"" 'item group moved under another group'
+assert_contains "$(ocs_as "$na" POST "/item-groups/${grp_vehicles}/move?${nws}" "{\"expectedRevision\":1,\"parentUuid\":\"${grp_fleet}\"}")" '"statuscode":400' 'item group cycle refused'
+assert_contains "$(ocs_as "$na" PATCH "/item-groups/${grp_fleet}?${nws}" '{"expectedRevision":1,"group":{"name":"Stale"}}')" '"statuscode":412' 'item group stale revision'
+assert_contains "$(ocs_as "$nb" POST "/item-groups?${nws}" '{"group":{"name":"Nope"}}')" '"statuscode":403' 'contributor cannot create item groups'
+assert_contains "$(ocs_as "$na" PUT "/assets/${ntf_asset}/group?${nws}" "{\"groupUuid\":\"${grp_fleet}\"}")" "\"groupUuid\":\"${grp_fleet}\"" 'item put into a group'
+assert_contains "$(ocs_as "$nb" PUT "/assets/${ntf_asset}/group?${nws}" '{"groupUuid":null}')" '"statuscode":403' 'contributor cannot move items between groups'
+grp_list=$(ocs_as "$nb" GET "/item-groups?${nws}")
+assert_contains "$grp_list" "{\"assetUuid\":\"${ntf_asset}\",\"groupUuid\":\"${grp_fleet}\"}" 'contributor reads group membership'
+assert_contains "$(ocs_as "$na" POST "/item-groups?${nws}" "{\"group\":{\"uuid\":\"${grp_temp}\",\"name\":\"Temp\"}}")" '"statuscode":201' 'temporary group created'
+assert_contains "$(ocs_as "$na" POST "/item-groups?${nws}" "{\"group\":{\"uuid\":\"${grp_inner}\",\"name\":\"Inner\",\"parentUuid\":\"${grp_temp}\"}}")" '"statuscode":201' 'subgroup created'
+assert_contains "$(ocs_as "$na" DELETE "/item-groups/${grp_temp}?${nws}&expectedRevision=1")" '"movedGroups":1' 'deleting a group moves its subgroups up'
+assert_contains "$(ocs_as "$na" GET "/item-groups?${nws}")" "\"uuid\":\"${grp_inner}\",\"parentUuid\":null" 'orphaned subgroup became top-level'
+grp_audit=$(ocs_as "$na" GET "/audit?${nws}&limit=20")
+assert_contains "$grp_audit" 'item_group.moved' 'group move audited'
+assert_contains "$grp_audit" 'asset.group_changed' 'group membership audited'
+
 # Workspace export: role-filtered sections, viewer-scoped evidence privacy,
 # ZIP layout with CSV formula escaping, optional evidence bytes from the
 # caller's own Files, and the export audit event. Data is synthetic.
@@ -2555,6 +2582,11 @@ imp_evidence=$(ocs_as "$na" GET "/evidence?${iws}&targetType=asset&targetUuid=${
 assert_contains "$imp_evidence" '"availability":"available"' 'restored evidence opens in Files'
 assert_contains "$imp_evidence" 'Maintenance Tracker imports' 'restored evidence written to import folder'
 assert_contains "$(ocs_as "$na" GET "/audit?${iws}&limit=5")" 'workspace.imported' 'import audited'
+imp_groups=$(ocs_as "$na" GET "/item-groups?${iws}")
+assert_contains "$imp_groups" '"name":"Fleet 1"' 'restored item groups'
+assert_not_contains "$imp_groups" "$grp_fleet" 'restored item groups get new UUIDs'
+imp_tree=$(printf '%s' "$imp_groups" | python3 -c 'import json,sys;d=json.load(sys.stdin)["ocs"]["data"];g={x["name"]:x for x in d["items"]};print("tree-ok" if g["Fleet 1"]["parentUuid"]==g["Vehicles"]["uuid"] and any(a["assetUuid"]==sys.argv[1] and a["groupUuid"]==g["Fleet 1"]["uuid"] for a in d["assignments"]) else "tree-bad")' "$imp_asset")
+assert_contains "$imp_tree" 'tree-ok' 'restored group tree and membership follow remapped ids'
 assert_contains "$(ocs_as "$na" GET "/assets?${nws}")" "$ntf_asset" 'original workspace untouched'
 assert_contains "$(import_as "$na" exp-owner.zip)" '"statuscode":201' 'same export can be restored twice'
 assert_contains "$(ocs_as "$nb" GET "/assets?${iws}")" '"statuscode":403' 'other members do not get access to the restored workspace'

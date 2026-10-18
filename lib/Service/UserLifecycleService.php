@@ -62,6 +62,8 @@ final class UserLifecycleService {
 		'maint_categories',
 		'maint_changes',
 		'maint_audit',
+		'maint_asset_grp',
+		'maint_item_groups',
 		'maint_assets',
 		'maint_members',
 	];
