@@ -206,8 +206,8 @@ final class FuelEconomy {
 			$costPerDistance[] = ['currency' => $currency, 'amount' => number_format($perUnit, $exp + 2, '.', ''), 'distance' => self::distanceIn($c['distance'], $distanceUnit)];
 		}
 		return [
-			'from' => gmdate('Y-m-d', $from),
-			'to' => gmdate('Y-m-d', $to),
+			'from' => $from <= 0 ? null : gmdate('Y-m-d', $from),
+			'to' => $to === PHP_INT_MAX ? null : gmdate('Y-m-d', $to),
 			'economyUnit' => $economyUnit,
 			'distanceUnit' => $distanceUnit,
 			'volumeUnit' => $volumeUnit,
