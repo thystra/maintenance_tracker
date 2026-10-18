@@ -16,6 +16,7 @@ import type {
 	OutsideLinkList,
 	Part,
 	PartList,
+	UpdatePart,
 	Vendor,
 	VendorList,
 } from '../catalogTypes.ts'
@@ -86,4 +87,20 @@ export async function createLink(subjectType: LinkSubjectType, subjectUuid: stri
 
 export async function archiveLink(subjectType: LinkSubjectType, subjectUuid: string, linkUuid: string, expectedRevision: number): Promise<OutsideLink> {
 	return data(await axios.delete<OcsEnvelope<OutsideLink>>(endpoint(`${linkBase(subjectType, subjectUuid)}/${encodeURIComponent(linkUuid)}`), { ...requestOptions, data: { expectedRevision } }))
+}
+
+export async function updatePart(uuid: string, expectedRevision: number, part: UpdatePart): Promise<Part> {
+	return data(await axios.patch<OcsEnvelope<Part>>(endpoint(`/parts/${encodeURIComponent(uuid)}`), { expectedRevision, part }, requestOptions))
+}
+
+export async function addPartFit(uuid: string, expectedRevision: number, assetUuid: string): Promise<Part> {
+	return data(await axios.post<OcsEnvelope<Part>>(endpoint(`/parts/${encodeURIComponent(uuid)}/fits`), { expectedRevision, assetUuid }, requestOptions))
+}
+
+export async function removePartFit(uuid: string, expectedRevision: number, assetUuid: string): Promise<Part> {
+	return data(await axios.delete<OcsEnvelope<Part>>(endpoint(`/parts/${encodeURIComponent(uuid)}/fits/${encodeURIComponent(assetUuid)}`), { ...requestOptions, params: { expectedRevision } }))
+}
+
+export async function updateVendor(uuid: string, expectedRevision: number, vendor: Omit<CreateVendor, 'uuid'>): Promise<Vendor> {
+	return data(await axios.patch<OcsEnvelope<Vendor>>(endpoint(`/vendors/${encodeURIComponent(uuid)}`), { expectedRevision, vendor }, requestOptions))
 }

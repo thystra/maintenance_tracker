@@ -48,6 +48,7 @@ final class VendorController extends OCSController {
 		return $this->run(AuthorizationCatalog::VENDOR_READ, $workspace, fn ($c): DataResponse => new DataResponse([
 			'workspace' => $c->workspace()->getUuid(),
 			'items' => $this->service->list($c, $includeArchived),
+			'websitesEnabled' => $this->service->websitesEnabled(),
 		]));
 	}
 

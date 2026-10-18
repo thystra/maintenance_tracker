@@ -366,3 +366,31 @@ export interface MaintenanceOccurrenceList {
 	policy: ReminderPolicy
 	items: MaintenanceOccurrence[]
 }
+
+export interface WorkspaceForecastItem {
+	asset: { uuid: string, name: string, category: string }
+	definition: { uuid: string, title: string, kind: string }
+	state: 'overdue' | 'due' | 'due_soon' | 'blocked' | 'setup_required' | 'not_due'
+	reason: string | null
+	lastPerformedAt: string | null
+	dueOn: string | null
+	remainingDays: number | null
+	meter: { name: string, displayUnit: string, canonicalUnit: string, remainingCanonicalValue: number | null } | null
+}
+export interface WorkspaceForecast {
+	workspace: string
+	asOf: string | null
+	scannedAssets: number
+	truncated: boolean
+	policy: ReminderPolicy
+	items: WorkspaceForecastItem[]
+}
+
+export interface AuditEntry {
+	id: number
+	eventType: string
+	actorUid: string
+	subjectType: string
+	subjectId: string
+	createdAt: string
+}

@@ -68,4 +68,35 @@ final class MaintenanceForecastController extends OCSController {
 			throw new OCSBadRequestException($exception->getMessage(), $exception);
 		}
 	}
+
+	/**
+	 * Workspace maintenance forecast summary (dashboard)
+	 *
+	 * @param string|null $asOf As of
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 * @throws OCSBadRequestException Invalid input
+	 * @throws OCSForbiddenException Not allowed
+	 * @throws OCSNotFoundException Not found
+	 *
+	 * 200: Success
+	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/maintenance-forecast')]
+	public function summary(?string $asOf = null, ?string $workspace = null): DataResponse {
+		try {
+			return $this->workspaces->runWithCapability(
+				$this->currentUser->uid(),
+				$workspace,
+				AuthorizationCatalog::MAINTENANCE_FORECAST_READ,
+				fn ($context): DataResponse => new DataResponse($this->service->summary($context, $asOf)),
+			);
+		} catch (AccessDeniedException $exception) {
+			throw new OCSForbiddenException($exception->getMessage(), $exception);
+		} catch (NotFoundException $exception) {
+			throw new OCSNotFoundException($exception->getMessage(), $exception);
+		} catch (ValidationException $exception) {
+			throw new OCSBadRequestException($exception->getMessage(), $exception);
+		}
+	}
 }

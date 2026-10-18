@@ -8,10 +8,24 @@ export interface Part {
 	manufacturer: string
 	partNumber: string
 	description: string
+	notes: string | null
+	vendorUuid: string | null
+	vendorName: string | null
+	/** Exact decimal string; never parsed as a float. */
+	unitPrice: string | null
+	currency: string | null
+	fits: PartFit[]
 	revision: number
 	createdAt: string
 	updatedAt: string
 	deletedAt: string | null
+}
+
+export interface PartFit {
+	assetUuid: string
+	assetName: string
+	/** manual: recorded here; profile: supplied by a maintenance profile or fitment data. */
+	source: 'manual' | 'profile'
 }
 
 export interface PartList {
@@ -24,12 +38,24 @@ export interface CreatePart {
 	manufacturer: string
 	partNumber: string
 	description: string
+	notes?: string | null
+	vendorUuid?: string | null
+	unitPrice?: string | null
+	currency?: string | null
 }
+
+export type UpdatePart = Partial<Omit<CreatePart, 'uuid' | 'manufacturer' | 'partNumber'>>
 
 export interface Vendor {
 	uuid: string
 	name: string
 	notes: string | null
+	/** https only; null while the administrator disables outside links. */
+	website: string | null
+	address: string | null
+	phone: string | null
+	email: string | null
+	contactName: string | null
 	revision: number
 	createdAt: string
 	updatedAt: string
@@ -39,16 +65,23 @@ export interface Vendor {
 export interface VendorList {
 	workspace: string
 	items: Vendor[]
+	/** False while the administrator disables outside links; websites are then hidden and rejected. */
+	websitesEnabled?: boolean
 }
 
 export interface CreateVendor {
 	uuid?: string
 	name: string
 	notes?: string | null
+	website?: string | null
+	address?: string | null
+	phone?: string | null
+	email?: string | null
+	contactName?: string | null
 }
 
 export interface CompatiblePart {
-	subjectType: 'component' | 'work_definition'
+	subjectType: 'asset' | 'component' | 'work_definition'
 	subjectUuid: string
 	part: { uuid: string, manufacturer: string, partNumber: string, description: string, archived: boolean }
 }
@@ -122,6 +155,7 @@ export interface CreateCost {
 	currency?: string
 	lineType?: CostLineType
 	category?: CostCategory
+	activityUuid?: string | null
 	vendorUuid?: string | null
 	notes?: string | null
 }

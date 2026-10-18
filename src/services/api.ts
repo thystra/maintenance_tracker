@@ -10,6 +10,7 @@ import type {
 	AssetList,
 	Assignment,
 	AssignmentList,
+	AuditEntry,
 	Capabilities,
 	Category,
 	CategoryList,
@@ -49,6 +50,7 @@ import type {
 	WorkDefinitionList,
 	WorkGroup,
 	WorkGroupList,
+	WorkspaceForecast,
 } from '../types.ts'
 
 import axios from '@nextcloud/axios'
@@ -292,4 +294,46 @@ export async function previewProfile(assetUuid: string, profile: ProfileDocument
 
 export async function installProfile(assetUuid: string, installationUuid: string, profile: ProfileDocument): Promise<ProfileInstallation> {
 	return data(await axios.post<OcsEnvelope<ProfileInstallation>>(endpoint(`/assets/${assetUuid}/profiles/install`), { installationUuid, profile }, requestOptions))
+}
+
+export async function getAsset(uuid: string): Promise<Asset> {
+	return data(await axios.get<OcsEnvelope<Asset>>(endpoint(`/assets/${encodeURIComponent(uuid)}`), requestOptions))
+}
+
+export async function updateAsset(uuid: string, expectedRevision: number, asset: Partial<CreateAsset>): Promise<Asset> {
+	return data(await axios.patch<OcsEnvelope<Asset>>(endpoint(`/assets/${encodeURIComponent(uuid)}`), { expectedRevision, asset }, requestOptions))
+}
+
+/**
+ * Soft-deletes the item (kept as a tombstone for sync and audit).
+ *
+ * @param uuid Item UUID.
+ * @param expectedRevision Revision the caller last read.
+ */
+export async function deleteAsset(uuid: string, expectedRevision: number): Promise<Asset> {
+	return data(await axios.delete<OcsEnvelope<Asset>>(endpoint(`/assets/${encodeURIComponent(uuid)}`), { ...requestOptions, params: { expectedRevision } }))
+}
+
+export async function updateWorkDefinition(uuid: string, expectedRevision: number, definition: Partial<CreateWorkDefinition>): Promise<WorkDefinition> {
+	return data(await axios.patch<OcsEnvelope<WorkDefinition>>(endpoint(`/work-definitions/${encodeURIComponent(uuid)}`), { expectedRevision, definition }, requestOptions))
+}
+
+export async function archiveWorkDefinition(uuid: string, expectedRevision: number): Promise<WorkDefinition> {
+	return data(await axios.delete<OcsEnvelope<WorkDefinition>>(endpoint(`/work-definitions/${encodeURIComponent(uuid)}`), { ...requestOptions, params: { expectedRevision } }))
+}
+
+export async function archiveActivity(uuid: string, expectedRevision: number): Promise<Activity> {
+	return data(await axios.delete<OcsEnvelope<Activity>>(endpoint(`/activities/${encodeURIComponent(uuid)}`), { ...requestOptions, params: { expectedRevision } }))
+}
+
+export async function archiveMeter(uuid: string, expectedRevision: number): Promise<Meter> {
+	return data(await axios.delete<OcsEnvelope<Meter>>(endpoint(`/meters/${encodeURIComponent(uuid)}`), { ...requestOptions, params: { expectedRevision } }))
+}
+
+export async function getWorkspaceForecast(): Promise<WorkspaceForecast> {
+	return data(await axios.get<OcsEnvelope<WorkspaceForecast>>(endpoint('/maintenance-forecast'), requestOptions))
+}
+
+export async function getAudit(limit = 15): Promise<AuditEntry[]> {
+	return (data(await axios.get<OcsEnvelope<{ items: AuditEntry[] }>>(endpoint('/audit'), { ...requestOptions, params: { limit } }))).items
 }

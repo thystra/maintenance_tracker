@@ -6,7 +6,11 @@
 <script setup lang="ts">
 import type { LinkSubjectType, OutsideLink } from '../catalogTypes.ts'
 
+import { mdiOpenInNew } from '@mdi/js'
 import { onMounted, reactive, ref } from 'vue'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { t } from '../l10n.ts'
 import { archiveLink, createLink, getLinks } from '../services/catalogApi.ts'
 
@@ -74,51 +78,74 @@ onMounted(load)
 		</p>
 		<ul v-if="links.length > 0">
 			<li v-for="link in links" :key="link.uuid">
+				<NcIconSvgWrapper :path="mdiOpenInNew" :size="16" />
 				<a :href="safeHref(link.url)" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>
-				<button type="button" :disabled="saving" @click="mutate(() => archiveLink(subjectType, subjectUuid, link.uuid, link.revision))">
+				<NcButton
+					variant="tertiary"
+					size="small"
+					:disabled="saving"
+					@click="mutate(() => archiveLink(subjectType, subjectUuid, link.uuid, link.revision))">
 					{{ t('maintenance_tracker', 'Remove') }}
-				</button>
+				</NcButton>
 			</li>
 		</ul>
-		<button v-if="!adding" type="button" @click="adding = true">
+		<NcButton v-if="!adding" variant="tertiary" @click="adding = true">
 			{{ t('maintenance_tracker', 'Add link') }}
-		</button>
+		</NcButton>
 		<form v-else class="outside-links-form" @submit.prevent="submit">
-			<input
+			<NcTextField
 				v-model="draft.label"
 				required
 				maxlength="255"
-				:placeholder="t('maintenance_tracker', 'Label')"
-				:aria-label="t('maintenance_tracker', 'Link label')">
-			<input
+				:label="t('maintenance_tracker', 'Link label')" />
+			<NcTextField
 				v-model="draft.url"
 				type="url"
 				required
 				maxlength="2048"
 				pattern="https://.+"
 				:placeholder="t('maintenance_tracker', 'https://')"
-				:aria-label="t('maintenance_tracker', 'Link URL')">
-			<button type="submit" :disabled="saving">
+				:label="t('maintenance_tracker', 'Link URL')" />
+			<NcButton type="submit" :disabled="saving">
 				{{ t('maintenance_tracker', 'Save') }}
-			</button>
+			</NcButton>
 		</form>
 	</div>
 </template>
 
 <style scoped>
-.outside-links { flex-basis: 100%; display: grid; gap: 4px; font-size: .9em; }
+.outside-links {
+	display: grid;
+	gap: 6px;
+}
 
-.outside-links ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.outside-links ul {
+	display: grid;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
 
-.outside-links li { display: flex; align-items: center; gap: 8px; }
+.outside-links li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
 
-.outside-links a { color: var(--color-primary-element); text-decoration: underline; }
+.outside-links a {
+	color: var(--color-primary-element);
+	text-decoration: underline;
+}
 
-.outside-links button { min-height: 28px; padding: 2px 10px; border: 1px solid var(--color-border-maxcontrast); border-radius: var(--border-radius-pill); background: var(--color-main-background); color: var(--color-main-text); cursor: pointer; justify-self: start; }
+.outside-links-form {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	gap: 8px;
+	align-items: end;
+}
 
-.outside-links-form { display: flex; flex-wrap: wrap; gap: 6px; }
-
-.outside-links-form input { min-height: 32px; padding: 4px 8px; border: 1px solid var(--color-border-maxcontrast); border-radius: var(--border-radius); }
-
-.outside-links-error { color: var(--color-error); }
+.outside-links-error {
+	color: var(--color-text-error, var(--color-error));
+}
 </style>

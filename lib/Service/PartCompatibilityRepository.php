@@ -49,4 +49,69 @@ final class PartCompatibilityRepository {
 			$result->closeCursor();
 		}
 	}
+
+	/**
+	 * Active items each part fits, grouped by part id. Manual whole-item fits
+	 * have subject type "asset"; component/work-definition rows come from
+	 * profiles and fitment.
+	 *
+	 * @return array<int,list<array{assetUuid:string,assetName:string,source:string}>>
+	 */
+	public function fitsByPart(int $workspaceId, ?int $partId = null): array {
+		$q = $this->db->getQueryBuilder();
+		$q->select('c.part_id', 'c.subject_type', 'a.uuid', 'a.name')
+			->from('maint_part_compat', 'c')
+			->innerJoin('c', 'maint_assets', 'a', $q->expr()->andX(
+				$q->expr()->eq('c.asset_id', 'a.id'),
+				$q->expr()->eq('c.workspace_id', 'a.workspace_id'),
+			))
+			->where($q->expr()->eq('c.workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->andWhere($q->expr()->isNull('a.deleted_at'))
+			->orderBy('a.name', 'ASC')->addOrderBy('a.uuid', 'ASC');
+		if ($partId !== null) {
+			$q->andWhere($q->expr()->eq('c.part_id', $q->createNamedParameter($partId, IQueryBuilder::PARAM_INT)));
+		}
+		$result = $q->executeQuery();
+		$fits = [];
+		try {
+			while (($row = $result->fetchAssociative()) !== false) {
+				$part = (int)$row['part_id'];
+				$asset = (string)$row['uuid'];
+				$source = $row['subject_type'] === 'asset' ? 'manual' : 'profile';
+				$existing = $fits[$part][$asset] ?? null;
+				if ($existing === null || $source === 'manual') {
+					$fits[$part][$asset] = ['assetUuid' => $asset, 'assetName' => (string)$row['name'], 'source' => $source];
+				}
+			}
+		} finally {
+			$result->closeCursor();
+		}
+		return array_map('array_values', $fits);
+	}
+
+	public function hasManualFit(int $workspaceId, int $partId, int $assetId): bool {
+		$q = $this->db->getQueryBuilder();
+		$q->select('id')->from('maint_part_compat')
+			->where($q->expr()->eq('workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->andWhere($q->expr()->eq('part_id', $q->createNamedParameter($partId, IQueryBuilder::PARAM_INT)))
+			->andWhere($q->expr()->eq('asset_id', $q->createNamedParameter($assetId, IQueryBuilder::PARAM_INT)))
+			->andWhere($q->expr()->eq('subject_type', $q->createNamedParameter('asset', IQueryBuilder::PARAM_STR)))
+			->setMaxResults(1);
+		$result = $q->executeQuery();
+		try {
+			return $result->fetchOne() !== false;
+		} finally {
+			$result->closeCursor();
+		}
+	}
+
+	public function deleteManualFit(int $workspaceId, int $partId, int $assetId): void {
+		$q = $this->db->getQueryBuilder();
+		$q->delete('maint_part_compat')
+			->where($q->expr()->eq('workspace_id', $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT)))
+			->andWhere($q->expr()->eq('part_id', $q->createNamedParameter($partId, IQueryBuilder::PARAM_INT)))
+			->andWhere($q->expr()->eq('asset_id', $q->createNamedParameter($assetId, IQueryBuilder::PARAM_INT)))
+			->andWhere($q->expr()->eq('subject_type', $q->createNamedParameter('asset', IQueryBuilder::PARAM_STR)));
+		$q->executeStatement();
+	}
 }

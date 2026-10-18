@@ -67,6 +67,8 @@ final class AuditEventCatalog {
 		'evidence.updated' => ['subjectType' => 'evidence', 'level' => 'info', 'detailKeys' => []],
 		'evidence.archived' => ['subjectType' => 'evidence', 'level' => 'info', 'detailKeys' => []],
 		'evidence.linked' => ['subjectType' => 'evidence', 'level' => 'info', 'detailKeys' => ['targetType', 'targetUuid']],
+		'workspace.created' => ['subjectType' => 'workspace', 'level' => 'security', 'detailKeys' => []],
+		'workspace.renamed' => ['subjectType' => 'workspace', 'level' => 'info', 'detailKeys' => []],
 		'workspace.imported' => ['subjectType' => 'workspace', 'level' => 'security', 'detailKeys' => ['formatVersion', 'sections', 'rows']],
 		'workspace.exported' => ['subjectType' => 'workspace', 'level' => 'security', 'detailKeys' => ['format', 'includeFiles', 'sections']],
 		'evidence.unlinked' => ['subjectType' => 'evidence', 'level' => 'info', 'detailKeys' => ['targetType', 'targetUuid']],

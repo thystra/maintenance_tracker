@@ -28,7 +28,7 @@ final class ImportPolicy {
 	public const ORDER = [
 		'categories', 'assets', 'components', 'specifications', 'relationships', 'assignments',
 		'meters', 'readings', 'work_groups', 'work_definitions', 'work_schedule_rules',
-		'parts', 'vendors', 'links',
+		'vendors', 'parts', 'links',
 		'profiles', 'profile_revisions', 'asset_profiles', 'profile_bindings', 'part_compatibility',
 		'fitment_packs', 'fitment_revisions', 'fitment_imports', 'fitment_bindings', 'fitment_targets',
 		'fitment_slots', 'fitment_offers', 'fitments', 'asset_fitments',

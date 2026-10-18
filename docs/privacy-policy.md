@@ -41,7 +41,7 @@ otherwise.
 | Maintained items | Names, categories, manufacturer and model, components, specifications such as serial numbers or VINs, notes, relationships and assignments between items |
 | Meters and readings | Distance, runtime hours, usage counts, with reading dates |
 | Maintenance plans and history | Work groups, work definitions and schedules, completed maintenance records with notes, parts used, and meter values |
-| Parts, vendors, and links | Part numbers, vendor names, and store or vendor web addresses entered by users |
+| Parts, vendors, and links | Part numbers, typical prices, vendor names, addresses, phone numbers, e-mail addresses, contact person names, and store or vendor web addresses entered by users. A vendor's contact person, phone number and e-mail address can identify a person and are personal data. |
 | Costs | Amounts, currencies, dates, and descriptions |
 | Evidence references | Which Nextcloud file is attached to which item, record, or cost, with its type (photo, receipt, invoice, ...) |
 | Profiles and fitment packs | Maintenance profiles and parts-compatibility data that members install or import |
@@ -153,7 +153,7 @@ supports them as follows:
 |-------|-------------------------|
 | Access | Every member can see their workspace data in the app, and can download everything their role can read with **Export data** (JSON, or ZIP with CSV files and optionally evidence files). |
 | Rectification | Records can be edited. Readings and completed maintenance records are corrected by adding a correcting entry, which keeps the original for the record's history. |
-| Erasure | Deleting the Nextcloud account deletes the personal workspace and other owned workspaces that nobody else uses (see above). Workspace owners can remove members. In a shared workspace that continues to exist, archived records and the append-only audit trail (which contains user IDs) remain; the app has no function to erase them individually, so such requests need the server operator. |
+| Erasure | Deleting the Nextcloud account deletes the personal workspace and other owned workspaces that nobody else uses (see above). Workspace owners can remove members. In a shared workspace that continues to exist, archived records and the append-only audit trail (which contains user IDs) remain; the app has no function to erase them individually, so such requests need the server operator. Vendor contact details (contact person, phone, e-mail, address) describe people outside Nextcloud: record only what you need, and clear the fields by editing the vendor, because deleting a vendor archives the record and keeps its fields. |
 | Portability | **Export data** produces machine-readable JSON and CSV. An owner's export can be restored into a new workspace with **Restore an export**, on the same or another Nextcloud server. |
 | Restriction and objection | Workspace owners control who is a member and with which role. Each user can turn off reminder notifications and calendar entries. Administrators can disable the app or turn off store and vendor links. |
 

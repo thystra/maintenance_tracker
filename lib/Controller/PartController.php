@@ -134,4 +134,38 @@ final class PartController extends OCSController {
 	public function destroy(string $uuid, int $expectedRevision, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::PART_MANAGE, $workspace, fn ($c): DataResponse => new DataResponse($this->service->archive($c, $uuid, $expectedRevision)));
 	}
+
+	/**
+	 * Record that a part fits an item
+	 *
+	 * @param string $uuid UUID of the part
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param string $assetUuid UUID of the item the part fits
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/parts/{uuid}/fits')]
+	public function addFit(string $uuid, int $expectedRevision, string $assetUuid, ?string $workspace = null): DataResponse {
+		return $this->run(AuthorizationCatalog::PART_MANAGE, $workspace, fn ($c): DataResponse => new DataResponse($this->service->addFit($c, $uuid, $expectedRevision, $assetUuid)));
+	}
+
+	/**
+	 * Remove a manually recorded item fit from a part
+	 *
+	 * @param string $uuid UUID of the part
+	 * @param string $assetUuid UUID of the item
+	 * @param int $expectedRevision Revision the client last read, for optimistic concurrency
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Success
+	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'DELETE', url: '/api/v1/parts/{uuid}/fits/{assetUuid}')]
+	public function removeFit(string $uuid, string $assetUuid, int $expectedRevision, ?string $workspace = null): DataResponse {
+		return $this->run(AuthorizationCatalog::PART_MANAGE, $workspace, fn ($c): DataResponse => new DataResponse($this->service->removeFit($c, $uuid, $expectedRevision, $assetUuid)));
+	}
 }

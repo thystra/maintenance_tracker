@@ -8,6 +8,7 @@ configuration.
 - [Privacy policy](privacy-policy.md) – what data the app stores, who can see it, retention, deletion, and your rights
 - [Security and privacy](security.md) – roles and permissions, where data is stored, what exports contain
 - [Accessibility](accessibility.md)
+- [User interface: pages and main flows](ui.md)
 - [Localization](localization.md) – translation status and how to help
 - [Roadmap](roadmap.md) – what is done and what is planned
 - [Changelog](../CHANGELOG.md)

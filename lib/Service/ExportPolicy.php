@@ -114,7 +114,7 @@ final class ExportPolicy {
 	private const DROPPED_COLUMNS = ['workspace_id', 'write_lock_token'];
 
 	/** Offer/link URL columns hidden while outside links are disabled. */
-	public const URL_SECTIONS = ['fitment_offers' => 'url'];
+	public const URL_SECTIONS = ['fitment_offers' => 'url', 'vendors' => 'website'];
 
 	/** Never exported: internal bookkeeping, not maintenance data. */
 	public const EXCLUDED_TABLES = ['maint_changes', 'maint_ev_folders', 'maint_ev_shares', 'maint_ws_transfers', 'maint_ws_xfer_items', 'maint_notify_log', 'maint_cal_events', 'maint_evidence', 'maint_evidence_links'];
