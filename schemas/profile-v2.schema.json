@@ -52,8 +52,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "author",
-        "sourceUrl"
+        "author"
       ],
       "properties": {
         "author": {
@@ -128,6 +127,137 @@
       "maxItems": 512,
       "items": {
         "$ref": "#/$defs/workDefinition"
+      }
+    },
+    "specifications": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "componentKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "regime": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          }
+        }
+      }
+    },
+    "fuel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regimes"
+      ],
+      "properties": {
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "distanceUnit": {
+              "enum": [
+                "mi",
+                "km"
+              ]
+            },
+            "volumeUnit": {
+              "enum": [
+                "gal",
+                "l"
+              ]
+            },
+            "economyUnit": {
+              "enum": [
+                "mpg",
+                "km_l",
+                "l_100km"
+              ]
+            },
+            "fuelType": {
+              "enum": [
+                "gasoline",
+                "diesel",
+                "e85",
+                "lpg",
+                "cng",
+                "other"
+              ]
+            }
+          }
+        },
+        "regimes": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "name",
+              "isDefault"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "isDefault": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
       }
     }
   },

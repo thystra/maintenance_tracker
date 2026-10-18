@@ -16,6 +16,7 @@ use OCA\MaintenanceTracker\Exception\ValidationException;
 use OCA\MaintenanceTracker\Service\AuthorizationCatalog;
 use OCA\MaintenanceTracker\Service\CurrentUser;
 use OCA\MaintenanceTracker\Service\ProfileInstallationService;
+use OCA\MaintenanceTracker\Service\ProfileLibraryService;
 use OCA\MaintenanceTracker\Service\WorkspaceService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
@@ -35,6 +36,7 @@ final class ProfileController extends OCSController {
 		private CurrentUser $currentUser,
 		private WorkspaceService $workspaces,
 		private ProfileInstallationService $service,
+		private ProfileLibraryService $library,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -55,7 +57,7 @@ final class ProfileController extends OCSController {
 	public function index(?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::PROFILE_READ, $workspace, fn ($context): DataResponse => new DataResponse([
 			'workspace' => $context->workspace()->getUuid(),
-			'items' => $this->service->bundled(),
+			'items' => array_merge($this->service->bundled(), $this->library->list($context)),
 		]));
 	}
 

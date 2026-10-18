@@ -34,7 +34,7 @@ final class ImportPolicy {
 		'fitment_slots', 'fitment_offers', 'fitments', 'asset_fitments',
 		'activities', 'activity_items', 'activity_meters', 'activity_parts',
 		'occurrences', 'reminder_policy', 'cost_settings', 'costs',
-		'fuel_settings', 'fuel_regimes', 'fuel',
+		'fuel_settings', 'fuel_regimes', 'fuel', 'workspace_profiles',
 	];
 
 	/**

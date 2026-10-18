@@ -47,6 +47,7 @@ final class UserLifecycleService {
 		'maint_asset_prof',
 		'maint_prof_revs',
 		'maint_profiles',
+		'maint_ws_profiles',
 		'maint_occurrences',
 		'maint_reminder_policy',
 		'maint_activity_parts',

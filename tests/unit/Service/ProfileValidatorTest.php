@@ -130,4 +130,85 @@ final class ProfileValidatorTest extends TestCase {
 		$this->expectExceptionMessage('incompatible');
 		$this->validator->validate($this->profile);
 	}
+
+	public function testOptionalSectionsLeaveExistingHashUnchanged(): void {
+		$before = $this->validator->validate($this->profile)['contentHash'];
+		self::assertSame($before, $this->validator->validate($this->profile)['contentHash']);
+		$withSpecs = $this->profile;
+		$withSpecs['specifications'] = [['key' => 'engine_oil.capacity', 'label' => 'Engine oil capacity', 'value' => '4.5', 'unit' => 'l']];
+		self::assertNotSame($before, $this->validator->validate($withSpecs)['contentHash']);
+	}
+
+	public function testSpecificationsAndFuelAreValidatedAndSummarized(): void {
+		$componentKey = $this->profile['components'][0]['key'];
+		$this->profile['specifications'] = [
+			['key' => 'tyre.pressure', 'label' => 'Tyre pressure', 'value' => 35, 'unit' => 'psi', 'componentKey' => $componentKey],
+			['key' => 'towing', 'label' => 'Towing rated', 'value' => true],
+		];
+		$this->profile['fuel'] = ['settings' => ['distanceUnit' => 'km', 'volumeUnit' => 'l', 'economyUnit' => 'l_100km', 'fuelType' => 'diesel'], 'regimes' => [
+			['key' => 'normal', 'name' => 'Normal', 'isDefault' => true],
+			['key' => 'towing', 'name' => 'Towing', 'isDefault' => false],
+		]];
+		$result = $this->validator->validate($this->profile);
+		self::assertSame(2, $result['summary']['specifications']);
+		self::assertSame(2, $result['summary']['fuelRegimes']);
+		self::assertSame('diesel', $result['profile']['fuel']['settings']['fuelType']);
+		self::assertSame($result['contentHash'], $this->validator->validate($result['profile'])['contentHash']);
+	}
+
+	public function testEmptyFuelSettingsAreDropped(): void {
+		$this->profile['fuel'] = ['settings' => [], 'regimes' => []];
+		$result = $this->validator->validate($this->profile);
+		self::assertArrayNotHasKey('settings', $result['profile']['fuel']);
+		self::assertSame([], $result['profile']['fuel']['regimes']);
+	}
+
+	public function testRejectsFuelRegimesWithoutExactlyOneDefault(): void {
+		$this->profile['fuel'] = ['regimes' => [['key' => 'a', 'name' => 'A', 'isDefault' => false]]];
+		$this->expectException(ValidationException::class);
+		$this->expectExceptionMessage('exactly one');
+		$this->validator->validate($this->profile);
+	}
+
+	public function testRejectsDuplicateRegimeNamesIgnoringCase(): void {
+		$this->profile['fuel'] = ['regimes' => [['key' => 'a', 'name' => 'Towing', 'isDefault' => true], ['key' => 'b', 'name' => 'towing', 'isDefault' => false]]];
+		$this->expectException(ValidationException::class);
+		$this->expectExceptionMessage('duplicate name');
+		$this->validator->validate($this->profile);
+	}
+
+	public function testRejectsUnknownFuelSetting(): void {
+		$this->profile['fuel'] = ['settings' => ['fuelTab' => 'shown'], 'regimes' => []];
+		$this->expectException(ValidationException::class);
+		$this->expectExceptionMessage('unknown fields');
+		$this->validator->validate($this->profile);
+	}
+
+	public function testRejectsSpecificationForUnknownComponent(): void {
+		$this->profile['specifications'] = [['key' => 'x', 'label' => 'X', 'value' => '1', 'componentKey' => 'no_such_component']];
+		$this->expectException(ValidationException::class);
+		$this->expectExceptionMessage('no_such_component');
+		$this->validator->validate($this->profile);
+	}
+
+	public function testRejectsNonScalarSpecificationValue(): void {
+		$this->profile['specifications'] = [['key' => 'x', 'label' => 'X', 'value' => ['nested' => true]]];
+		$this->expectException(ValidationException::class);
+		$this->validator->validate($this->profile);
+	}
+
+	public function testSourceUrlIsOptionalButMustBeHttpsWhenPresent(): void {
+		unset($this->profile['provenance']['sourceUrl']);
+		$result = $this->validator->validate($this->profile);
+		self::assertArrayNotHasKey('sourceUrl', $result['profile']['provenance']);
+		$this->profile['provenance']['sourceUrl'] = 'http://example.com/profile.json';
+		$this->expectException(ValidationException::class);
+		$this->validator->validate($this->profile);
+	}
+
+	public function testEmptyApplicabilityCanonicalizesToAnObject(): void {
+		$this->profile['applicability'] = [];
+		$result = $this->validator->validate($this->profile);
+		self::assertStringContainsString('"applicability":{}', $result['canonicalJson']);
+	}
 }

@@ -33,6 +33,8 @@ final class ProfileInstallationService {
 		private UuidGenerator $uuidGenerator,
 		private ChangeJournal $journal,
 		private ITimeFactory $timeFactory,
+		private SpecificationService $specifications,
+		private FuelService $fuel,
 	) {
 	}
 
@@ -59,9 +61,6 @@ final class ProfileInstallationService {
 		$conflicts = $this->conflicts($context, $asset, $v['profile']);
 		$warnings = [];
 		$applicable = $this->applicable($asset, $v['profile'], $warnings);
-		foreach ($this->partConflicts($v['profile']['parts']) as $conflict) {
-			$conflicts[] = $conflict;
-		}
 		return [
 			'assetUuid' => $asset->getUuid(),
 			'profile' => $this->metadata($v['profile'], $v['contentHash'], $v['summary'], $source),
@@ -69,6 +68,7 @@ final class ProfileInstallationService {
 			'installable' => $applicable && $conflicts === [],
 			'conflicts' => $conflicts,
 			'warnings' => $warnings,
+			'notices' => $this->notices($context, $asset, $v['profile']),
 			'materializes' => $v['summary'],
 		];
 	}
@@ -114,12 +114,7 @@ final class ProfileInstallationService {
 		$revisionId = $this->profileRevision($workspaceId, $profileId, $profile, $v['contentHash'], $v['canonicalJson'], $now);
 		$assetProfileId = $this->repository->insertInstallation($workspaceId, $asset->getId(), $revisionId, $installationUuid, $now);
 
-		$partIds = $this->materializeParts($context, $assetProfileId, $profile['parts']);
-		$componentUuids = $this->materializeComponents($context, $asset, $assetProfileId, $profile['components']);
-		$meterUuids = $this->materializeMeters($context, $asset, $assetProfileId, $profile['meters']);
-		$groupUuids = $this->materializeGroups($context, $asset, $assetProfileId, $profile['workGroups']);
-		$definitionUuids = $this->materializeDefinitions($context, $asset, $assetProfileId, $profile['workDefinitions'], $componentUuids, $meterUuids, $groupUuids);
-		$this->materializeCompatibility($context, $asset, $assetProfileId, $profile, $partIds, $componentUuids, $definitionUuids, $now);
+		$this->materialize($context, $asset, $profile, $assetProfileId, ['type' => 'profile', 'reference' => $profile['id'] . '@' . $profile['version']], $now);
 
 		$updated = $this->assets->update($context, $asset->getUuid(), $asset->getRevision(), [
 			'profileKey' => $profile['id'],
@@ -141,6 +136,35 @@ final class ProfileInstallationService {
 			throw new \LogicException('Profile installation disappeared inside its transaction');
 		}
 		return $this->installationToApi($context, $row, $updated->getUuid());
+	}
+
+	/**
+	 * Create the ordinary records a validated profile describes. With an
+	 * installation id the source keys are bound to the created records;
+	 * without one (copying an item's setup) nothing is bound.
+	 *
+	 * @param array<string,mixed> $profile validated profile
+	 * @param array{type:string,reference:string}|null $specSource
+	 * @return array<string,int>
+	 */
+	public function materialize(WorkspaceContext $context, Asset $asset, array $profile, ?int $assetProfileId, ?array $specSource, int $now): array {
+		$partIds = $this->materializeParts($context, $assetProfileId, $profile['parts']);
+		$componentUuids = $this->materializeComponents($context, $asset, $assetProfileId, $profile['components']);
+		$meterUuids = $this->materializeMeters($context, $asset, $assetProfileId, $profile['meters']);
+		$groupUuids = $this->materializeGroups($context, $asset, $assetProfileId, $profile['workGroups']);
+		$definitionUuids = $this->materializeDefinitions($context, $asset, $assetProfileId, $profile['workDefinitions'], $componentUuids, $meterUuids, $groupUuids);
+		$this->materializeCompatibility($context, $asset, $assetProfileId, $profile, $partIds, $componentUuids, $definitionUuids, $now);
+		$specifications = $this->materializeSpecifications($context, $asset, $assetProfileId, $profile['specifications'] ?? [], $componentUuids, $specSource);
+		$regimes = $this->materializeFuel($context, $asset, $assetProfileId, $profile['fuel'] ?? null);
+		return [
+			'meters' => count($meterUuids),
+			'components' => array_sum(array_map('count', $componentUuids)),
+			'parts' => count($partIds),
+			'workGroups' => count($groupUuids),
+			'workDefinitions' => count($definitionUuids),
+			'specifications' => $specifications,
+			'fuelRegimes' => $regimes,
+		];
 	}
 
 	/** @param array{origin:string,trustState:string} $source */
@@ -168,7 +192,7 @@ final class ProfileInstallationService {
 	}
 
 	/** @param list<array<string,mixed>> $templates @return array<string,list<string>> */
-	private function materializeComponents(WorkspaceContext $context, Asset $asset, int $assetProfileId, array $templates): array {
+	private function materializeComponents(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $templates): array {
 		$byKey = [];
 		foreach ($templates as $template) $byKey[$template['key']] = $template;
 		$created = [];
@@ -195,7 +219,7 @@ final class ProfileInstallationService {
 					'status' => $template['enabledByDefault'] ? 'active' : 'suppressed',
 				]);
 				$uuids[] = $row->getUuid();
-				$this->repository->insertBinding($context->workspace()->getId(), $assetProfileId, 'component', $template['key'], $ordinal, $row->getUuid());
+				$this->bind($context, $assetProfileId, 'component', $template['key'], $ordinal, $row->getUuid());
 			}
 			unset($creating[$key]);
 			return $created[$key] = $uuids;
@@ -205,18 +229,18 @@ final class ProfileInstallationService {
 	}
 
 	/** @param list<array<string,mixed>> $templates @return array<string,string> */
-	private function materializeMeters(WorkspaceContext $context, Asset $asset, int $assetProfileId, array $templates): array {
-		$created=[];foreach($templates as $t){$row=$this->meters->create($context,$asset->getUuid(),['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'name'=>$t['name'],'dimension'=>$t['dimension'],'displayUnit'=>$t['displayUnit'],'monotonic'=>$t['monotonic']]);$created[$t['key']]=$row['uuid'];$this->repository->insertBinding($context->workspace()->getId(),$assetProfileId,'meter',$t['key'],1,$row['uuid']);}return $created;
+	private function materializeMeters(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $templates): array {
+		$created=[];foreach($templates as $t){$row=$this->meters->create($context,$asset->getUuid(),['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'name'=>$t['name'],'dimension'=>$t['dimension'],'displayUnit'=>$t['displayUnit'],'monotonic'=>$t['monotonic']]);$created[$t['key']]=$row['uuid'];$this->bind($context,$assetProfileId,'meter',$t['key'],1,$row['uuid']);}return $created;
 	}
 
 	/** @param list<array<string,mixed>> $templates @return array<string,string> */
-	private function materializeGroups(WorkspaceContext $context, Asset $asset, int $assetProfileId, array $templates): array {
-		$created=[];foreach($templates as $t){$payload=['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'name'=>$t['name'],'sortOrder'=>$t['sortOrder']];if(isset($t['description']))$payload['description']=$t['description'];$row=$this->groups->create($context,$asset->getUuid(),$payload);$created[$t['key']]=$row['uuid'];$this->repository->insertBinding($context->workspace()->getId(),$assetProfileId,'work_group',$t['key'],1,$row['uuid']);}return $created;
+	private function materializeGroups(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $templates): array {
+		$created=[];foreach($templates as $t){$payload=['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'name'=>$t['name'],'sortOrder'=>$t['sortOrder']];if(isset($t['description']))$payload['description']=$t['description'];$row=$this->groups->create($context,$asset->getUuid(),$payload);$created[$t['key']]=$row['uuid'];$this->bind($context,$assetProfileId,'work_group',$t['key'],1,$row['uuid']);}return $created;
 	}
 
 	/** @param list<array<string,mixed>> $templates @param array<string,list<string>> $componentUuids @param array<string,string> $meterUuids @param array<string,string> $groupUuids */
-	private function materializeDefinitions(WorkspaceContext $context, Asset $asset, int $assetProfileId, array $templates, array $componentUuids, array $meterUuids, array $groupUuids): array {
-		$created=[];foreach($templates as $t){$payload=['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'title'=>$t['title'],'kind'=>$t['kind'],'status'=>$t['enabledByDefault']?'active':'suppressed','schedule'=>$this->runtimeSchedule($t['schedule'],$meterUuids)];if(isset($t['groupKey']))$payload['groupUuid']=$groupUuids[$t['groupKey']];if(isset($t['componentKey']))$payload['componentUuid']=$componentUuids[$t['componentKey']][0];if(isset($t['instructions']))$payload['instructions']=$t['instructions'];if(isset($t['notes']))$payload['notes']=$t['notes'];$row=$this->definitions->create($context,$asset->getUuid(),$payload);$this->repository->insertBinding($context->workspace()->getId(),$assetProfileId,'work_definition',$t['key'],1,$row['uuid']);$created[$t['key']]=$row['uuid'];}
+	private function materializeDefinitions(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $templates, array $componentUuids, array $meterUuids, array $groupUuids): array {
+		$created=[];foreach($templates as $t){$payload=['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'title'=>$t['title'],'kind'=>$t['kind'],'status'=>$t['enabledByDefault']?'active':'suppressed','schedule'=>$this->runtimeSchedule($t['schedule'],$meterUuids)];if(isset($t['groupKey']))$payload['groupUuid']=$groupUuids[$t['groupKey']];if(isset($t['componentKey']))$payload['componentUuid']=$componentUuids[$t['componentKey']][0];if(isset($t['instructions']))$payload['instructions']=$t['instructions'];if(isset($t['notes']))$payload['notes']=$t['notes'];$row=$this->definitions->create($context,$asset->getUuid(),$payload);$this->bind($context,$assetProfileId,'work_definition',$t['key'],1,$row['uuid']);$created[$t['key']]=$row['uuid'];}
 		return $created;
 	}
 
@@ -226,15 +250,15 @@ final class ProfileInstallationService {
 	 * @param list<array<string,mixed>> $templates
 	 * @return array<string,int> part key => canonical part id
 	 */
-	private function materializeParts(WorkspaceContext $context, int $assetProfileId, array $templates): array {
+	private function materializeParts(WorkspaceContext $context, ?int $assetProfileId, array $templates): array {
 		$ids = [];
 		foreach ($templates as $t) {
 			$row = $this->parts->ensure($context, $this->uuidGenerator->generate(), $t['manufacturer'], $t['partNumber'], $t['description'])['row'];
 			$ids[$t['key']] = (int)$row['id'];
-			$this->repository->insertBinding($context->workspace()->getId(), $assetProfileId, 'part', $t['key'], 1, (string)$row['uuid']);
+			$this->bind($context, $assetProfileId, 'part', $t['key'], 1, (string)$row['uuid']);
 			foreach ($t['offers'] as $j => $offer) {
 				$linkUuid = $this->links->ensureForPart($context, (int)$row['id'], $offer['label'], $offer['url']);
-				$this->repository->insertBinding($context->workspace()->getId(), $assetProfileId, 'offer', $t['key'], $j + 1, $linkUuid);
+				$this->bind($context, $assetProfileId, 'offer', $t['key'], $j + 1, $linkUuid);
 			}
 		}
 		return $ids;
@@ -246,7 +270,7 @@ final class ProfileInstallationService {
 	 * @param array<string,list<string>> $componentUuids
 	 * @param array<string,string> $definitionUuids
 	 */
-	private function materializeCompatibility(WorkspaceContext $context, Asset $asset, int $assetProfileId, array $profile, array $partIds, array $componentUuids, array $definitionUuids, int $now): void {
+	private function materializeCompatibility(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $profile, array $partIds, array $componentUuids, array $definitionUuids, int $now): void {
 		$workspaceId = $context->workspace()->getId();
 		foreach ($profile['components'] as $c) {
 			foreach ($componentUuids[$c['key']] ?? [] as $componentUuid) {
@@ -284,6 +308,69 @@ final class ProfileInstallationService {
 		return $out;
 	}
 
+	private function bind(WorkspaceContext $context, ?int $assetProfileId, string $sourceType, string $sourceKey, int $ordinal, string $targetUuid): void {
+		if ($assetProfileId !== null) {
+			$this->repository->insertBinding($context->workspace()->getId(), $assetProfileId, $sourceType, $sourceKey, $ordinal, $targetUuid);
+		}
+	}
+
+	/**
+	 * @param list<array<string,mixed>> $templates
+	 * @param array<string,list<string>> $componentUuids
+	 * @param array{type:string,reference:string}|null $source
+	 */
+	private function materializeSpecifications(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $templates, array $componentUuids, ?array $source): int {
+		$count = 0;
+		foreach ($templates as $i => $t) {
+			$targets = isset($t['componentKey']) ? ($componentUuids[$t['componentKey']] ?? []) : [null];
+			foreach ($targets as $ordinal => $componentUuid) {
+				$payload = ['uuid' => $this->uuidGenerator->generate(), 'key' => $t['key'], 'label' => $t['label'], 'value' => $t['value']];
+				if ($componentUuid !== null) $payload['componentUuid'] = $componentUuid;
+				if (isset($t['unit'])) $payload['unit'] = $t['unit'];
+				if (isset($t['regime'])) $payload['regime'] = $t['regime'];
+				if ($source !== null) $payload['source'] = $source;
+				$spec = $this->specifications->create($context, $asset->getUuid(), $payload);
+				$this->bind($context, $assetProfileId, 'specification', $t['key'] . (isset($t['componentKey']) ? '@' . $t['componentKey'] : ''), $ordinal + 1, $spec->getUuid());
+				++$count;
+			}
+		}
+		return $count;
+	}
+
+	/**
+	 * Fuel settings apply only while the item still has the defaults; regimes
+	 * are added, and the profile's default only wins on an item without
+	 * regimes, so existing choices are never overwritten.
+	 *
+	 * @param array<string,mixed>|null $fuel
+	 */
+	private function materializeFuel(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, ?array $fuel): int {
+		if ($fuel === null) {
+			return 0;
+		}
+		if (($fuel['settings'] ?? []) !== []) {
+			$current = $this->fuel->settings($context, $asset->getUuid());
+			if ((int)$current['revision'] === 0) {
+				$this->fuel->updateSettings($context, $asset->getUuid(), 0, $fuel['settings']);
+			}
+		}
+		$hadRegimes = $this->fuel->regimes($context, $asset->getUuid()) !== [];
+		foreach ($fuel['regimes'] as $r) {
+			$row = $this->fuel->createRegime($context, $asset->getUuid(), ['uuid' => $this->uuidGenerator->generate(), 'name' => $r['name'], 'isDefault' => !$hadRegimes && $r['isDefault']]);
+			$this->bind($context, $assetProfileId, 'fuel_regime', $r['key'], 1, (string)$row['uuid']);
+		}
+		return count($fuel['regimes']);
+	}
+
+	/** @param array<string,mixed> $profile @return list<string> */
+	private function notices(WorkspaceContext $context, Asset $asset, array $profile): array {
+		$out = [];
+		if (($profile['fuel']['settings'] ?? []) !== [] && (int)$this->fuel->settings($context, $asset->getUuid())['revision'] !== 0) {
+			$out[] = 'The item already has its own fuel settings; the profile\'s fuel settings are not applied';
+		}
+		return $out;
+	}
+
 	/** @param array<string,string> $meterUuids */
 	private function runtimeSchedule(string|array $schedule, array $meterUuids): string|array {
 		if ($schedule === 'none') return 'none';
@@ -296,13 +383,29 @@ final class ProfileInstallationService {
 		$out=[];$workspaceId=$context->workspace()->getId();
 		if($this->repository->findInstallationForAsset($workspaceId,$asset->getId())!==null)$out[]='Asset already has a materialized profile installation; profile upgrades are a later explicit-diff workflow';
 		if($asset->getProfileKey()!==null||$asset->getProfileVersion()!==null)$out[]='Asset already carries profile metadata and cannot be adopted silently';
-		$meterKeys=array_fill_keys(array_map(static fn(array $i):string=>$i['key'],$this->meters->list($context,$asset->getUuid())),true);
-		$groupKeys=array_fill_keys(array_map(static fn(array $i):string=>$i['key'],$this->groups->list($context,$asset->getUuid())),true);
-		$defKeys=array_fill_keys(array_map(static fn(array $i):string=>$i['key'],$this->definitions->list($context,$asset->getUuid())),true);
-		foreach($profile['meters'] as $i)if(isset($meterKeys[$i['key']]))$out[]='Meter key already exists on asset: '.$i['key'];
-		foreach($profile['workGroups'] as $i)if(isset($groupKeys[$i['key']]))$out[]='Work-group key already exists on asset: '.$i['key'];
-		foreach($profile['workDefinitions'] as $i)if(isset($defKeys[$i['key']]))$out[]='Work-definition key already exists on asset: '.$i['key'];
+		$out=array_merge($out,$this->setupConflicts($context,$asset,$profile));
 		return array_values(array_unique($out));
+	}
+
+	/**
+	 * Conflicts that also block copying a setup between items.
+	 *
+	 * @param array<string,mixed> $profile
+	 * @return list<string>
+	 */
+	public function setupConflicts(WorkspaceContext $context, Asset $asset, array $profile): array {
+		$out = [];
+		$meterKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->meters->list($context, $asset->getUuid())), true);
+		$groupKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->groups->list($context, $asset->getUuid())), true);
+		$defKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->definitions->list($context, $asset->getUuid())), true);
+		foreach ($profile['meters'] as $i) if (isset($meterKeys[$i['key']])) $out[] = 'Meter key already exists on asset: ' . $i['key'];
+		foreach ($profile['workGroups'] as $i) if (isset($groupKeys[$i['key']])) $out[] = 'Work-group key already exists on asset: ' . $i['key'];
+		foreach ($profile['workDefinitions'] as $i) if (isset($defKeys[$i['key']])) $out[] = 'Work-definition key already exists on asset: ' . $i['key'];
+		$regimeNames = [];
+		foreach ($this->fuel->regimes($context, $asset->getUuid()) as $r) $regimeNames[mb_strtolower((string)$r['name'])] = true;
+		foreach ($profile['fuel']['regimes'] ?? [] as $r) if (isset($regimeNames[mb_strtolower($r['name'])])) $out[] = 'Fuel regime already exists on asset: ' . $r['name'];
+		foreach ($this->partConflicts($profile['parts']) as $conflict) $out[] = $conflict;
+		return $out;
 	}
 
 	/** @param array<string,mixed> $profile @param list<string> $warnings */
@@ -319,5 +422,5 @@ final class ProfileInstallationService {
 	private function metadata(array $profile,string $hash,array $summary,array $source):array{return ['id'=>$profile['id'],'version'=>$profile['version'],'name'=>$profile['name'],'category'=>$profile['category'],'description'=>$profile['description'],'dataLicense'=>$profile['dataLicense'],'provenance'=>$profile['provenance'],'applicability'=>$profile['applicability'],'contentHash'=>$hash,'summary'=>$summary,'origin'=>$source['origin'],'trustState'=>$source['trustState']];}
 
 	/** @param array<string,mixed> $row @return array<string,mixed> */
-	private function installationToApi(WorkspaceContext $context,array $row,string $assetUuid):array{$bindings=array_map(static fn(array $b):array=>['sourceType'=>(string)$b['source_type'],'sourceKey'=>(string)$b['source_key'],'ordinal'=>(int)$b['source_ordinal'],'targetUuid'=>(string)$b['target_uuid']],$this->repository->findBindings($context->workspace()->getId(),(int)$row['id']));return ['installationUuid'=>(string)$row['installation_uuid'],'assetUuid'=>$assetUuid,'profile'=>['id'=>(string)$row['profile_key'],'version'=>(string)$row['profile_version'],'contentHash'=>(string)$row['content_hash'],'origin'=>(string)$row['origin'],'trustState'=>(string)$row['trust_state'],'dataLicense'=>(string)$row['data_license'],'provenance'=>['author'=>(string)$row['author_name'],'sourceUrl'=>(string)$row['source_url'],'sourceRevision'=>$row['source_revision']===null?null:(string)$row['source_revision']]],'installedAt'=>gmdate('Y-m-d\TH:i:s\Z',(int)$row['installed_at']),'bindings'=>$bindings];}
+	private function installationToApi(WorkspaceContext $context,array $row,string $assetUuid):array{$bindings=array_map(static fn(array $b):array=>['sourceType'=>(string)$b['source_type'],'sourceKey'=>(string)$b['source_key'],'ordinal'=>(int)$b['source_ordinal'],'targetUuid'=>(string)$b['target_uuid']],$this->repository->findBindings($context->workspace()->getId(),(int)$row['id']));return ['installationUuid'=>(string)$row['installation_uuid'],'assetUuid'=>$assetUuid,'profile'=>['id'=>(string)$row['profile_key'],'version'=>(string)$row['profile_version'],'contentHash'=>(string)$row['content_hash'],'origin'=>(string)$row['origin'],'trustState'=>(string)$row['trust_state'],'dataLicense'=>(string)$row['data_license'],'provenance'=>['author'=>(string)$row['author_name'],'sourceUrl'=>(string)$row['source_url']===''?null:(string)$row['source_url'],'sourceRevision'=>$row['source_revision']===null?null:(string)$row['source_revision']]],'installedAt'=>gmdate('Y-m-d\TH:i:s\Z',(int)$row['installed_at']),'bindings'=>$bindings];}
 }

@@ -31,7 +31,7 @@ final class ProfileValidator {
 	public function validate(array $input): array {
 		$this->assertEncodedBound($input);
 		$this->assertDepth($input, 0);
-		$this->known($input, ['schemaVersion','id','version','name','category','description','dataLicense','provenance','applicability','meters','components','parts','workGroups','workDefinitions'], 'profile');
+		$this->known($input, ['schemaVersion','id','version','name','category','description','dataLicense','provenance','applicability','meters','components','parts','workGroups','workDefinitions','specifications','fuel'], 'profile');
 		$this->required($input, ['schemaVersion','id','version','name','category','description','dataLicense','provenance','applicability','meters','components','parts','workGroups','workDefinitions'], 'profile');
 		if ($input['schemaVersion'] !== 2) {
 			throw new ValidationException('schemaVersion must be 2 for runtime installation');
@@ -53,7 +53,20 @@ final class ProfileValidator {
 			'workGroups' => $this->workGroups($input['workGroups']),
 			'workDefinitions' => $this->workDefinitions($input['workDefinitions']),
 		];
+		// Optional sections (0.1.17) are only present in the canonical form when
+		// supplied, so the identity of existing profiles does not change.
+		if (array_key_exists('specifications', $input)) {
+			$profile['specifications'] = $this->specifications($input['specifications']);
+		}
+		if (array_key_exists('fuel', $input)) {
+			$profile['fuel'] = $this->fuel($input['fuel']);
+		}
 		$this->crossReferences($profile);
+		foreach ($profile['specifications'] ?? [] as $spec) {
+			if (isset($spec['componentKey']) && !in_array($spec['componentKey'], array_column($profile['components'], 'key'), true)) {
+				throw new ValidationException("Specification {$spec['key']} references unknown componentKey {$spec['componentKey']}");
+			}
+		}
 		$canonicalJson = $this->canonicalJson($profile);
 		return [
 			'profile' => $profile,
@@ -66,6 +79,8 @@ final class ProfileValidator {
 				'parts' => count($profile['parts']),
 				'workGroups' => count($profile['workGroups']),
 				'workDefinitions' => count($profile['workDefinitions']),
+				'specifications' => count($profile['specifications'] ?? []),
+				'fuelRegimes' => count($profile['fuel']['regimes'] ?? []),
 			],
 		];
 	}
@@ -73,6 +88,9 @@ final class ProfileValidator {
 	/** @param array<string,mixed> $profile */
 	public function canonicalJson(array $profile): string {
 		$normalized = $this->sortObjectKeys($profile);
+		if (($normalized['applicability'] ?? null) === []) {
+			$normalized['applicability'] = new \stdClass();
+		}
 		try {
 			return json_encode($normalized, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
 		} catch (JsonException $exception) {
@@ -83,13 +101,19 @@ final class ProfileValidator {
 	private function provenance(mixed $value): array {
 		$a = $this->object($value, 'provenance');
 		$this->known($a, ['author','sourceUrl','sourceRevision'], 'provenance');
-		$this->required($a, ['author','sourceUrl'], 'provenance');
-		$out = ['author' => $this->text($a['author'], 'provenance.author', 255), 'sourceUrl' => $this->httpsUrl($a['sourceUrl'], 'provenance.sourceUrl')];
+		$this->required($a, ['author'], 'provenance');
+		$out = ['author' => $this->text($a['author'], 'provenance.author', 255)];
+		// A source URL is provenance metadata only (never fetched); profiles
+		// built in a workspace have none.
+		if (array_key_exists('sourceUrl', $a)) $out['sourceUrl'] = $this->httpsUrl($a['sourceUrl'], 'provenance.sourceUrl');
 		if (array_key_exists('sourceRevision', $a)) $out['sourceRevision'] = $this->text($a['sourceRevision'], 'provenance.sourceRevision', 160);
 		return $out;
 	}
 
 	private function applicability(mixed $value): array {
+		if ($value === []) {
+			return [];
+		}
 		$a = $this->object($value, 'applicability');
 		$this->known($a, ['manufacturer','model','yearFrom','yearTo','tags'], 'applicability');
 		$out = [];
@@ -131,6 +155,83 @@ final class ProfileValidator {
 		$items=$this->listValue($value,'parts',512);$out=[];
 		foreach($items as $i=>$value){$a=$this->object($value,"parts[{$i}]");$this->known($a,['key','manufacturer','partNumber','description','offers'],"parts[{$i}]");$this->required($a,['key','manufacturer','partNumber','description','offers'],"parts[{$i}]");$offers=$this->listValue($a['offers'],"parts[{$i}].offers",32);$normOffers=[];foreach($offers as $j=>$offer){$o=$this->object($offer,"parts[{$i}].offers[{$j}]");$this->known($o,['label','sku','url'],"parts[{$i}].offers[{$j}]");$this->required($o,['label','url'],"parts[{$i}].offers[{$j}]");$n=['label'=>$this->text($o['label'],"parts[{$i}].offers[{$j}].label",255),'url'=>$this->httpsUrl($o['url'],"parts[{$i}].offers[{$j}].url")];if(array_key_exists('sku',$o))$n['sku']=$this->text($o['sku'],"parts[{$i}].offers[{$j}].sku",128);$normOffers[]=$n;}$out[]=['key'=>$this->key($a['key'],"parts[{$i}].key",64),'manufacturer'=>$this->text($a['manufacturer'],"parts[{$i}].manufacturer",255),'partNumber'=>$this->text($a['partNumber'],"parts[{$i}].partNumber",128),'description'=>$this->text($a['description'],"parts[{$i}].description",1000,true),'offers'=>$normOffers];}
 		$this->uniqueKeys($out,'parts');return $out;
+	}
+
+	/** @return list<array<string,mixed>> */
+	private function specifications(mixed $value): array {
+		$items = $this->listValue($value, 'specifications', 512);
+		$out = [];
+		$seen = [];
+		foreach ($items as $i => $item) {
+			$a = $this->object($item, "specifications[{$i}]");
+			$this->known($a, ['key','label','value','unit','componentKey','regime'], "specifications[{$i}]");
+			$this->required($a, ['key','label','value'], "specifications[{$i}]");
+			$key = $this->text($a['key'], "specifications[{$i}].key", 160);
+			if (preg_match('/^[a-z0-9][a-z0-9._-]*$/D', $key) !== 1) {
+				throw new ValidationException("specifications[{$i}].key must be a lowercase key");
+			}
+			$n = ['key' => $key, 'label' => $this->text($a['label'], "specifications[{$i}].label", 255), 'value' => $this->specValue($a['value'], "specifications[{$i}].value")];
+			if (array_key_exists('unit', $a)) $n['unit'] = $this->text($a['unit'], "specifications[{$i}].unit", 64);
+			if (array_key_exists('componentKey', $a)) $n['componentKey'] = $this->key($a['componentKey'], "specifications[{$i}].componentKey", 64);
+			if (array_key_exists('regime', $a)) $n['regime'] = $this->key($a['regime'], "specifications[{$i}].regime", 64);
+			$identity = $key . '|' . ($n['componentKey'] ?? '');
+			if (isset($seen[$identity])) {
+				throw new ValidationException("specifications contains duplicate key {$key}");
+			}
+			$seen[$identity] = true;
+			$out[] = $n;
+		}
+		return $out;
+	}
+
+	private function specValue(mixed $value, string $field): string|int|float|bool {
+		if (is_bool($value) || is_int($value)) {
+			return $value;
+		}
+		if (is_float($value)) {
+			if (!is_finite($value)) throw new ValidationException("{$field} must be finite");
+			return $value;
+		}
+		return $this->text($value, $field, 1000, true);
+	}
+
+	/** @return array<string,mixed> */
+	private function fuel(mixed $value): array {
+		$a = $this->object($value, 'fuel');
+		$this->known($a, ['settings','regimes'], 'fuel');
+		$this->required($a, ['regimes'], 'fuel');
+		$out = [];
+		if (array_key_exists('settings', $a)) {
+			$s = $a['settings'];
+			if (!is_array($s) || ($s !== [] && array_is_list($s))) throw new ValidationException('fuel.settings must be an object');
+			$this->known($s, ['distanceUnit','volumeUnit','economyUnit','fuelType'], 'fuel.settings');
+			$settings = [];
+			if (array_key_exists('distanceUnit', $s)) $settings['distanceUnit'] = $this->enum($s['distanceUnit'], 'fuel.settings.distanceUnit', array_keys(FuelEconomy::DISTANCE_UNITS));
+			if (array_key_exists('volumeUnit', $s)) $settings['volumeUnit'] = $this->enum($s['volumeUnit'], 'fuel.settings.volumeUnit', array_keys(FuelEconomy::VOLUME_UNITS));
+			if (array_key_exists('economyUnit', $s)) $settings['economyUnit'] = $this->enum($s['economyUnit'], 'fuel.settings.economyUnit', FuelEconomy::ECONOMY_UNITS);
+			if (array_key_exists('fuelType', $s)) $settings['fuelType'] = $this->enum($s['fuelType'], 'fuel.settings.fuelType', FuelEconomy::FUEL_TYPES);
+			if ($settings !== []) $out['settings'] = $settings;
+		}
+		$regimes = [];
+		$defaults = 0;
+		$names = [];
+		foreach ($this->listValue($a['regimes'], 'fuel.regimes', 50) as $i => $item) {
+			$r = $this->object($item, "fuel.regimes[{$i}]");
+			$this->known($r, ['key','name','isDefault'], "fuel.regimes[{$i}]");
+			$this->required($r, ['key','name','isDefault'], "fuel.regimes[{$i}]");
+			$regime = ['key' => $this->key($r['key'], "fuel.regimes[{$i}].key", 64), 'name' => $this->text($r['name'], "fuel.regimes[{$i}].name", 120), 'isDefault' => $this->boolean($r['isDefault'], "fuel.regimes[{$i}].isDefault")];
+			$defaults += $regime['isDefault'] ? 1 : 0;
+			$lower = function_exists('mb_strtolower') ? mb_strtolower($regime['name']) : strtolower($regime['name']);
+			if (isset($names[$lower])) throw new ValidationException("fuel.regimes contains duplicate name {$regime['name']}");
+			$names[$lower] = true;
+			$regimes[] = $regime;
+		}
+		$this->uniqueKeys($regimes, 'fuel.regimes');
+		if ($regimes !== [] && $defaults !== 1) {
+			throw new ValidationException('fuel.regimes must mark exactly one regime as the default');
+		}
+		$out['regimes'] = $regimes;
+		return $out;
 	}
 
 	private function workGroups(mixed $value): array {
