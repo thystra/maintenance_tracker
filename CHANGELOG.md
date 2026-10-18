@@ -12,6 +12,18 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.18] - 2026-10-18
+
+### Fixed
+
+- CI: Nextcloud jobs no longer fail intermittently with "Nextcloud did not become ready within 180 seconds". The smoke and upgrade harnesses share `tests/integration/lib/docker-ready.sh`. It waits up to `NC_SMOKE_READY_TIMEOUT` seconds (default 600, set in CI) on a real clock (the old loop counted 90 polls, not 180 s), prints progress every 30 s, and fails fast if the container exits. On failure it prints `docker ps -a`, the container state and log, `status.php`, `occ status`, `nextcloud.log` and the database log. Sections that cannot be collected, for example because the container never started, now say so instead of printing nothing. A start that never becomes ready is retried once on fresh containers (`NC_SMOKE_START_ATTEMPTS`, default 2).
+- CI: images are pulled in their own step (`tests/integration/pull-images.sh`, retried with exponential backoff: `NC_SMOKE_PULL_ATTEMPTS`, `NC_SMOKE_PULL_BACKOFF`), so registry time never counts against the readiness wait. The harnesses pull the same way when an image is missing.
+- CI: parallel jobs on the shared Docker daemon no longer collide on fixed names (for example "network with name maintenance-tracker-nc34-pgsql-smoke-network already exists"), and one job can no longer remove another job's containers through the old leftover cleanup. Container and network names carry a short per-run id (`NC_SMOKE_RUN_ID`: 8 hex characters hashed from the CI run id, job, attempt and a random part; each name can still be overridden), for example `mt-1a2b3c4d-nc33-mysql-db`. Names double as DNS names, so they stay within the 63-character DNS label limit: the harness fails fast on a longer name, and Nextcloud reaches the database by the short alias `db` (`NC_SMOKE_DB_ALIAS`) on the run's own network, not by its container name. Every resource gets this run's label. The exit trap removes only this run's labelled containers (with their anonymous volumes) and networks. An existing network is reused only if it carries this run's label. Containers no longer use `--rm`, so a container that crashed keeps its logs until the trap has printed them.
+
+### Changed
+
+- CI job limits: `nextcloud` 20 → 45 minutes and `upgrade` 20 → 40 minutes, each pre-pull step 15 minutes. This leaves room for the pull, two 10-minute readiness waits and the suite. Normal runs are unchanged.
+
 ## [0.1.17] - 2026-10-18
 
 ### Added

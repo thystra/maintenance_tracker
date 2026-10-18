@@ -106,7 +106,10 @@ jobs:
   nextcloud:
     name: Nextcloud ${{ matrix.nextcloud }} / ${{ matrix.database }}
     runs-on: forgejo-workstation
-    timeout-minutes: 20
+    # Budget: image pre-pull (step limit 15) + up to two starts of
+    # NC_SMOKE_READY_TIMEOUT (10 min each) + the suite (about 10 min on a
+    # cold runner). Normal runs finish well inside 20 minutes.
+    timeout-minutes: 45
     container:
       image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud@sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c
     needs:
@@ -145,18 +148,33 @@ jobs:
         if: matrix.database == 'sqlite'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      # Pulling is its own retried step so a cold runner or a slow registry
+      # never counts against the Nextcloud readiness timeout.
+      - name: Pre-pull container images
+        timeout-minutes: 15
+        env:
+          NC_SMOKE_DATABASE: ${{ matrix.database }}
+          NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+          NC_SMOKE_BROWSER: ${{ matrix.database == 'sqlite' && '1' || '0' }}
+        run: bash tests/integration/pull-images.sh
+
       - name: Run disposable Nextcloud ${{ matrix.nextcloud }} integration suite
         env:
           NC_SMOKE_DATABASE: ${{ matrix.database }}
           NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
           # The UI mount check runs once per Nextcloud release (SQLite jobs).
           NC_SMOKE_BROWSER: ${{ matrix.database == 'sqlite' && '1' || '0' }}
+          # First install on a cold runner can take minutes; a start that
+          # never becomes ready is retried once with a diagnostics dump.
+          NC_SMOKE_READY_TIMEOUT: '600'
+          NC_SMOKE_START_ATTEMPTS: '2'
         run: bash tests/integration/nextcloud-smoke.sh
 
   upgrade:
     name: Upgrade from v0.1.10 on Nextcloud ${{ matrix.nextcloud }} / ${{ matrix.database }}
     runs-on: forgejo-workstation
-    timeout-minutes: 20
+    # Same budget as the nextcloud job, with a shorter suite.
+    timeout-minutes: 40
     container:
       image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud@sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c
     needs:
@@ -181,10 +199,19 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Pre-pull container images
+        timeout-minutes: 15
+        env:
+          NC_SMOKE_DATABASE: ${{ matrix.database }}
+          NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+        run: bash tests/integration/pull-images.sh
+
       - name: Run upgrade-migration test
         env:
           NC_SMOKE_DATABASE: ${{ matrix.database }}
           NC_SMOKE_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
+          NC_SMOKE_READY_TIMEOUT: '600'
+          NC_SMOKE_START_ATTEMPTS: '2'
         run: bash tests/integration/upgrade-smoke.sh
 
   package:

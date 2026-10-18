@@ -18,11 +18,19 @@ esac
 image="${NC_SMOKE_IMAGE:-nextcloud:34.0.5-apache}"
 nc_label="${image##*:}"
 nc_label="${nc_label%%-*}"
-container="${NC_SMOKE_CONTAINER:-maintenance-tracker-nc${nc_label%%.*}-${database}-smoke}"
-network="${NC_SMOKE_NETWORK:-${container}-network}"
+# shellcheck source=tests/integration/lib/docker-ready.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/docker-ready.sh"
+# Names are unique per run (NC_SMOKE_RUN_ID) so parallel jobs on one Docker
+# daemon never collide; each can still be overridden.
+# Kept short (mt-<run>-nc34-pgsql-db is 23 characters): names double as DNS
+# names, limited to 63 characters.
+container="${NC_SMOKE_CONTAINER:-mt-${NC_SMOKE_RUN_ID}-nc${nc_label%%.*}-${database}}"
+network="${NC_SMOKE_NETWORK:-${container}-net}"
 db_container="${NC_SMOKE_DB_CONTAINER:-${container}-db}"
-postgres_image="${NC_SMOKE_POSTGRES_IMAGE:-postgres:17-alpine}"
-mariadb_image="${NC_SMOKE_MARIADB_IMAGE:-mariadb:11.4}"
+browser_container="${NC_SMOKE_BROWSER_CONTAINER:-${container}-browser}"
+assert_dns_name "$container" "$network" "$db_container" "$browser_container" "$NC_SMOKE_DB_ALIAS" || exit 2
+postgres_image="$NC_SMOKE_POSTGRES_IMAGE"
+mariadb_image="$NC_SMOKE_MARIADB_IMAGE"
 # network: a user-defined bridge with container DNS (default).
 # bridge: the default Docker bridge, addressing the database by container IP,
 # for hosts whose firewall drops traffic on user-defined bridges.
@@ -47,27 +55,19 @@ postgres_password="integration-postgres-only"
 staging_root="$(mktemp -d)"
 created_network=0
 started_database=0
+diagnosed=0
 
 cleanup() {
 	status=$?
-	if [ "$status" -ne 0 ]; then
-		echo '===== Nextcloud application log tail =====' >&2
-		docker exec --user www-data "$container" sh -c \
-			'test ! -f /var/www/html/data/nextcloud.log || tail -n 120 /var/www/html/data/nextcloud.log' >&2 2>/dev/null || true
-		echo '===== Nextcloud container log tail =====' >&2
-		docker logs --tail 120 "$container" 2>/dev/null || true
+	if [ "$status" -ne 0 ] && [ "$diagnosed" -eq 0 ]; then
 		if [ "$started_database" -eq 1 ]; then
-			docker logs --tail 120 "$db_container" 2>/dev/null || true
+			dump_nextcloud_diagnostics "$container" "$db_container"
+		else
+			dump_nextcloud_diagnostics "$container"
 		fi
 	fi
-	docker rm --force "${container}-browser" >/dev/null 2>&1 || true
-	docker rm --force "$container" >/dev/null 2>&1 || true
-	if [ "$started_database" -eq 1 ]; then
-		docker rm --force "$db_container" >/dev/null 2>&1 || true
-	fi
-	if [ "$created_network" -eq 1 ]; then
-		docker network rm "$network" >/dev/null 2>&1 || true
-	fi
+	# Only this run's labelled containers, their volumes and its network.
+	remove_run_resources
 	rm -rf "$staging_root"
 }
 trap cleanup EXIT
@@ -117,111 +117,134 @@ stage_app() {
 
 stage_app
 
-docker rm --force "$container" >/dev/null 2>&1 || true
-docker rm --force "$db_container" >/dev/null 2>&1 || true
-docker network rm "$network" >/dev/null 2>&1 || true
+# Images are pulled first (retried, see lib/docker-ready.sh) so registry time
+# never counts against the readiness timeout; CI also pre-pulls them in a
+# separate step. A start that never becomes ready is retried once on fresh
+# containers (NC_SMOKE_START_ATTEMPTS) after its diagnostics are printed.
+remove_stack() {
+	remove_run_resources
+	created_network=0
+	started_database=0
+}
 
-run_args=(
-	--rm
-	--detach
-	--name "$container"
-	--env "NEXTCLOUD_ADMIN_USER=$admin_user"
-	--env "NEXTCLOUD_ADMIN_PASSWORD=$admin_password"
-)
+start_stack() {
+	# No --rm: a container that exits keeps its logs for the diagnostics;
+	# the EXIT trap removes it.
+	run_args=(
+		--detach
+		--label "$smoke_label"
+		--label "${smoke_label_key}-ci=${smoke_ci_context}"
+		--name "$container"
+		--env "NEXTCLOUD_ADMIN_USER=$admin_user"
+		--env "NEXTCLOUD_ADMIN_PASSWORD=$admin_password"
+	)
 
-if [ "$database" = 'sqlite' ]; then
-	run_args+=(--env SQLITE_DATABASE=nextcloud)
-else
-	db_run_args=(--rm --detach --name "$db_container")
-	if [ "$network_mode" = 'network' ]; then
-		docker network create "$network" >/dev/null
-		created_network=1
-		db_run_args+=(--network "$network")
-		run_args+=(--network "$network")
-	fi
-
-	if [ "$database" = 'pgsql' ]; then
-		docker run "${db_run_args[@]}" \
-			--env "POSTGRES_DB=$postgres_database" \
-			--env "POSTGRES_USER=$postgres_user" \
-			--env "POSTGRES_PASSWORD=$postgres_password" \
-			"$postgres_image" >/dev/null
+	if [ "$database" = 'sqlite' ]; then
+		run_args+=(--env SQLITE_DATABASE=nextcloud)
 	else
-		# Nextcloud requires READ-COMMITTED isolation and row-based binlogs.
-		docker run "${db_run_args[@]}" \
-			--env "MARIADB_DATABASE=$postgres_database" \
-			--env "MARIADB_USER=$postgres_user" \
-			--env "MARIADB_PASSWORD=$postgres_password" \
-			--env "MARIADB_ROOT_PASSWORD=$postgres_password-root" \
-			"$mariadb_image" \
-			--transaction-isolation=READ-COMMITTED --binlog-format=ROW \
-			--character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci >/dev/null
-	fi
-	started_database=1
+		db_run_args=(--detach --label "$smoke_label" --name "$db_container")
+		db_run_args+=(--label "${smoke_label_key}-ci=${smoke_ci_context}")
+		if [ "$network_mode" = 'network' ]; then
+			ensure_run_network "$network" || return 1
+			created_network=1
+			# Nextcloud reaches the database by a short alias on this run's
+			# own network, independent of the container name's length.
+			db_run_args+=(--network "$network" --network-alias "$NC_SMOKE_DB_ALIAS")
+			run_args+=(--network "$network")
+		fi
 
-	db_ready=0
-	for _attempt in $(seq 1 90); do
 		if [ "$database" = 'pgsql' ]; then
-			if docker exec "$db_container" \
-				pg_isready --quiet --username "$postgres_user" --dbname "$postgres_database"; then
+			docker run "${db_run_args[@]}" \
+				--env "POSTGRES_DB=$postgres_database" \
+				--env "POSTGRES_USER=$postgres_user" \
+				--env "POSTGRES_PASSWORD=$postgres_password" \
+				"$postgres_image" >/dev/null || return 1
+		else
+			# Nextcloud requires READ-COMMITTED isolation and row-based binlogs.
+			docker run "${db_run_args[@]}" \
+				--env "MARIADB_DATABASE=$postgres_database" \
+				--env "MARIADB_USER=$postgres_user" \
+				--env "MARIADB_PASSWORD=$postgres_password" \
+				--env "MARIADB_ROOT_PASSWORD=$postgres_password-root" \
+				"$mariadb_image" \
+				--transaction-isolation=READ-COMMITTED --binlog-format=ROW \
+				--character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci >/dev/null || return 1
+		fi
+		started_database=1
+
+		db_ready=0
+		for _attempt in $(seq 1 90); do
+			if [ "$database" = 'pgsql' ]; then
+				if docker exec "$db_container" \
+					pg_isready --quiet --username "$postgres_user" --dbname "$postgres_database"; then
+					db_ready=1
+					break
+				fi
+			elif docker exec "$db_container" \
+				mariadb --user="$postgres_user" --password="$postgres_password" --execute='SELECT 1' "$postgres_database" >/dev/null 2>&1; then
 				db_ready=1
 				break
 			fi
-		elif docker exec "$db_container" \
-			mariadb --user="$postgres_user" --password="$postgres_password" --execute='SELECT 1' "$postgres_database" >/dev/null 2>&1; then
-			db_ready=1
-			break
+			sleep 1
+		done
+		if [ "$db_ready" -ne 1 ]; then
+			echo "${database} did not become ready within 90 seconds." >&2
+			return 1
 		fi
-		sleep 1
-	done
-	if [ "$db_ready" -ne 1 ]; then
-		echo "${database} did not become ready within 90 seconds." >&2
+
+		if [ "$network_mode" = 'network' ]; then
+			db_host="$NC_SMOKE_DB_ALIAS"
+		else
+			db_host=$(docker inspect --format '{{.NetworkSettings.IPAddress}}' "$db_container")
+		fi
+		if [ "$database" = 'pgsql' ]; then
+			run_args+=(
+				--env "POSTGRES_DB=$postgres_database"
+				--env "POSTGRES_USER=$postgres_user"
+				--env "POSTGRES_PASSWORD=$postgres_password"
+				--env "POSTGRES_HOST=$db_host"
+			)
+		else
+			run_args+=(
+				--env "MYSQL_DATABASE=$postgres_database"
+				--env "MYSQL_USER=$postgres_user"
+				--env "MYSQL_PASSWORD=$postgres_password"
+				--env "MYSQL_HOST=$db_host"
+			)
+		fi
+	fi
+
+	if ! docker run "${run_args[@]}" "$image" >/dev/null; then
+		ready_log "could not start the Nextcloud container ${container}"
+		dump_nextcloud_diagnostics "$container"
+		return 1
+	fi
+	if [ "$started_database" -eq 1 ]; then
+		wait_for_nextcloud "$container" "$db_container"
+	else
+		wait_for_nextcloud "$container"
+	fi
+}
+
+if [ "$database" = 'pgsql' ]; then
+	pull_image "$postgres_image"
+elif [ "$database" = 'mysql' ]; then
+	pull_image "$mariadb_image"
+fi
+pull_image "$image"
+
+remove_stack
+start_attempt=1
+until start_stack; do
+	if [ "$start_attempt" -ge "$NC_SMOKE_START_ATTEMPTS" ]; then
+		echo "Nextcloud did not start and become ready in ${start_attempt} attempt(s) (readiness timeout ${NC_SMOKE_READY_TIMEOUT}s each); see the diagnostics above." >&2
+		diagnosed=1
 		exit 1
 	fi
-
-	if [ "$network_mode" = 'network' ]; then
-		db_host="$db_container"
-	else
-		db_host=$(docker inspect --format '{{.NetworkSettings.IPAddress}}' "$db_container")
-	fi
-	if [ "$database" = 'pgsql' ]; then
-		run_args+=(
-			--env "POSTGRES_DB=$postgres_database"
-			--env "POSTGRES_USER=$postgres_user"
-			--env "POSTGRES_PASSWORD=$postgres_password"
-			--env "POSTGRES_HOST=$db_host"
-		)
-	else
-		run_args+=(
-			--env "MYSQL_DATABASE=$postgres_database"
-			--env "MYSQL_USER=$postgres_user"
-			--env "MYSQL_PASSWORD=$postgres_password"
-			--env "MYSQL_HOST=$db_host"
-		)
-	fi
-fi
-
-docker run "${run_args[@]}" "$image" >/dev/null
-
-ready=0
-for _attempt in $(seq 1 90); do
-	status=$(docker exec --user www-data "$container" \
-		php occ status --output=json 2>/dev/null || true)
-	if [[ "$status" == *'"installed":true'* ]] \
-		|| [[ "$status" == *'"installed": true'* ]]; then
-		http_status=$(docker exec "$container" curl --silent --show-error \
-			'http://127.0.0.1/status.php' 2>/dev/null || true)
-		if [[ "$http_status" == *'"installed":true'* ]]; then
-			ready=1
-			break
-		fi
-	fi
-	sleep 2
+	start_attempt=$((start_attempt + 1))
+	ready_log "retrying the container start (attempt ${start_attempt}/${NC_SMOKE_START_ATTEMPTS}) on fresh containers"
+	remove_stack
 done
-if [ "$ready" -ne 1 ]; then
-	echo 'Nextcloud did not become ready within 180 seconds.' >&2
-	exit 1
-fi
 
 # The Forgejo workstation runners use a separate Docker daemon. `docker cp`
 # transfers the staged application through the Docker API instead of assuming
@@ -2802,15 +2825,14 @@ fi
 # the Nextcloud container's network), visit every page, add a vendor and a
 # part, add and delete an item, and assert there are no app console errors. HTTP 200 alone does not prove the bundles load.
 if [ "${NC_SMOKE_BROWSER:-0}" = '1' ]; then
-	browser_image="${NC_SMOKE_BROWSER_IMAGE:-mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf}"
-	browser_container="${container}-browser"
+	browser_image="$NC_SMOKE_BROWSER_IMAGE"
+	pull_image "$browser_image"
 	if [ ! -f node_modules/playwright-core/package.json ]; then
 		echo 'NC_SMOKE_BROWSER=1 needs node_modules/playwright-core; run npm ci first.' >&2
 		exit 1
 	fi
 	docker exec --user www-data "$container" php occ app:disable firstrunwizard >/dev/null 2>&1 || true
-	docker rm --force "$browser_container" >/dev/null 2>&1 || true
-	docker create --name "$browser_container" \
+	docker create --name "$browser_container" --label "$smoke_label" \
 		--network "container:${container}" \
 		--workdir /check \
 		--env NC_BASE_URL=http://127.0.0.1 \
@@ -2832,7 +2854,7 @@ if [ "${NC_SMOKE_BROWSER:-0}" = '1' ]; then
 		docker cp "$browser_container:/check/app.png" "$NC_SMOKE_ARTIFACTS/app-${nc_label}-${database}.png" >/dev/null 2>&1 || true
 		docker cp "$browser_container:/check/pages" "$NC_SMOKE_ARTIFACTS/pages-${nc_label}-${database}" >/dev/null 2>&1 || true
 	fi
-	docker rm --force "$browser_container" >/dev/null 2>&1 || true
+	docker rm --force --volumes "$browser_container" >/dev/null 2>&1 || true
 	if [ "$browser_status" -ne 0 ]; then
 		echo 'Browser mount check failed.' >&2
 		exit 1

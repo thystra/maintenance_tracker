@@ -44,7 +44,7 @@ fixture_paths=(
 	lib/Service/FitmentPackValidator.php lib/Service/FitmentCsvBundleService.php lib/Service/FitmentZipBundleService.php lib/Service/FitmentRepository.php lib/Service/AssetFitmentDescriptorService.php lib/Service/FitmentService.php
 	lib/Migration/Version1120Date20261016160000.php lib/Service/IntegrationProjector.php lib/Service/ReminderService.php lib/Service/IntegrationSettingsService.php lib/Service/CalendarEventBuilder.php lib/Service/IntegrationEventMap.php
 	lib/Service/ExportPolicy.php lib/Service/ExportService.php lib/Service/ImportPolicy.php lib/Service/ImportService.php openapi.json scripts/check-a11y.mjs
-	tests/integration/nextcloud-smoke.sh tests/integration/upgrade-smoke.sh
+	tests/integration/nextcloud-smoke.sh tests/integration/upgrade-smoke.sh tests/integration/lib/docker-ready.sh
 	scripts/l10n.mjs .l10nignore templates lib/Settings/AdminSection.php
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 	lib/Service/VendorService.php src/App.vue src/router.ts src/views/VendorsView.vue
@@ -702,5 +702,25 @@ expect_rejected 'a setup copy that copies history' 'Copying an item setup must n
 copy_fixture
 sed -i "s/'maint_ws_profiles', //; s/'maint_ws_profiles',//" "$tmp/fixture/lib/Service/UserLifecycleService.php"
 expect_rejected 'workspace profiles missing from the purge registry' 'maint_ws_profiles' "$tmp/profile-purge.out"
+
+copy_fixture
+sed -i "s/NC_SMOKE_READY_TIMEOUT: '600'/NC_SMOKE_READY_TIMEOUT: '180'/" "$tmp/fixture/.forgejo/workflows/ci.yml"
+expect_rejected 'a CI readiness wait without the 600 s budget' 'CI must pre-pull images in a retried step' "$tmp/ready-timeout.out"
+
+copy_fixture
+sed -i 's/wait_for_nextcloud/wait_for_it/g' "$tmp/fixture/tests/integration/upgrade-smoke.sh"
+expect_rejected 'an upgrade harness with its own readiness loop' 'configurable readiness wait with a diagnostics dump' "$tmp/ready-upgrade.out"
+
+copy_fixture
+sed -i 's/mt-${NC_SMOKE_RUN_ID}-nc/mt-nc/' "$tmp/fixture/tests/integration/nextcloud-smoke.sh"
+expect_rejected 'fixed Docker names shared by parallel jobs' 'Smoke harness Docker names must be unique per run' "$tmp/run-names.out"
+
+copy_fixture
+sed -i 's/db_host="$NC_SMOKE_DB_ALIAS"/db_host="$db_container"/' "$tmp/fixture/tests/integration/nextcloud-smoke.sh"
+expect_rejected 'a database reached by its long container name' '63-character DNS label limit' "$tmp/dns-db-host.out"
+
+copy_fixture
+sed -i 's/-gt 63/-gt 128/' "$tmp/fixture/tests/integration/lib/docker-ready.sh"
+expect_rejected 'a hostname guard above the DNS label limit' '63-character DNS label limit' "$tmp/dns-guard.out"
 
 echo 'Project validator self-tests passed.'

@@ -101,6 +101,29 @@ network. On hosts whose firewall drops traffic on user-defined bridges (for
 example mixed iptables-legacy/nft rules), set `NC_SMOKE_NETWORK_MODE=bridge` to
 use the default bridge and address the database by container IP.
 
+Both harnesses pull their images first, retrying with exponential backoff
+(`NC_SMOKE_PULL_ATTEMPTS`, default 4; `NC_SMOKE_PULL_BACKOFF`, default 10 s), so
+pull time never counts against the readiness wait. `bash
+tests/integration/pull-images.sh` does the same pull on its own; CI runs it as a
+separate step. The harness then waits up to `NC_SMOKE_READY_TIMEOUT` seconds
+(default 600) for the first install, printing progress every 30 s. If Nextcloud
+never becomes ready, or its container exits, it prints `docker ps -a`, the
+container state and log, `status.php`, `occ status` and the `nextcloud.log` tail,
+then retries once on fresh containers (`NC_SMOKE_START_ATTEMPTS`, default 2).
+
+Container and network names carry a short per-run id (`NC_SMOKE_RUN_ID`: 8 hex
+characters hashed from the CI run id, job and attempt plus a random part, or
+from a random part locally), for example `mt-1a2b3c4d-nc34-pgsql-db`. Every
+resource carries the label `org.argentwolf.maintenance-tracker.smoke-run=<run id>`
+(and `…smoke-run-ci=<run>-<job>-<attempt>` for tracing). The exit trap removes
+only resources with this run's label, so parallel runs on one Docker daemon
+never collide or clean up each other. Names double as DNS names, so they must
+stay within the 63-character DNS label limit; the harness checks this and fails
+fast. On the per-run network, Nextcloud reaches the database by the short alias
+`db` (`NC_SMOKE_DB_ALIAS`), not by its container name. `NC_SMOKE_CONTAINER`,
+`NC_SMOKE_NETWORK`, `NC_SMOKE_DB_CONTAINER` and `NC_SMOKE_BROWSER_CONTAINER`
+still override single names.
+
 The harness stages the runtime app and copies it in with `docker cp`, so it does
 not need to bind-mount the checkout and works with a remote or isolated Docker
 daemon.
