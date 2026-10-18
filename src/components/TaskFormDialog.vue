@@ -147,8 +147,11 @@ async function submit(): Promise<void> {
 }
 
 const buttons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => emit('update:open', false) },
-	{ label: props.task ? t('maintenance_tracker', 'Save') : t('maintenance_tracker', 'Add task'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		emit('update:open', false)
+		return false
+	} },
+	{ label: props.task ? t('maintenance_tracker', 'Save') : t('maintenance_tracker', 'Add task'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
 ])
 </script>
 

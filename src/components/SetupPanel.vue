@@ -75,8 +75,11 @@ async function saveGroup(): Promise<false | void> {
 }
 
 const buttons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => { groupOpen.value = false } },
-	{ label: t('maintenance_tracker', 'Add group'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		groupOpen.value = false
+		return false
+	} },
+	{ label: t('maintenance_tracker', 'Add group'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
 ])
 
 onMounted(async () => {

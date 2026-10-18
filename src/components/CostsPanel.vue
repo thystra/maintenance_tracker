@@ -127,8 +127,11 @@ async function remove(): Promise<void> {
 }
 
 const buttons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => { addOpen.value = false } },
-	{ label: t('maintenance_tracker', 'Add cost'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		addOpen.value = false
+		return false
+	} },
+	{ label: t('maintenance_tracker', 'Add cost'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
 ])
 
 onMounted(load)

@@ -131,12 +131,18 @@ async function remove(): Promise<void> {
 }
 
 const readingButtons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => { readingFor.value = null } },
-	{ label: t('maintenance_tracker', 'Save reading'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		readingFor.value = null
+		return false
+	} },
+	{ label: t('maintenance_tracker', 'Save reading'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
 ])
 const meterButtons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => { meterOpen.value = false } },
-	{ label: t('maintenance_tracker', 'Add meter'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		meterOpen.value = false
+		return false
+	} },
+	{ label: t('maintenance_tracker', 'Add meter'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
 ])
 
 watch(() => props.meters, load)
