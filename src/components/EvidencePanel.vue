@@ -6,8 +6,13 @@
 <script setup lang="ts">
 import type { Evidence, EvidenceKind, EvidenceTargetType } from '../evidenceTypes.ts'
 
+import { mdiCloudUploadOutline, mdiFolderOutline } from '@mdi/js'
 import { getFilePickerBuilder } from '@nextcloud/dialogs'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import SelectField from './SelectField.vue'
 import { t } from '../l10n.ts'
 import { archiveEvidence, attachEvidence, getUploadTarget, listEvidence, uploadToFiles } from '../services/evidenceApi.ts'
 
@@ -17,7 +22,17 @@ const props = defineProps<{ targetType: EvidenceTargetType, targetUuid: string, 
 
 const kinds: EvidenceKind[] = ['photo', 'receipt', 'invoice', 'document', 'video', 'other']
 const items = ref<Evidence[]>([])
-const kind = ref<EvidenceKind>('receipt')
+const kind = ref<string | null>('receipt')
+const kindLabels: Record<EvidenceKind, string> = {
+	photo: t('maintenance_tracker', 'Photo'),
+	receipt: t('maintenance_tracker', 'Receipt'),
+	invoice: t('maintenance_tracker', 'Invoice'),
+	document: t('maintenance_tracker', 'Document'),
+	video: t('maintenance_tracker', 'Video'),
+	other: t('maintenance_tracker', 'Other'),
+}
+const kindOptions = computed(() => kinds.map((value) => ({ value, label: kindLabels[value] })))
+const selectedKind = (): EvidenceKind => (kinds as string[]).includes(kind.value ?? '') ? kind.value as EvidenceKind : 'other'
 const error = ref('')
 const busy = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -91,7 +106,7 @@ async function pickFromFiles(): Promise<void> {
 	} catch {
 		return
 	}
-	await run(() => attachEvidence({ uuid: crypto.randomUUID(), kind: kind.value, path, targetType: props.targetType, targetUuid: props.targetUuid }))
+	await run(() => attachEvidence({ uuid: crypto.randomUUID(), kind: selectedKind(), path, targetType: props.targetType, targetUuid: props.targetUuid }))
 }
 
 async function upload(event: Event): Promise<void> {
@@ -111,7 +126,7 @@ async function upload(event: Event): Promise<void> {
 			throw new Error(t('maintenance_tracker', 'Not enough storage left in the workspace owner\'s quota for this file.'))
 		}
 		const path = await uploadToFiles(target.uploadPath, file)
-		await attachEvidence({ uuid: crypto.randomUUID(), kind: kind.value, title: file.name, path, targetType: props.targetType, targetUuid: props.targetUuid })
+		await attachEvidence({ uuid: crypto.randomUUID(), kind: selectedKind(), title: file.name, path, targetType: props.targetType, targetUuid: props.targetUuid })
 	})
 	if (fileInput.value) {
 		fileInput.value.value = ''
@@ -123,11 +138,16 @@ onMounted(load)
 
 <template>
 	<section class="evidence-panel" :class="{ compact }">
-		<h4 v-if="!compact">
-			{{ t('maintenance_tracker', 'Evidence') }}
-		</h4>
-		<p v-if="error" class="evidence-error" role="alert">
-			{{ error }}
+		<p v-if="!compact" class="muted">
+			{{ t('maintenance_tracker', 'Photos, receipts and manuals. Files stay in Nextcloud Files; this only links them.') }}
+		</p>
+		<NcNoteCard v-if="error" type="error">
+			<p role="alert">
+				{{ error }}
+			</p>
+		</NcNoteCard>
+		<p v-if="items.length === 0 && !compact" class="muted">
+			{{ t('maintenance_tracker', 'No files attached yet.') }}
 		</p>
 		<ul v-if="items.length > 0" class="evidence-list">
 			<li v-for="item in items" :key="item.uuid">
@@ -144,63 +164,98 @@ onMounted(load)
 						target="_blank"
 						rel="noopener noreferrer">{{ item.title }}</a>
 					<strong v-else>{{ item.title }}</strong>
-					<span> · {{ item.kind }} · {{ size(item.size) }}<template v-if="item.storage === 'workspace'"> {{ t('maintenance_tracker', '· workspace folder') }}</template></span>
+					<span class="muted"> · {{ kindLabels[item.kind] ?? item.kind }} · {{ size(item.size) }}<template v-if="item.storage === 'workspace'"> {{ t('maintenance_tracker', '· workspace folder') }}</template></span>
 					<em v-if="item.availability !== 'available'"> · {{ availabilityText[item.availability] }}</em>
 					<em v-else-if="item.file?.changed"> {{ t('maintenance_tracker', '· file changed since it was attached') }}</em>
 				</span>
-				<button
+				<NcButton
 					v-if="item.canChange"
-					type="button"
+					variant="tertiary"
 					:disabled="busy"
-					:title="t('maintenance_tracker', 'Removes the evidence record; the file stays in Files')"
+					:title="t('maintenance_tracker', 'Removes the link; the file stays in Files')"
 					@click="run(() => archiveEvidence(item.uuid, item.revision))">
 					{{ t('maintenance_tracker', 'Remove') }}
-				</button>
+				</NcButton>
 			</li>
 		</ul>
 		<div class="evidence-actions">
-			<select v-model="kind" :aria-label="t('maintenance_tracker', 'Evidence kind')">
-				<option v-for="k in kinds" :key="k" :value="k">
-					{{ k }}
-				</option>
-			</select>
-			<button type="button" :disabled="busy" @click="pickFromFiles">
+			<div class="evidence-kind">
+				<SelectField v-model="kind" :options="kindOptions" :label="t('maintenance_tracker', 'File type')" />
+			</div>
+			<NcButton :disabled="busy" @click="pickFromFiles">
+				<template #icon>
+					<NcIconSvgWrapper :path="mdiFolderOutline" />
+				</template>
 				{{ t('maintenance_tracker', 'Attach from Files') }}
-			</button>
-			<label class="evidence-upload">
+			</NcButton>
+			<NcButton :disabled="busy" @click="fileInput?.click()">
+				<template #icon>
+					<NcIconSvgWrapper :path="mdiCloudUploadOutline" />
+				</template>
 				{{ t('maintenance_tracker', 'Upload') }}
-				<input
-					ref="fileInput"
-					type="file"
-					:disabled="busy"
-					@change="upload">
-			</label>
+			</NcButton>
+			<input
+				ref="fileInput"
+				class="hidden-visually"
+				type="file"
+				tabindex="-1"
+				:aria-label="t('maintenance_tracker', 'Upload a file')"
+				:disabled="busy"
+				@change="upload">
 		</div>
 	</section>
 </template>
 
 <style scoped>
-.evidence-panel { display: grid; gap: 8px; }
+.evidence-panel {
+	display: grid;
+	gap: 8px;
+}
 
-.evidence-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.evidence-list {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
 
-.evidence-list li { display: flex; align-items: center; gap: 10px; }
+.evidence-list li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
 
-.evidence-thumb { width: 48px; height: 48px; border-radius: var(--border-radius); object-fit: cover; }
+.evidence-thumb {
+	width: 48px;
+	height: 48px;
+	border-radius: var(--border-radius);
+	object-fit: cover;
+}
 
-.evidence-text { flex: 1; }
+.evidence-text {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
 
-.evidence-text a { color: var(--color-primary-element); text-decoration: underline; }
+.evidence-text a {
+	color: var(--color-primary-element);
+	text-decoration: underline;
+}
 
-.evidence-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.evidence-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 8px;
+}
 
-.evidence-actions select { min-height: 34px; }
+.evidence-kind {
+	min-width: 180px;
+}
 
-.evidence-panel button, .evidence-upload { min-height: 34px; padding: 4px 14px; border: 1px solid var(--color-border-maxcontrast); border-radius: var(--border-radius-pill); background: var(--color-main-background); color: var(--color-main-text); cursor: pointer; }
-
-.evidence-upload input { display: none; }
-
-.evidence-error { color: var(--color-error); }
-
-.compact { font-size: .9em; }
+.muted {
+	color: var(--color-text-maxcontrast);
+}
 </style>
