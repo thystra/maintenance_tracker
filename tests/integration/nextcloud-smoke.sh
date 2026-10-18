@@ -2593,8 +2593,8 @@ if [ "$app_errors" != '0' ]; then
 fi
 
 # NC_SMOKE_BROWSER=1: open the app in headless Chromium (Playwright image on
-# the Nextcloud container's network) and assert that the Vue UI mounts with no
-# console errors. HTTP 200 alone does not prove the bundles load.
+# the Nextcloud container's network), visit every page, add a vendor and a
+# part, add and delete an item, and assert there are no app console errors. HTTP 200 alone does not prove the bundles load.
 if [ "${NC_SMOKE_BROWSER:-0}" = '1' ]; then
 	browser_image="${NC_SMOKE_BROWSER_IMAGE:-mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf}"
 	browser_container="${container}-browser"
@@ -2611,6 +2611,7 @@ if [ "${NC_SMOKE_BROWSER:-0}" = '1' ]; then
 		--env "NC_USER=$admin_user" \
 		--env "NC_PASSWORD=$admin_password" \
 		--env NC_SCREENSHOT=/check/app.png \
+		--env NC_SCREENSHOT_DIR=/check/pages \
 		"$browser_image" node app-mount.mjs >/dev/null
 	browser_stage="$staging_root/browser"
 	mkdir -p "$browser_stage/node_modules"
@@ -2623,6 +2624,7 @@ if [ "${NC_SMOKE_BROWSER:-0}" = '1' ]; then
 	if [ -n "${NC_SMOKE_ARTIFACTS:-}" ]; then
 		mkdir -p "$NC_SMOKE_ARTIFACTS"
 		docker cp "$browser_container:/check/app.png" "$NC_SMOKE_ARTIFACTS/app-${nc_label}-${database}.png" >/dev/null 2>&1 || true
+		docker cp "$browser_container:/check/pages" "$NC_SMOKE_ARTIFACTS/pages-${nc_label}-${database}" >/dev/null 2>&1 || true
 	fi
 	docker rm --force "$browser_container" >/dev/null 2>&1 || true
 	if [ "$browser_status" -ne 0 ]; then
