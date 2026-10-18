@@ -29,14 +29,27 @@ const count = computed(() => itemsInGroup(props.group.uuid).length)
 const active = computed(() => route.name === 'items' && route.query.group === props.group.uuid)
 const open = ref(false)
 
-// Keep the branch leading to the selected group expanded.
+// Selecting a group expands it and the branch leading to it, and a new
+// subgroup shows up expanded, so the selected place is always visible.
 watch(() => route.query.group, (selected) => {
-	if (typeof selected === 'string' && selected !== props.group.uuid && groupPath(selected).some((entry) => entry.uuid === props.group.uuid)) {
+	if (typeof selected === 'string' && groupPath(selected).some((entry) => entry.uuid === props.group.uuid)) {
 		open.value = true
 	}
 }, { immediate: true })
+watch(() => children.value.length, (now, before) => {
+	if (now > before) {
+		open.value = true
+	}
+})
 
-function show(): void {
+/**
+ * Show the group's items. The entry renders as a plain link to "#"; stop that
+ * default so hash routing does not jump to the dashboard.
+ *
+ * @param event The click event.
+ */
+function show(event: MouseEvent): void {
+	event.preventDefault()
 	void router.push({ name: 'items', query: { group: props.group.uuid } })
 }
 </script>

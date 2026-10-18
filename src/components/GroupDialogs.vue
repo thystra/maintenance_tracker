@@ -111,10 +111,29 @@ async function confirmDelete(): Promise<void> {
 	}
 }
 
+// Both buttons return false so NcDialog does not run its own delayed close:
+// that close lands 300 ms later and would shut a group dialog opened again in
+// the meantime. submit() closes the dialog itself once the change is saved and
+// keeps it open with the error otherwise.
 const buttons = computed(() => [
-	{ label: t('maintenance_tracker', 'Cancel'), callback: () => closeGroupDialog() },
-	{ label: groupDialog.mode === 'create' ? t('maintenance_tracker', 'Create group') : t('maintenance_tracker', 'Save'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value },
+	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
+		closeGroupDialog()
+		return false
+	} },
+	{ label: groupDialog.mode === 'create' ? t('maintenance_tracker', 'Create group') : t('maintenance_tracker', 'Save'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
 ])
+
+function formClosed(open: boolean): void {
+	if (!open && formOpen.value) {
+		closeGroupDialog()
+	}
+}
+
+function deleteClosed(open: boolean): void {
+	if (!open && groupDialog.mode === 'delete') {
+		closeGroupDialog()
+	}
+}
 
 </script>
 
@@ -127,7 +146,7 @@ const buttons = computed(() => [
 			isForm
 			size="small"
 			@submit="submit"
-			@update:open="$event || closeGroupDialog()">
+			@update:open="formClosed">
 			<div class="form-stack">
 				<NcNoteCard v-if="error" type="error" role="alert">
 					{{ error }}
@@ -156,7 +175,7 @@ const buttons = computed(() => [
 			:name="t('maintenance_tracker', 'Delete group?')"
 			:message="deleteMessage"
 			:busy="busy"
-			@update:open="$event || closeGroupDialog()"
+			@update:open="deleteClosed"
 			@confirm="confirmDelete" />
 	</div>
 </template>

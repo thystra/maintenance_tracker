@@ -6,10 +6,11 @@
 <script setup lang="ts">
 import type { Asset } from '../types.ts'
 
-import { mdiDeleteOutline, mdiFolderOutline, mdiFolderPlusOutline, mdiPencilOutline, mdiPlus, mdiWrenchOutline } from '@mdi/js'
+import { mdiArrowRightBold, mdiDeleteOutline, mdiFolderOutline, mdiFolderPlusOutline, mdiPencilOutline, mdiPlus, mdiWrenchOutline } from '@mdi/js'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcActions from '@nextcloud/vue/components/NcActions'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
@@ -137,12 +138,38 @@ async function confirmDelete(): Promise<void> {
 					</template>
 					{{ t('maintenance_tracker', 'Add subgroup') }}
 				</NcButton>
+				<NcButton v-else @click="openGroupDialog('create')">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiFolderPlusOutline" />
+					</template>
+					{{ t('maintenance_tracker', 'New group') }}
+				</NcButton>
 				<NcButton variant="primary" @click="openAdd">
 					<template #icon>
 						<NcIconSvgWrapper :path="mdiPlus" />
 					</template>
 					{{ t('maintenance_tracker', 'Add item') }}
 				</NcButton>
+				<NcActions v-if="groupInfo" :aria-label="t('maintenance_tracker', 'More actions for group {name}', { name: groupInfo.name })">
+					<NcActionButton closeAfterClick @click="openGroupDialog('rename', groupInfo)">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiPencilOutline" />
+						</template>
+						{{ t('maintenance_tracker', 'Rename group') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="openGroupDialog('move', groupInfo)">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiArrowRightBold" />
+						</template>
+						{{ t('maintenance_tracker', 'Move group') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="openGroupDialog('delete', groupInfo)">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiDeleteOutline" />
+						</template>
+						{{ t('maintenance_tracker', 'Delete group') }}
+					</NcActionButton>
+				</NcActions>
 			</template>
 		</PageHeader>
 		<p class="hidden-visually" role="status">
@@ -154,6 +181,29 @@ async function confirmDelete(): Promise<void> {
 			</p>
 		</NcNoteCard>
 
+		<div
+			v-if="subgroups.length > 0 || (selectedGroup === null && state.groups.length > 0)"
+			class="group-chips"
+			role="group"
+			:aria-label="groupInfo ? t('maintenance_tracker', 'Subgroups') : t('maintenance_tracker', 'Groups')">
+			<NcButton
+				v-for="group in (groupInfo ? subgroups : childGroups(null))"
+				:key="group.uuid"
+				size="small"
+				:to="{ name: 'items', query: { group: group.uuid } }">
+				<template #icon>
+					<NcIconSvgWrapper :path="mdiFolderOutline" :size="18" />
+				</template>
+				{{ t('maintenance_tracker', '{name} ({count})', { name: group.name, count: itemsInGroup(group.uuid).length }) }}
+			</NcButton>
+			<NcButton
+				v-if="selectedGroup === null && ungroupedCount > 0"
+				size="small"
+				variant="tertiary"
+				:to="{ name: 'items', query: { group: 'none' } }">
+				{{ t('maintenance_tracker', 'Ungrouped ({count})', { count: ungroupedCount }) }}
+			</NcButton>
+		</div>
 		<NcEmptyContent
 			v-if="state.assetsLoaded && state.assets.length === 0"
 			:name="t('maintenance_tracker', 'No items yet')"
@@ -184,31 +234,8 @@ async function confirmDelete(): Promise<void> {
 					:placeholder="t('maintenance_tracker', 'All categories')"
 					clearable />
 			</div>
-			<div
-				v-if="subgroups.length > 0 || (selectedGroup === null && state.groups.length > 0)"
-				class="group-chips"
-				role="group"
-				:aria-label="groupInfo ? t('maintenance_tracker', 'Subgroups') : t('maintenance_tracker', 'Groups')">
-				<NcButton
-					v-for="group in (groupInfo ? subgroups : childGroups(null))"
-					:key="group.uuid"
-					size="small"
-					:to="{ name: 'items', query: { group: group.uuid } }">
-					<template #icon>
-						<NcIconSvgWrapper :path="mdiFolderOutline" :size="18" />
-					</template>
-					{{ t('maintenance_tracker', '{name} ({count})', { name: group.name, count: itemsInGroup(group.uuid).length }) }}
-				</NcButton>
-				<NcButton
-					v-if="selectedGroup === null && ungroupedCount > 0"
-					size="small"
-					variant="tertiary"
-					:to="{ name: 'items', query: { group: 'none' } }">
-					{{ t('maintenance_tracker', 'Ungrouped ({count})', { count: ungroupedCount }) }}
-				</NcButton>
-			</div>
 			<p v-if="visible.length === 0" class="muted">
-				{{ t('maintenance_tracker', 'No items match the filter.') }}
+				{{ groupInfo && query === '' && category === null ? t('maintenance_tracker', 'No items in this group yet. Use “Add item” to add one here.') : t('maintenance_tracker', 'No items match the filter.') }}
 			</p>
 			<ul class="item-list" :aria-label="t('maintenance_tracker', 'Items')">
 				<NcListItem

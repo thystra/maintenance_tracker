@@ -110,7 +110,7 @@ const auditLabels: Record<string, () => string> = {
 	'workspace.created': () => t('maintenance_tracker', 'Workspace created'),
 	'workspace.renamed': () => t('maintenance_tracker', 'Workspace renamed'),
 	'item_group.created': () => t('maintenance_tracker', 'Group created'),
-	'asset.group_changed': () => t('maintenance_tracker', 'Item moved to another group'),
+	'asset.group_changed': () => t('maintenance_tracker', 'Item group changed'),
 }
 const recent = computed(() => audit.value.filter((entry) => auditLabels[entry.eventType] !== undefined).slice(0, 8))
 
