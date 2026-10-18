@@ -92,7 +92,7 @@ export interface CompatiblePartList {
 }
 
 export type CostLineType = 'charge' | 'tax'
-export type CostCategory = 'parts' | 'labor' | 'fluids' | 'service' | 'fees' | 'tax' | 'other'
+export type CostCategory = 'parts' | 'labor' | 'fluids' | 'fuel' | 'service' | 'fees' | 'tax' | 'other'
 
 export interface CostSettings {
 	defaultCurrency: string

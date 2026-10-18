@@ -14,7 +14,7 @@ use OCA\MaintenanceTracker\Exception\ValidationException;
 /** Pure evidence rules: kinds, kind/MIME compatibility, link targets, names. */
 final class EvidencePolicy {
 	public const KINDS = ['photo', 'video', 'receipt', 'invoice', 'document', 'other'];
-	public const TARGET_TYPES = ['asset', 'activity', 'cost'];
+	public const TARGET_TYPES = ['asset', 'activity', 'cost', 'fuel'];
 	public const MAX_LINKS = 20;
 	/** Files up to this size are hashed (SHA-256) at attach time. */
 	public const HASH_LIMIT_BYTES = 64 * 1024 * 1024;

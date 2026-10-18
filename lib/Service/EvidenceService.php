@@ -44,6 +44,7 @@ final class EvidenceService {
 		private AssetService $assets,
 		private ActivityMapper $activities,
 		private CostRepository $costs,
+		private FuelRepository $fuel,
 		private AuthorizationCatalog $authorization,
 		private IRootFolder $rootFolder,
 		private IPreview $preview,
@@ -471,6 +472,12 @@ final class EvidenceService {
 					throw new NotFoundException('Activity not found');
 				}
 				return ['type' => 'activity', 'id' => $activity->getId(), 'uuid' => $uuid, 'assetId' => $activity->getAssetId()];
+			case 'fuel':
+				$ticket = $this->fuel->findTicket($workspaceId, $uuid, $includeArchived);
+				if ($ticket === null) {
+					throw new NotFoundException('Fuel ticket not found');
+				}
+				return ['type' => 'fuel', 'id' => (int)$ticket['id'], 'uuid' => $uuid, 'assetId' => (int)$ticket['asset_id']];
 			default:
 				$cost = $this->costs->findByUuid($workspaceId, $uuid, $includeArchived);
 				if ($cost === null) {
@@ -484,6 +491,7 @@ final class EvidenceService {
 		return $this->repository->targetUuid($workspaceId, match ($type) {
 			'asset' => 'maint_assets',
 			'activity' => 'maint_activities',
+			'fuel' => 'maint_fuel',
 			default => 'maint_costs',
 		}, $id);
 	}

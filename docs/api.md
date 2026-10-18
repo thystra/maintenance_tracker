@@ -723,7 +723,7 @@ Endpoints:
 - `GET /cost-settings` — current settings plus `source` (`default` until first saved) and `currenciesInUse`.
 - `PATCH /cost-settings` with `expectedRevision` (0 before the first save) and `{"settings": {"defaultCurrency"?, "taxEnabled"?, "multiCurrency"?}}` — Owner only; audited as `cost_settings.updated` with the three resulting values.
 - `GET /assets/{assetUuid}/costs` — active entries, per-currency `totals` (`chargesMinor`, `taxMinor`, `totalMinor`, their decimal strings, `count`), and settings.
-- `POST /assets/{assetUuid}/costs` with `{"cost": {"uuid", "incurredOn" (YYYY-MM-DD), "description", "amount", "currency"?, "lineType"?, "category"?, "activityUuid"?, "vendorUuid"?, "partUuid"?, "notes"?}}` — categories are `parts`, `labor`, `fluids`, `service`, `fees`, `other` (default). Retrying the same UUID with identical facts returns the existing entry; different facts are a precondition conflict.
+- `POST /assets/{assetUuid}/costs` with `{"cost": {"uuid", "incurredOn" (YYYY-MM-DD), "description", "amount", "currency"?, "lineType"?, "category"?, "activityUuid"?, "vendorUuid"?, "partUuid"?, "notes"?}}` — categories are `parts`, `labor`, `fluids`, `fuel` (used by fuel tickets), `service`, `fees`, `other` (default). Retrying the same UUID with identical facts returns the existing entry; different facts are a precondition conflict.
 - `GET /costs/{uuid}`, `PATCH /costs/{uuid}` with `expectedRevision` and any of `incurredOn`, `category`, `description`, `amount`, `currency`, `vendorUuid`, `partUuid`, `notes` (changing `currency` requires restating `amount`), `DELETE /costs/{uuid}` with `expectedRevision` — archive.
 - `GET /costs/totals` — workspace-wide per-currency totals over active entries.
 

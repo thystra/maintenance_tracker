@@ -248,7 +248,7 @@ final class EvidenceRepository {
 
 	/** Resolve a link target's UUID; table names come from a fixed allowlist. */
 	public function targetUuid(int $workspaceId, string $table, int $id): ?string {
-		if (!in_array($table, ['maint_assets', 'maint_activities', 'maint_costs'], true)) {
+		if (!in_array($table, ['maint_assets', 'maint_activities', 'maint_costs', 'maint_fuel'], true)) {
 			throw new \LogicException('Unsupported evidence target table');
 		}
 		$q = $this->db->getQueryBuilder();
