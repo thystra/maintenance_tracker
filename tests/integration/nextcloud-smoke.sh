@@ -2470,6 +2470,79 @@ grp_audit=$(ocs_as "$na" GET "/audit?${nws}&limit=20")
 assert_contains "$grp_audit" 'item_group.moved' 'group move audited'
 assert_contains "$grp_audit" 'asset.group_changed' 'group membership audited'
 
+# Fuel log (0.1.16): settings, regimes, fill-ups that create odometer readings
+# and linked fuel costs, idempotent retries, stale revisions, monotonic
+# readings, role boundaries, economy statistics with a mixed-regime stretch,
+# receipts as evidence, and audit. Restore is checked after the import below.
+fuel_asset='a1b2c3d4-0000-4000-8000-0000000fa001'
+fuel_meter='a1b2c3d4-0000-4000-8000-0000000fa002'
+fuel_empty='a1b2c3d4-0000-4000-8000-0000000fa003'
+fuel_tow='a1b2c3d4-0000-4000-8000-0000000fa004'
+fuel_t1='a1b2c3d4-0000-4000-8000-0000000fa011'
+fuel_t2='a1b2c3d4-0000-4000-8000-0000000fa012'
+fuel_t3='a1b2c3d4-0000-4000-8000-0000000fa013'
+fuel_t4='a1b2c3d4-0000-4000-8000-0000000fa014'
+fuel_t5='a1b2c3d4-0000-4000-8000-0000000fa015'
+fuel_t6='a1b2c3d4-0000-4000-8000-0000000fa016'
+fuel_ticket() { # uuid date odometer volume fullFill regime [extra json]
+	printf '{"ticket":{"uuid":"%s","filledAt":"%s","odometer":"%s","volume":"%s","fullFill":%s,"regimeUuid":"%s"%s}}' "$1" "$2" "$3" "$4" "$5" "$6" "${7:-}"
+}
+assert_contains "$(ocs_as "$na" POST "/assets?${nws}" "{\"asset\":{\"uuid\":\"${fuel_asset}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Fuel test pickup\"}}")" '"statuscode":201' 'fuel test vehicle created'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/meters?${nws}" "{\"meter\":{\"uuid\":\"${fuel_meter}\",\"key\":\"odometer\",\"name\":\"Odometer\",\"dimension\":\"distance\",\"displayUnit\":\"mi\",\"monotonic\":true}}")" '"statuscode":201' 'fuel test odometer created'
+fuel_settings=$(ocs_as "$nb" GET "/assets/${fuel_asset}/fuel-settings?${nws}")
+assert_contains "$fuel_settings" '"shown":true' 'fuel tab shown for a vehicle'
+assert_contains "$fuel_settings" '"economyUnit":"mpg"' 'fuel defaults to MPG'
+assert_contains "$fuel_settings" "\"uuid\":\"${fuel_meter}\"" 'fuel settings name the odometer meter'
+assert_contains "$(ocs_as "$nb" PUT "/assets/${fuel_asset}/fuel-settings?${nws}" '{"expectedRevision":0,"settings":{"fuelTab":"off"}}')" '"statuscode":403' 'contributor cannot change fuel settings'
+assert_contains "$(ocs_as "$na" PUT "/assets/${fuel_asset}/fuel-settings?${nws}" '{"expectedRevision":0,"settings":{"fuelType":"diesel"}}')" '"fuelType":"diesel"' 'fuel settings updated'
+assert_contains "$(ocs_as "$na" PUT "/assets/${fuel_asset}/fuel-settings?${nws}" '{"expectedRevision":0,"settings":{"fuelType":"gasoline"}}')" '"statuscode":412' 'fuel settings stale revision'
+assert_contains "$(ocs_as "$na" PUT "/assets/${fuel_asset}/fuel-settings?${nws}" '{"expectedRevision":1,"settings":{"economyUnit":"furlongs"}}')" '"statuscode":400' 'unknown economy unit refused'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel-regimes?${nws}" "{\"regime\":{\"uuid\":\"${fuel_empty}\",\"name\":\"Empty\"}}")" '"isDefault":true' 'first regime becomes the default'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel-regimes?${nws}" "{\"regime\":{\"uuid\":\"${fuel_tow}\",\"name\":\"Towing\"}}")" '"isDefault":false' 'second regime created'
+assert_contains "$(ocs_as "$nb" POST "/assets/${fuel_asset}/fuel-regimes?${nws}" '{"regime":{"name":"Nope"}}')" '"statuscode":403' 'contributor cannot create regimes'
+fuel_c1=$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t1" 2026-09-01T08:00:00Z 10000 12 true "$fuel_empty" ',"totalCost":"40.00","station":"Synthetic station"')")
+assert_contains "$fuel_c1" '"statuscode":201' 'fill-up created'
+assert_contains "$fuel_c1" "\"meterUuid\":\"${fuel_meter}\"" 'fill-up recorded on the odometer'
+assert_contains "$fuel_c1" '"totalCost":"40.00"' 'fill-up price linked as a cost'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t1" 2026-09-01T08:00:00Z 10000 12 true "$fuel_empty" ',"totalCost":"40.00","station":"Synthetic station"')")" '"statuscode":201' 'fill-up retry is idempotent'
+assert_contains "$(ocs_as "$na" GET "/assets/${fuel_asset}/costs?${nws}")" '"category":"fuel"' 'fuel cost in the cost ledger'
+assert_contains "$(ocs_as "$na" GET "/meters/${fuel_meter}/readings?${nws}")" '"type":"fuel"' 'fill-up odometer is a fuel reading'
+assert_contains "$(ocs_as "$nb" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t2" 2026-09-05T08:00:00Z 10300 10 true "$fuel_empty")")" '"statuscode":201' 'contributor adds a fill-up'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t3" 2026-09-10T08:00:00Z 10600 6 false "$fuel_empty")")" '"statuscode":201' 'partial fill-up created'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t4" 2026-09-14T08:00:00Z 10800 8 true "$fuel_tow")")" '"statuscode":201' 'mixed-regime fill-up created'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t5" 2026-09-20T08:00:00Z 11100 12 true "$fuel_tow" ',"totalCost":"48.00"')")" '"statuscode":201' 'towing fill-up created'
+assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t6" 2026-09-25T08:00:00Z 9000 5 true "$fuel_tow")")" '"statuscode":400' 'decreasing odometer refused'
+assert_contains "$(ocs_as "$nb" PATCH "/fuel/${fuel_t2}?${nws}" '{"expectedRevision":1,"ticket":{"notes":"x"}}')" '"statuscode":403' 'contributor cannot edit fill-ups'
+assert_contains "$(ocs_as "$na" PATCH "/fuel/${fuel_t2}?${nws}" '{"expectedRevision":7,"ticket":{"notes":"x"}}')" '"statuscode":412' 'fill-up stale revision'
+assert_contains "$(ocs_as "$na" PATCH "/fuel/${fuel_t1}?${nws}" '{"expectedRevision":1,"ticket":{"totalCost":"45.50"}}')" '"totalCost":"45.50"' 'fill-up price edit updates the cost'
+fuel_stats=$(ocs_as "$na" GET "/assets/${fuel_asset}/fuel-stats?${nws}&period=all")
+fuel_check=$(printf '%s' "$fuel_stats" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["ocs"]["data"]
+r = {x["name"]: x for x in d["regimes"]}
+o = d["overall"]
+print("overall=%s/%.1f mixed=%s empty=%.1f/%s tow=%.1f/%s fills=%s chart=%s" % (o["segments"], float(o["economy"]), d["mixedSegments"], float(r["Empty"]["economy"]), r["Empty"]["segments"], float(r["Towing"]["economy"]), r["Towing"]["segments"], d["fills"], len(d["chart"])))')
+assert_contains "$fuel_check" 'overall=3/30.6' 'overall economy across full fills'
+assert_contains "$fuel_check" 'mixed=1' 'mixed-regime stretch counted'
+assert_contains "$fuel_check" 'empty=30.0/1' 'empty regime economy excludes the mixed stretch'
+assert_contains "$fuel_check" 'tow=25.0/1' 'towing regime economy'
+assert_contains "$fuel_check" 'chart=3' 'chart points'
+assert_contains "$(ocs_as "$na" GET "/assets/${fuel_asset}/fuel-stats?${nws}&period=all&unit=l_100km")" '"economyUnit":"l_100km"' 'economy converted to L/100 km'
+assert_contains "$(ocs_as "$na" GET "/assets/${fuel_asset}/fuel-stats?${nws}&period=custom&from=2026-09-01&to=2026-09-06")" '"segments":1' 'custom period stats'
+docker exec "$container" sh -c "echo '${v0111_png}' | base64 -d > /tmp/fuel.png"
+assert_contains "$(dav_as "$na" PUT /fuel-receipt.png --upload-file /tmp/fuel.png)" '201' 'fuel receipt upload'
+assert_contains "$(ocs_as "$na" POST "/evidence?${nws}" "{\"evidence\":{\"uuid\":\"a1b2c3d4-0000-4000-8000-0000000fa021\",\"kind\":\"receipt\",\"path\":\"/fuel-receipt.png\",\"links\":[{\"targetType\":\"fuel\",\"targetUuid\":\"${fuel_t1}\"}]}}")" '"statuscode":201' 'receipt attached to a fill-up'
+assert_contains "$(ocs_as "$nb" GET "/evidence?${nws}&targetType=fuel&targetUuid=${fuel_t1}")" '"kind":"receipt"' 'fill-up receipt listed'
+fuel_t5_rev=$(ocs_as "$na" GET "/fuel/${fuel_t5}?${nws}" | json_field revision)
+assert_contains "$(ocs_as "$na" DELETE "/fuel/${fuel_t5}?${nws}&expectedRevision=${fuel_t5_rev}")" '"statuscode":200' 'fill-up deleted'
+assert_not_contains "$(ocs_as "$na" GET "/assets/${fuel_asset}/costs?${nws}")" '48.00' 'deleting a fill-up archives its cost'
+assert_contains "$(ocs_as "$na" GET "/meters/${fuel_meter}/readings?${nws}")" '11100' 'deleting a fill-up keeps its reading'
+assert_contains "$(ocs_as "$nb" GET "/fuel-summary?${nws}")" 'Fuel test pickup' 'dashboard fuel summary'
+fuel_audit=$(ocs_as "$na" GET "/audit?${nws}&limit=40")
+assert_contains "$fuel_audit" 'fuel.created' 'fill-up audited'
+assert_contains "$fuel_audit" 'fuel_regime.created' 'regime audited'
+assert_contains "$fuel_audit" 'fuel.archived' 'fill-up deletion audited'
+
 # Workspace export: role-filtered sections, viewer-scoped evidence privacy,
 # ZIP layout with CSV formula escaping, optional evidence bytes from the
 # caller's own Files, and the export audit event. Data is synthetic.
@@ -2532,7 +2605,7 @@ for who in ("owner", "viewer"):
 print(" ".join(out))
 PY
 )
-assert_contains "$exp_zip_report" 'owner:files=1' 'owner ZIP carries the readable evidence file'
+assert_contains "$exp_zip_report" 'owner:files=2' 'owner ZIP carries the readable evidence files (item photo and fuel receipt)'
 assert_contains "$exp_zip_report" 'owner:named=yes' 'owner export names own evidence file'
 assert_contains "$exp_zip_report" 'owner:audit=yes' 'owner ZIP carries audit CSV'
 assert_contains "$exp_zip_report" 'owner:formula=ok' 'CSV formula cell escaped'
@@ -2567,7 +2640,7 @@ imp_result=$(import_as "$na" exp-owner.zip 'Restored van')
 assert_contains "$imp_result" '"statuscode":201' 'owner ZIP restored'
 assert_contains "$imp_result" '"name":"Restored van"' 'restored workspace named'
 assert_contains "$imp_result" '"role":"owner"' 'importer owns the restored workspace'
-assert_contains "$imp_result" '"restored":1' 'evidence file restored'
+assert_contains "$imp_result" '"restored":2' 'evidence files restored'
 assert_contains "$imp_result" '"notRestored":["members","audit"]' 'members and audit reported as not restored'
 imp_ws=$(printf '%s' "$imp_result" | json_field workspace.uuid)
 iws="workspace=${imp_ws}"
@@ -2587,10 +2660,19 @@ assert_contains "$imp_groups" '"name":"Fleet 1"' 'restored item groups'
 assert_not_contains "$imp_groups" "$grp_fleet" 'restored item groups get new UUIDs'
 imp_tree=$(printf '%s' "$imp_groups" | python3 -c 'import json,sys;d=json.load(sys.stdin)["ocs"]["data"];g={x["name"]:x for x in d["items"]};print("tree-ok" if g["Fleet 1"]["parentUuid"]==g["Vehicles"]["uuid"] and any(a["assetUuid"]==sys.argv[1] and a["groupUuid"]==g["Fleet 1"]["uuid"] for a in d["assignments"]) else "tree-bad")' "$imp_asset")
 assert_contains "$imp_tree" 'tree-ok' 'restored group tree and membership follow remapped ids'
+imp_fuel_asset=$(printf '%s' "$imp_assets" | python3 -c 'import json,sys;print([a["uuid"] for a in json.load(sys.stdin)["ocs"]["data"]["items"] if a["name"]=="Fuel test pickup"][0])')
+imp_fuel=$(ocs_as "$na" GET "/assets/${imp_fuel_asset}/fuel?${iws}")
+assert_contains "$imp_fuel" '"regimeName":"Towing"' 'restored fill-ups keep their regime'
+assert_contains "$imp_fuel" '"totalCost":"45.50"' 'restored fill-ups keep their linked cost'
+assert_not_contains "$imp_fuel" "$fuel_t1" 'restored fill-ups get new UUIDs'
+imp_fuel_t1=$(printf '%s' "$imp_fuel" | python3 -c 'import json,sys;print([t["uuid"] for t in json.load(sys.stdin)["ocs"]["data"]["items"] if t["totalCost"]=="45.50"][0])')
+assert_contains "$(ocs_as "$na" GET "/evidence?${iws}&targetType=fuel&targetUuid=${imp_fuel_t1}")" '"availability":"available"' 'restored fill-up receipt follows the remapped ticket'
+assert_contains "$(ocs_as "$na" GET "/assets/${imp_fuel_asset}/fuel-settings?${iws}")" '"fuelType":"diesel"' 'restored fuel settings'
+assert_contains "$(ocs_as "$na" GET "/assets/${imp_fuel_asset}/fuel-stats?${iws}&period=all")" '"mixedSegments":1' 'restored fuel statistics'
 assert_contains "$(ocs_as "$na" GET "/assets?${nws}")" "$ntf_asset" 'original workspace untouched'
 assert_contains "$(import_as "$na" exp-owner.zip)" '"statuscode":201' 'same export can be restored twice'
 assert_contains "$(ocs_as "$nb" GET "/assets?${iws}")" '"statuscode":403' 'other members do not get access to the restored workspace'
-docker exec "$container" rm -f /tmp/exp-tampered.json
+docker exec "$container" rm -f /tmp/exp-tampered.json /tmp/fuel.png
 docker exec "$container" rm -f /tmp/exp-owner.json /tmp/exp-member.json /tmp/exp-bad.json /tmp/exp-viewer.zip /tmp/exp-owner.zip /tmp/exp.png
 
 # @@V0111_NEXT@@
