@@ -4,7 +4,8 @@
  *
  * Headless browser check: log in, open the app, visit every page, run the
  * main create/delete flows (vendor, part, item with a task, item deletion,
- * item groups, fuel log with regimes and fill-ups),
+ * item groups, fuel log with regimes and fill-ups, profile builder with
+ * save-as-profile and copy-setup-from),
  * and assert that nothing from this app logs a console error, throws, or
  * gets an HTTP error. Run by tests/integration/nextcloud-smoke.sh when
  * NC_SMOKE_BROWSER=1, inside the Playwright image on the Nextcloud
@@ -284,6 +285,63 @@ try {
 		await page.locator('#fuel-heading').waitFor({ timeout: 10000 })
 		await page.waitForLoadState('networkidle')
 		await shot('34-dashboard-fuel')
+	})
+
+	await step('profile builder', async () => {
+		const source = `Fuel van ${stamp}`
+		const profile = `Van setup ${stamp}`
+		const copy = `Copied van ${stamp}`
+		// Save the fuel van's setup (with its regimes) as a workspace profile.
+		await nav('Items').click()
+		await heading('Items').waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main .list-item', { hasText: source }).first().click()
+		await heading(source).waitFor({ state: 'visible', timeout: 10000 })
+		await page.getByRole('tab', { name: 'Setup', exact: true }).click()
+		await page.getByRole('button', { name: 'Save as profile' }).click()
+		await dialog().getByLabel('Profile name', { exact: true }).fill(profile)
+		await shot('43-save-as-profile')
+		await dialog().getByRole('button', { name: 'Save profile' }).click()
+		await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 })
+		await page.getByRole('link', { name: 'Open in the profile editor' }).click()
+		await heading(profile).waitFor({ state: 'visible', timeout: 10000 })
+		await page.getByRole('button', { name: 'Fuel (2)' }).waitFor({ timeout: 10000 })
+		// Edit it: add a spec and save.
+		await page.getByRole('button', { name: 'Add spec' }).click()
+		const spec = page.locator('#profile-specs fieldset.profile-row').last()
+		await spec.getByLabel('Name', { exact: true }).fill('Tyre pressure')
+		await spec.getByLabel('Value', { exact: true }).fill('50')
+		await spec.getByLabel('Unit (optional)', { exact: true }).fill('psi')
+		await page.getByRole('button', { name: 'Save profile' }).click()
+		await page.locator('.profile-editor__saved', { hasText: `Saved ${profile}` }).waitFor({ timeout: 10000 })
+		await page.locator('#profile-specs').scrollIntoViewIfNeeded()
+		await shot('42-profile-editor')
+		await nav('Profiles').click()
+		await heading('Profiles').waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main', { hasText: profile }).waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('41-profiles')
+		// Add an item that copies the van's setup: regimes yes, fill-ups no.
+		await nav('Items').click()
+		await heading('Items').waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main').getByRole('button', { name: 'Add item' }).first().click()
+		await dialog().getByLabel('Name', { exact: true }).fill(copy)
+		await dialog().getByLabel('Copy setup from', { exact: true }).fill(source)
+		await page.getByRole('option', { name: source }).first().waitFor({ timeout: 5000 })
+		await page.keyboard.press('Enter')
+		await shot('44-add-item-copy')
+		await dialog().getByRole('button', { name: 'Add item' }).click()
+		await heading(copy).waitFor({ state: 'visible', timeout: 10000 })
+		await page.getByRole('tab', { name: 'Fuel', exact: true }).click()
+		await page.getByText('No fill-ups yet').waitFor({ timeout: 10000 })
+		await page.getByRole('button', { name: 'Fuel options' }).click()
+		await page.getByRole('menuitem', { name: 'Operating regimes' }).click()
+		await dialog().getByLabel('Name of regime Towing').waitFor({ timeout: 10000 })
+		await dialog().getByRole('button', { name: 'Close' }).last().click()
+		await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 })
+		await nav('Dashboard').click()
+		await page.locator('#maintenance-main', { hasText: 'Latest tank:' }).first().waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('45-dashboard-fuel-label')
 	})
 
 	await step('settings sections', async () => {

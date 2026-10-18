@@ -50,6 +50,7 @@ fixture_paths=(
 	lib/Service/VendorService.php src/App.vue src/router.ts src/views/VendorsView.vue
 	lib/Migration/Version1130Date20261018000000.php lib/Migration/Version1150Date20261018120000.php lib/Service/ItemGroupService.php lib/Service/ItemGroupTree.php
 	lib/Migration/Version1160Date20261018180000.php lib/Service/FuelService.php lib/Service/FuelEconomy.php
+	lib/Migration/Version1170Date20261018220000.php lib/Service/ProfileLibraryService.php lib/Service/SetupCopyService.php lib/Service/ProfileSnapshotBuilder.php
 )
 
 copy_fixture() {
@@ -685,5 +686,21 @@ expect_rejected 'fuel economy without mixed-regime stretches' 'Fuel economy must
 copy_fixture
 sed -i "s/'maint_fuel', //; s/'maint_fuel',//" "$tmp/fixture/lib/Service/UserLifecycleService.php"
 expect_rejected 'fuel tickets missing from the purge registry' 'maint_fuel' "$tmp/fuel-purge.out"
+
+copy_fixture
+sed -i "s/belongs to a bundled profile/is taken/" "$tmp/fixture/lib/Service/ProfileLibraryService.php"
+expect_rejected 'workspace profiles posing as bundled ones' 'Workspace profiles must not reuse the id of a bundled (first-party) profile.' "$tmp/profile-bundled.out"
+
+copy_fixture
+printf '\n// $client = IClientService::class;\n' >> "$tmp/fixture/lib/Service/ProfileSnapshotBuilder.php"
+expect_rejected 'a profile builder that fetches remote data' 'The profile builder must never fetch anything remote' "$tmp/profile-remote.out"
+
+copy_fixture
+printf '\n// FuelService\n' >> "$tmp/fixture/lib/Service/SetupCopyService.php"
+expect_rejected 'a setup copy that copies history' 'Copying an item setup must not copy history' "$tmp/profile-copy-history.out"
+
+copy_fixture
+sed -i "s/'maint_ws_profiles', //; s/'maint_ws_profiles',//" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+expect_rejected 'workspace profiles missing from the purge registry' 'maint_ws_profiles' "$tmp/profile-purge.out"
 
 echo 'Project validator self-tests passed.'
