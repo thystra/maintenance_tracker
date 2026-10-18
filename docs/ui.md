@@ -50,6 +50,8 @@ has *New group*.
 | Item | `#/items/<uuid>/<tab>` | Breadcrumbs when the item is in a group. Header: *Log maintenance*, and *Edit*/*Delete* in the actions menu. Tabs below. |
 | Parts | `#/parts` | Part catalog: name, manufacturer and part number, usual vendor, typical price, what it fits. A row expands to fitment (add/remove) and store links. |
 | Vendors | `#/vendors` | Shops and service providers with website, address, phone, e-mail, contact person and notes; a row expands to the details and extra links. |
+| Profiles | `#/profiles` | *Workspace profiles* (edit, duplicate, export JSON, delete) and *Bundled profiles* (duplicate, export JSON), each with a summary of what it sets up. *New profile* and *Import profile* (a local JSON file up to 1 MiB) in the header (Owner, Manager). |
+| Profile editor | `#/profiles/<uuid>` (`new` for a new one) | Section buttons at the top jump to *Details* (name, version, category, ID, author, data license, description, *Applies to*), *Meters*, *Components* (parent, quantity, compatible parts, notes), *Specs*, *Parts* (store links from an imported profile are kept), *Task groups*, *Tasks* (type, group, component, parts used, instructions, *Repeats* rules: time, business days, meter) and *Fuel* (units, fuel type, driving regimes with a default). Keys are made from names until edited. *Create/Save profile* in a sticky bar; server validation errors are shown above it. *Export JSON* downloads the current draft. |
 | Settings | `#/settings/<section>` | Sections listed below. |
 
 Item tabs:
@@ -63,7 +65,7 @@ Item tabs:
 | Fuel | Shown for items whose category or profile is a vehicle or that have a distance (odometer) meter; *Show/Hide the Fuel tab* in the item's actions menu overrides that per item. Period (30/90/365 days, this year, all time, custom range) and economy unit (MPG, km/L, L/100 km) filters; *Fuel economy* (average, best, worst, measured distance) and *Fuel spend* (spend, volume, cost per distance) cards; *By operating regime* table; *Economy over time* chart (hollow dots mark mixed stretches; a data table follows for screen readers); fill-ups with economy, price and receipts, edit/delete. *Add fill-up* (Contributor and up) and *Fuel options* → *Operating regimes* / *Fuel settings* (Owner, Manager). |
 | Costs | Totals per currency, entries with receipts, add/delete. |
 | Files | Evidence linked to the item (upload into the workspace folder or attach from Files). |
-| Setup | Maintenance profile (choose → preview → apply; paste JSON as an advanced option), components and specifications, linked items (lasting relationships or time-bound assignments), task groups, parts that fit, work queue. |
+| Setup | Maintenance profile (choose a bundled or workspace profile → preview → apply; paste JSON as an advanced option; *Save as profile* stores this item's setup in the workspace library), components and specifications, linked items (lasting relationships or time-bound assignments), task groups, parts that fit, work queue. |
 
 Settings sections:
 
@@ -117,6 +119,16 @@ administration settings.
    regime (for example Empty, Loaded, Towing); *Fuel settings* sets units, the
    default fuel type and whether the tab is shown.
 
+11. **Reuse a setup.** Item → Setup → *Save as profile* (name, version) stores
+   the item's components, meters, specs, compatible parts, task groups, tasks
+   and fuel regimes as a workspace profile; *Open in the profile editor* to
+   refine it, then apply it to other items from their Setup tab. Or *Add item*
+   → *Copy setup from* another item: the new item gets the same setup straight
+   away. Neither copies history, readings, fill-ups, costs or files.
+12. **Build or share a profile.** Profiles → *New profile*, *Duplicate* a
+   bundled one, or *Import profile* from a JSON file; *Export JSON* gives a file
+   to share. Nothing is fetched from the internet.
+
 Dialogs close only after a successful save or on *Cancel*; if saving fails the
 dialog stays open with the error.
 
@@ -131,6 +143,9 @@ dialog stays open with the error.
 - Relationship type labels come from the server in English.
 - Item groups are re-arranged with *Move* dialogs; there is no drag and drop
   in the sidebar yet.
+- The profile editor does not warn about unsaved changes when you leave
+  the page; profile upgrades (re-applying a newer version to an item that
+  already has one) are not available yet.
 - Deleting a fill-up between two others merges their stretches; mark the next
   fill-up *A previous fill-up was not recorded* instead when a fill-up is
   genuinely missing.

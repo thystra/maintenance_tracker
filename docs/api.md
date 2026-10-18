@@ -287,6 +287,76 @@ and `chart` (up to the last 60 measured stretches: `date`, `economy`,
 For the dashboard: per item with fill-ups, `assetUuid`, `name`,
 `lastFilledAt`, `economyUnit`, `lastEconomy` and `economy90d`.
 
+## Profile builder (0.1.17)
+
+Workspaces keep their own maintenance profiles next to the bundled ones.
+Workspace profiles are ordinary profile-v2 documents: every create, update,
+import, "save as profile" and setup copy runs the same `ProfileValidator` as
+bundled profiles (1 MiB encoded bound, nesting depth 16, bounded lists,
+unknown fields rejected, HTTPS-only `sourceUrl`/offer URLs, which are never
+fetched). They are stored canonically in `maint_ws_profiles` and listed by
+`GET /profiles` with `origin: workspace` and `trustState: local`; installing
+one snapshots an immutable revision exactly like a pasted local profile.
+The id of a bundled profile is reserved, so a workspace profile can never
+pass as first-party. Reads need `profile.read`; writes need `profile.manage`
+(Owner, Manager). Writes are journaled and audited (`workspace_profile.created`,
+`workspace_profile.updated`, `workspace_profile.archived`); a setup copy is
+audited as `asset.setup_copied`. At most 200 active profiles per workspace.
+
+Profile v2 gained two optional sections (documents without them keep their
+content hash): `specifications` (up to 512 `{key, label, value, unit?,
+componentKey?, regime?}` entries, scalar values) and `fuel` (`{settings?:
+{distanceUnit, volumeUnit, economyUnit, fuelType}, regimes: [{key, name,
+isDefault}]}`, at most 50 regimes, unique names, exactly one default). On
+installation specs are created per component instance; fuel settings are applied
+only to an item still on its default fuel settings (otherwise preview lists a
+notice), and regimes are added by name, a regime name the item already uses being
+a preview conflict. `sourceUrl` is now optional.
+
+### `GET /profile-library/{uuid}?workspace=<uuid>`
+
+One workspace profile: the catalog fields of `GET /profiles` plus `uuid`,
+`revision`, `updatedAt` and the normalized `profile` document.
+
+### `POST /profile-library?workspace=<uuid>`
+
+Body `{"uuid": "...", "profile": { ...profile-v2... }}` → 201. A retry with
+the same UUID and the same canonical content returns the stored profile; the
+same UUID with different content is 412. The `id`/`version` pair must be
+unused in the workspace and `id` must not belong to a bundled profile (400).
+This is also how the Profiles page imports a JSON file (read locally in the
+browser and size-checked first; nothing is fetched).
+
+### `PUT /profile-library/{uuid}?workspace=<uuid>`
+
+Body `{"expectedRevision": n, "profile": { ... }}` replaces the document;
+a stale revision is 412. Items already set up from it keep their setup.
+
+### `DELETE /profile-library/{uuid}?workspace=<uuid>&expectedRevision=n`
+
+Archives (tombstones) the profile.
+
+### `POST /assets/{assetUuid}/save-as-profile?workspace=<uuid>`
+
+Body `{"uuid": "...", "name": "Pickup setup", "id": "workspace.pickup", "version":
+"1.0.0", "description": "..."}`; only `name` is required (the id defaults to
+`workspace.<name as key>`, the author to the workspace name) → 201 with the new
+workspace profile. The snapshot holds the item's active and suppressed
+components (suppressed ones become `enabledByDefault: false`), meters,
+specifications, compatible parts that have a manufacturer and part number,
+work groups, work definitions with their schedules, and fuel settings and
+regimes. It never holds readings, activities, fill-ups, costs, files,
+identifiers such as serial numbers, or store links.
+
+### Copy setup from an existing item
+
+`POST /assets` accepts an optional top-level `copySetupFrom` (an item UUID in
+the same workspace) next to `asset`. The new item gets the same snapshot as
+"save as profile" materialized in the same transaction, without an installation
+record; the response adds `setupCopied` counts. A retry with an existing asset
+UUID does not copy again. History (readings, fill-ups, costs, activities,
+files) is never copied.
+
 ## Meter and reading endpoints
 
 Meter configuration and observations are separate resources. Initial dimensions
@@ -529,7 +599,8 @@ Manager.
 
 ### `GET /profiles`
 
-Lists bundled profile-v2 documents after the same server-side validation used for
+Lists bundled profile-v2 documents, followed by the workspace's own profiles
+(`origin: workspace`, see *Profile builder (0.1.17)*), after the same server-side validation used for
 local input. Each item includes profile ID/version/name/category, data license,
 provenance/applicability, canonical SHA-256 `contentHash`, materialization summary,
 `origin: bundled`, `trustState: first_party`, and the normalized `profile` document.
@@ -560,7 +631,8 @@ profile-contract violations are rejected.
 ### `POST /assets/{assetUuid}/profiles/preview`
 
 Body: `{ "profile": { ... } }`. Preview revalidates the document and reports
-`applicable`, `installable`, `conflicts`, `warnings`, and `materializes` counts without
+`applicable`, `installable`, `conflicts`, `warnings`, `notices` (since 0.1.17, for
+example fuel settings that will be left alone) and `materializes` counts without
 writing anything. Existing profile installation/profile metadata, meter/work-group/
 work-definition key collisions, and applicability mismatches are surfaced here.
 Since v0.1.10, profile-v2 `parts` materialize into the canonical workspace part catalog
