@@ -68,9 +68,10 @@ final class PartCatalogRepository {
 		return $this->one($q);
 	}
 
-	public function insertPart(int $workspaceId, string $uuid, string $identityHash, string $manufacturer, string $partNumber, string $description, int $now): int {
+	/** @param array<string,string|int|null> $extra Optional columns (notes, vendor_id, unit_price_minor, currency) */
+	public function insertPart(int $workspaceId, string $uuid, string $identityHash, string $manufacturer, string $partNumber, string $description, int $now, array $extra = []): int {
 		$q = $this->db->getQueryBuilder();
-		$q->insert('maint_parts')->values([
+		$q->insert('maint_parts')->values($this->extraValues($q, $extra) + [
 			'workspace_id' => $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT),
 			'uuid' => $q->createNamedParameter($uuid, IQueryBuilder::PARAM_STR),
 			'identity_hash' => $q->createNamedParameter($identityHash, IQueryBuilder::PARAM_STR),
@@ -86,10 +87,18 @@ final class PartCatalogRepository {
 		return $q->getLastInsertId();
 	}
 
-	/** Optimistic revision update. Returns false when the expected revision no longer matches. */
-	public function updatePart(int $workspaceId, int $id, int $expectedRevision, string $description, ?int $deletedAt, int $now): bool {
+	/**
+	 * Optimistic revision update. Returns false when the expected revision no longer matches.
+	 *
+	 * @param array<string,string|int|null> $extra
+	 */
+	public function updatePart(int $workspaceId, int $id, int $expectedRevision, string $description, ?int $deletedAt, int $now, array $extra = []): bool {
 		$q = $this->db->getQueryBuilder();
-		$q->update('maint_parts')
+		$q->update('maint_parts');
+		foreach ($this->extraValues($q, $extra) as $column => $value) {
+			$q->set($column, $value);
+		}
+		$q
 			->set('description', $q->createNamedParameter($description, IQueryBuilder::PARAM_STR))
 			->set('deleted_at', $q->createNamedParameter($deletedAt, $deletedAt === null ? IQueryBuilder::PARAM_NULL : IQueryBuilder::PARAM_INT))
 			->set('revision', $q->createNamedParameter($expectedRevision + 1, IQueryBuilder::PARAM_INT))
@@ -149,9 +158,10 @@ final class PartCatalogRepository {
 		return $this->one($q);
 	}
 
-	public function insertVendor(int $workspaceId, string $uuid, string $name, ?string $notes, int $now): int {
+	/** @param array<string,string|int|null> $extra Contact columns (website, address, phone, email, contact_name) */
+	public function insertVendor(int $workspaceId, string $uuid, string $name, ?string $notes, int $now, array $extra = []): int {
 		$q = $this->db->getQueryBuilder();
-		$q->insert('maint_vendors')->values([
+		$q->insert('maint_vendors')->values($this->extraValues($q, $extra) + [
 			'workspace_id' => $q->createNamedParameter($workspaceId, IQueryBuilder::PARAM_INT),
 			'uuid' => $q->createNamedParameter($uuid, IQueryBuilder::PARAM_STR),
 			'name' => $q->createNamedParameter($name, IQueryBuilder::PARAM_STR),
@@ -165,9 +175,14 @@ final class PartCatalogRepository {
 		return $q->getLastInsertId();
 	}
 
-	public function updateVendor(int $workspaceId, int $id, int $expectedRevision, string $name, ?string $notes, ?int $deletedAt, int $now): bool {
+	/** @param array<string,string|int|null> $extra */
+	public function updateVendor(int $workspaceId, int $id, int $expectedRevision, string $name, ?string $notes, ?int $deletedAt, int $now, array $extra = []): bool {
 		$q = $this->db->getQueryBuilder();
-		$q->update('maint_vendors')
+		$q->update('maint_vendors');
+		foreach ($this->extraValues($q, $extra) as $column => $value) {
+			$q->set($column, $value);
+		}
+		$q
 			->set('name', $q->createNamedParameter($name, IQueryBuilder::PARAM_STR))
 			->set('notes', $this->nullableString($q, $notes))
 			->set('deleted_at', $q->createNamedParameter($deletedAt, $deletedAt === null ? IQueryBuilder::PARAM_NULL : IQueryBuilder::PARAM_INT))
@@ -202,5 +217,24 @@ final class PartCatalogRepository {
 
 	private function nullableString(IQueryBuilder $q, ?string $value): mixed {
 		return $q->createNamedParameter($value, $value === null ? IQueryBuilder::PARAM_NULL : IQueryBuilder::PARAM_STR);
+	}
+
+	/**
+	 * @param array<string,string|int|null> $extra
+	 * @return array<string,mixed>
+	 */
+	private function extraValues(IQueryBuilder $q, array $extra): array {
+		$values = [];
+		foreach ($extra as $column => $value) {
+			if (preg_match('/^[a-z_]+$/', $column) !== 1) {
+				throw new \LogicException('Invalid column name');
+			}
+			$values[$column] = $q->createNamedParameter($value, match (true) {
+				$value === null => IQueryBuilder::PARAM_NULL,
+				is_int($value) => IQueryBuilder::PARAM_INT,
+				default => IQueryBuilder::PARAM_STR,
+			});
+		}
+		return $values;
 	}
 }
