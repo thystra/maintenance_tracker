@@ -14,6 +14,8 @@ use OCA\MaintenanceTracker\Db\WorkspaceMapper;
 use OCA\MaintenanceTracker\Db\WorkspaceMember;
 use OCA\MaintenanceTracker\Db\WorkspaceMemberMapper;
 use OCA\MaintenanceTracker\Exception\AccessDeniedException;
+use OCA\MaintenanceTracker\Exception\RevisionConflictException;
+use OCA\MaintenanceTracker\Exception\ValidationException;
 use OCA\MaintenanceTracker\Model\WorkspaceContext;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -26,6 +28,7 @@ final class WorkspaceService {
 		private ITimeFactory $timeFactory,
 		private UserLifecycleService $userLifecycleService,
 		private AuthorizationCatalog $authorization,
+		private AuditService $audit,
 	) {
 	}
 
@@ -66,6 +69,74 @@ final class WorkspaceService {
 				return $items;
 			},
 		);
+	}
+
+	/**
+	 * Create a shared workspace owned by the caller. Members are added later
+	 * through MembershipService.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function createShared(string $userUid, mixed $name): array {
+		$name = self::validName($name);
+		return $this->userLifecycleService->runForActiveUser($userUid, function () use ($userUid, $name): array {
+			$now = $this->timeFactory->getTime();
+			$workspace = new Workspace();
+			$workspace->setUuid($this->uuidGenerator->generate());
+			$workspace->setOwnerUid($userUid);
+			$workspace->setPersonalOwnerUid(null);
+			$workspace->setName($name);
+			$workspace->setKind('shared');
+			$workspace->setRevision(1);
+			$workspace->setCreatedAt($now);
+			$workspace->setUpdatedAt($now);
+			/** @var Workspace $workspace */
+			$workspace = $this->workspaceMapper->insert($workspace);
+			$member = new WorkspaceMember();
+			$member->setWorkspaceId($workspace->getId());
+			$member->setUserUid($userUid);
+			$member->setRole('owner');
+			$member->setCreatedAt($now);
+			$this->memberMapper->insert($member);
+			$this->audit->record($workspace->getId(), 'workspace.created', $userUid, $workspace->getUuid(), 1);
+			return $workspace->toApi('owner');
+		});
+	}
+
+	/**
+	 * Rename a workspace. Requires the workspace settings capability (owner).
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function rename(string $userUid, string $workspaceUuid, int $expectedRevision, mixed $name): array {
+		$name = self::validName($name);
+		if ($expectedRevision < 1) {
+			throw new ValidationException('expectedRevision must be a positive integer');
+		}
+		return $this->runWithCapability($userUid, $workspaceUuid, AuthorizationCatalog::WORKSPACE_SETTINGS_MANAGE, function (WorkspaceContext $context) use ($userUid, $expectedRevision, $name): array {
+			$workspace = $this->workspaceMapper->findById($context->workspace()->getId());
+			if ($workspace->getRevision() !== $expectedRevision) {
+				throw new RevisionConflictException('The workspace has changed since it was last read');
+			}
+			$workspace->setName($name);
+			$workspace->setRevision($expectedRevision + 1);
+			$workspace->setUpdatedAt($this->timeFactory->getTime());
+			/** @var Workspace $workspace */
+			$workspace = $this->workspaceMapper->update($workspace);
+			$this->audit->record($workspace->getId(), 'workspace.renamed', $userUid, $workspace->getUuid(), $workspace->getRevision());
+			return $workspace->toApi($context->role());
+		});
+	}
+
+	private static function validName(mixed $name): string {
+		if (!is_string($name)) {
+			throw new ValidationException('name must be a string');
+		}
+		$name = trim($name);
+		if ($name === '' || mb_strlen($name) > 120 || preg_match('/[\x00-\x1F\x7F]/u', $name) === 1) {
+			throw new ValidationException('name must be 1 to 120 printable characters');
+		}
+		return $name;
 	}
 
 	/**
