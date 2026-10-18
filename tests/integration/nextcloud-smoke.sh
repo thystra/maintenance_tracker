@@ -1974,9 +1974,55 @@ assert_contains "$v0110_vendor" '"statuscode":201' 'owner vendor create'
 v0110_vendor_denied=$(contributor_ocs POST "/vendors?${ws}" '{"vendor":{"name":"Denied"}}')
 assert_contains "$v0110_vendor_denied" '"statuscode":403' 'contributor vendor create denied'
 
+# 1.0 UI: vendor contact details and part catalog extras.
+v0130_vendor_patch=$(owner_ocs PATCH "/vendors/${v0110_vendor_uuid}?${ws}" '{"expectedRevision":1,"vendor":{"website":"https://parts.example/","address":"1 Smoke Street","phone":"+1 (555) 010-0100","email":"orders@parts.example","contactName":"Pat Example"}}')
+assert_contains "$v0130_vendor_patch" '"contactName":"Pat Example"' 'vendor contact details saved'
+assert_contains "$v0130_vendor_patch" '"website":"https:\/\/parts.example\/"' 'vendor website saved'
+for v0130_bad in '{"website":"http://parts.example/"}' '{"email":"not-an-email"}' '{"phone":"call me"}'; do
+	v0130_bad_resp=$(owner_ocs PATCH "/vendors/${v0110_vendor_uuid}?${ws}" "{\"expectedRevision\":2,\"vendor\":${v0130_bad}}")
+	assert_contains "$v0130_bad_resp" '"statuscode":400' "invalid vendor contact rejected: ${v0130_bad}"
+done
+v0130_vendor_restore=$(owner_ocs PATCH "/vendors/${v0110_vendor_uuid}?${ws}" '{"expectedRevision":2,"vendor":{"name":"Smoke Parts Store"}}')
+assert_contains "$v0130_vendor_restore" '"email":"orders@parts.example"' 'absent vendor fields are kept'
+v0130_part_extras=$(owner_ocs PATCH "/parts/${v0110_part_uuid}?${ws}" "{\"expectedRevision\":2,\"part\":{\"notes\":\"Torque 25 Nm\",\"vendorUuid\":\"${v0110_vendor_uuid}\",\"unitPrice\":\"12.50\",\"currency\":\"USD\"}}")
+assert_contains "$v0130_part_extras" '"vendorName":"Smoke Parts Store"' 'part preferred vendor'
+assert_contains "$v0130_part_extras" '"unitPrice":"12.50"' 'part typical price'
+
 v0110_asset_uuid='3e7c1d5b-9f4a-4b6c-8d8e-0f1a2b3c4d5e'
 v0110_asset=$(owner_ocs POST "/assets?${ws}" "{\"asset\":{\"uuid\":\"${v0110_asset_uuid}\",\"category\":\"vehicle\",\"name\":\"v0.1.10 smoke vehicle\"}}")
 assert_contains "$v0110_asset" '"statuscode":201' 'v0.1.10 smoke asset'
+v0130_fit=$(owner_ocs POST "/parts/${v0110_part_uuid}/fits?${ws}" "{\"expectedRevision\":3,\"assetUuid\":\"${v0110_asset_uuid}\"}")
+assert_contains "$v0130_fit" '"source":"manual"' 'part fits item recorded'
+assert_contains "$v0130_fit" '"revision":4' 'part fit bumps the part revision'
+v0130_fit_denied=$(contributor_ocs POST "/parts/${v0110_part_uuid}/fits?${ws}" "{\"expectedRevision\":4,\"assetUuid\":\"${v0110_asset_uuid}\"}")
+assert_contains "$v0130_fit_denied" '"statuscode":403' 'contributor cannot change part fits'
+v0130_unfit=$(owner_ocs DELETE "/parts/${v0110_part_uuid}/fits/${v0110_asset_uuid}?${ws}&expectedRevision=4")
+assert_contains "$v0130_unfit" '"fits":[]' 'part fit removed'
+
+v0130_summary=$(contributor_ocs GET "/maintenance-forecast?${ws}")
+assert_contains "$v0130_summary" '"statuscode":200' 'workspace forecast summary'
+assert_contains "$v0130_summary" '"scannedAssets":' 'workspace forecast summary scans items'
+
+# 1.0 UI: shared workspace creation/rename and item deletion.
+v0130_space=$(owner_ocs POST "/workspaces" '{"name":"Smoke household"}')
+assert_contains "$v0130_space" '"statuscode":201' 'shared workspace created'
+assert_contains "$v0130_space" '"kind":"shared"' 'created workspace is shared'
+v0130_space_uuid=$(printf '%s' "$v0130_space" | python3 -c 'import json,sys;print(json.load(sys.stdin)["ocs"]["data"]["uuid"])')
+v0130_rename=$(owner_ocs PATCH "/workspaces/${v0130_space_uuid}" '{"expectedRevision":1,"name":"Smoke home"}')
+assert_contains "$v0130_rename" '"name":"Smoke home"' 'workspace renamed'
+v0130_rename_denied=$(contributor_ocs PATCH "/workspaces/${v0130_space_uuid}" '{"expectedRevision":2,"name":"Nope"}')
+assert_not_contains "$v0130_rename_denied" '"statuscode":200' 'non-member cannot rename a workspace'
+v0130_blank=$(owner_ocs POST "/workspaces" '{"name":"   "}')
+assert_contains "$v0130_blank" '"statuscode":400' 'blank workspace name rejected'
+v0130_del_asset=$(owner_ocs POST "/assets?workspace=${v0130_space_uuid}" '{"asset":{"category":"vehicle","name":"Delete me"}}')
+v0130_del_uuid=$(printf '%s' "$v0130_del_asset" | python3 -c 'import json,sys;print(json.load(sys.stdin)["ocs"]["data"]["uuid"])')
+v0130_deleted=$(owner_ocs DELETE "/assets/${v0130_del_uuid}?workspace=${v0130_space_uuid}&expectedRevision=1")
+assert_contains "$v0130_deleted" '"statuscode":200' 'item deleted'
+v0130_after=$(owner_ocs GET "/assets?workspace=${v0130_space_uuid}")
+assert_not_contains "$v0130_after" "$v0130_del_uuid" 'deleted item no longer listed'
+v0130_audit=$(owner_ocs GET "/audit?workspace=${v0130_space_uuid}&limit=20")
+assert_contains "$v0130_audit" 'asset.archived' 'item deletion audited'
+assert_contains "$v0130_audit" 'workspace.renamed' 'workspace rename audited'
 
 v0110_activity_uuid='4f8d2e6c-0a5b-4c7d-9e9f-1a2b3c4d5e6f'
 v0110_activity_body="{\"activity\":{\"uuid\":\"${v0110_activity_uuid}\",\"performedAt\":\"2026-10-01T12:00:00Z\",\"items\":[{\"uuid\":\"5a9e3f7d-1b6c-4d8e-8f0a-2b3c4d5e6f7a\",\"title\":\"Oil change\",\"kind\":\"maintenance\"}],\"parts\":[{\"uuid\":\"6b0f4a8e-2c7d-4e9f-9a1b-3c4d5e6f7a8b\",\"partUuid\":\"${v0110_part_uuid}\",\"quantity\":\"1\",\"unit\":\"each\",\"vendorUuid\":\"${v0110_vendor_uuid}\"},{\"uuid\":\"7c1a5b9f-3d8e-4fa0-8b2c-4d5e6f7a8b9c\",\"partUuid\":\"${v0110_part_uuid}\",\"quantity\":\"5.5\",\"unit\":\"qt\"}]}}"
