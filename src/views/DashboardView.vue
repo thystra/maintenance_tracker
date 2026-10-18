@@ -319,7 +319,7 @@ onMounted(load)
 									: t('maintenance_tracker', '{economy} over 90 days · last fill-up {date}', { economy: formatEconomy(row.economy90d, row.economyUnit), date: formatDate(row.lastFilledAt) }) }}
 							</template>
 							<template v-if="row.lastEconomy !== null" #details>
-								<span :title="t('maintenance_tracker', 'Last measured tank')">{{ formatEconomy(row.lastEconomy, row.economyUnit) }}</span>
+								<span>{{ t('maintenance_tracker', 'Latest tank: {economy}', { economy: formatEconomy(row.lastEconomy, row.economyUnit) }) }}</span>
 							</template>
 						</NcListItem>
 					</ul>
