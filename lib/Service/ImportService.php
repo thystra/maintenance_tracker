@@ -109,7 +109,11 @@ final class ImportService {
 			foreach (ImportPolicy::ORDER as $section) {
 				$table = ExportPolicy::TABLES[$section];
 				$types = $columnTypes[$table] ?? throw new \LogicException('Missing table ' . $table);
-				foreach ($tables[$section] ?? [] as $row) {
+				$rows = $tables[$section] ?? [];
+				if (isset(ImportPolicy::PARENT_FIRST[$section])) {
+					$rows = ItemGroupTree::parentsFirst($rows, ImportPolicy::PARENT_FIRST[$section]);
+				}
+				foreach ($rows as $row) {
 					$values = ImportPolicy::remap($section, $row, $idMap, $uuidMap, $types);
 					$newId = $this->insert($table, $workspace->getId(), $values, $types);
 					if (isset($row['id'])) {

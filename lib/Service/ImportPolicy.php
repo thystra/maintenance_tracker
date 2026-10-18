@@ -26,7 +26,7 @@ final class ImportPolicy {
 
 	/** Restored sections in dependency order (referenced tables first). */
 	public const ORDER = [
-		'categories', 'assets', 'components', 'specifications', 'relationships', 'assignments',
+		'categories', 'item_groups', 'assets', 'asset_groups', 'components', 'specifications', 'relationships', 'assignments',
 		'meters', 'readings', 'work_groups', 'work_definitions', 'work_schedule_rules',
 		'vendors', 'parts', 'links',
 		'profiles', 'profile_revisions', 'asset_profiles', 'profile_bindings', 'part_compatibility',
@@ -53,6 +53,8 @@ final class ImportPolicy {
 			'pack_id' => 'fitment_packs', 'import_id' => 'fitment_imports', 'slot_id' => 'fitment_slots',
 		],
 		'components' => ['parent_id' => 'components'],
+		'item_groups' => ['parent_id' => 'item_groups'],
+		'asset_groups' => ['group_id' => 'item_groups'],
 		'readings' => ['supersedes_id' => 'readings'],
 		'work_definitions' => ['group_id' => 'work_groups'],
 		'fitment_imports' => ['revision_id' => 'fitment_revisions'],
@@ -64,6 +66,12 @@ final class ImportPolicy {
 	public const POLYMORPHIC = [
 		'links' => ['subject_type', 'subject_id', ['part' => 'parts', 'vendor' => 'vendors']],
 	];
+
+	/**
+	 * Self-referencing sections whose rows are re-ordered parents-first before
+	 * insertion: a moved group can reference a parent with a larger id.
+	 */
+	public const PARENT_FIRST = ['item_groups' => 'parent_id'];
 
 	/** Columns holding a row's own UUID identity, regenerated on import. */
 	public const IDENTITY_COLUMNS = ['uuid', 'installation_uuid', 'import_uuid'];
