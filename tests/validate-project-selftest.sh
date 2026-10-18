@@ -48,6 +48,7 @@ fixture_paths=(
 	scripts/l10n.mjs .l10nignore templates lib/Settings/AdminSection.php
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
 	lib/Service/VendorService.php src/App.vue src/router.ts src/views/VendorsView.vue
+	lib/Migration/Version1130Date20261018000000.php lib/Migration/Version1150Date20261018120000.php lib/Service/ItemGroupService.php lib/Service/ItemGroupTree.php
 )
 
 copy_fixture() {
@@ -659,5 +660,17 @@ expect_rejected 'vendor websites without noreferrer' 'Vendor websites must rende
 copy_fixture
 sed -i 's/createWebHashHistory/createWebHistory/g' "$tmp/fixture/src/router.ts"
 expect_rejected 'a router without hash history' 'The app router must use hash history; the app has one page route.' "$tmp/router-history.out"
+
+copy_fixture
+sed -i "s/^## \\[0\\.1\\.[0-9]*\\]/## [0.0.0]/" "$tmp/fixture/CHANGELOG.md"
+expect_rejected 'a version without a CHANGELOG section' 'CHANGELOG.md must have a section for the current app version' "$tmp/changelog-version.out"
+
+copy_fixture
+sed -i 's/ItemGroupTree::assertMove(/ItemGroupTree::noop(/' "$tmp/fixture/lib/Service/ItemGroupService.php"
+expect_rejected 'item group moves without cycle checks' 'Item group moves must be checked for cycles.' "$tmp/group-cycle.out"
+
+copy_fixture
+sed -i "s/'maint_asset_grp',//" "$tmp/fixture/lib/Service/UserLifecycleService.php"
+expect_rejected 'item group membership missing from the purge registry' 'Account deletion purge registry must cover workspace-scoped table maint_asset_grp.' "$tmp/group-purge.out"
 
 echo 'Project validator self-tests passed.'

@@ -21,6 +21,22 @@ are UUIDs; database primary keys are auto-incrementing `BIGINT`s.
   and so on. `asset_class` is a coarse behavior/relationship class independent
   of the user-facing category.
 
+`maint_item_groups`
+: Item groups (0.1.15): workspace-scoped organisational containers forming a
+  tree through a nullable `parent_id` (any depth; the service refuses moves
+  that would make a group its own ancestor). Columns: `uuid`, `parent_id`,
+  `name`, `sort_order`, `revision`, timestamps and a `deleted_at` tombstone.
+  Groups are organisational only: they carry no maintenance semantics and do
+  not affect schedules, relationships or permissions.
+
+`maint_asset_grp`
+: Membership of an asset in one item group (unique `asset_id`, so at most one
+  group per asset), with its own `revision`. A link table rather than a column
+  on `maint_assets`, so moving an item between groups never rewrites the asset
+  row or bumps its revision, and group changes sync independently. Deleting a
+  group moves its subgroups and memberships to its parent (or removes the
+  memberships at the top level) in the same transaction.
+
 `maint_relationships`
 : Typed relationships between independent assets. The row stores the canonical forward relationship key, source/target assets, optional context, and whether it is the contextual default. Inverse keys/labels are catalog metadata rather than separately stored relationship types.
 

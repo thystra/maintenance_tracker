@@ -444,7 +444,7 @@ for (const table of [...workspaceTables].sort()) {
 expect(userLifecycle.includes('$this->serializeWorkspacePurge($workspaceId);'), 'Account deletion must serialize each personal workspace before purging child rows.')
 expect(userLifecycle.includes('runForActiveUsers(') && userLifecycle.includes('sort($userUids, SORT_STRING);'), 'Multi-user lifecycle locks must be acquired through deterministic UID ordering.')
 const assetPurgePosition = userLifecycle.indexOf("'maint_assets'")
-for (const table of ['maint_evidence_links', 'maint_evidence', 'maint_ev_shares', 'maint_ev_folders', 'maint_links', 'maint_costs', 'maint_cost_settings', 'maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
+for (const table of ['maint_asset_grp', 'maint_item_groups', 'maint_evidence_links', 'maint_evidence', 'maint_ev_shares', 'maint_ev_folders', 'maint_links', 'maint_costs', 'maint_cost_settings', 'maint_part_compat', 'maint_vendors', 'maint_asset_fit', 'maint_fitments', 'maint_offers', 'maint_fit_bind', 'maint_fit_targets', 'maint_fit_imports', 'maint_fit_revs', 'maint_fit_packs', 'maint_parts', 'maint_fit_slots', 'maint_prof_bind', 'maint_asset_prof', 'maint_prof_revs', 'maint_profiles', 'maint_occurrences', 'maint_reminder_policy', 'maint_activity_parts', 'maint_activity_meters', 'maint_activity_items', 'maint_activities', 'maint_work_sched', 'maint_work_defs', 'maint_work_groups', 'maint_readings', 'maint_meters', 'maint_assignments', 'maint_relationships', 'maint_specs', 'maint_components', 'maint_categories', 'maint_changes', 'maint_audit']) {
 	expect(userLifecycle.indexOf(`'${table}'`) !== -1 && userLifecycle.indexOf(`'${table}'`) < assetPurgePosition, `${table} must be purged before maint_assets.`)
 }
 
@@ -559,6 +559,19 @@ expect(packageJson.dependencies?.['@nextcloud/l10n'] !== undefined && l10nScript
 expect(['js/', 'vendor/', 'node_modules/'].every((path) => l10nIgnore.split(/\r?\n/).includes(path)), '.l10nignore must keep generated and third-party code out of translation extraction.')
 expect(adminTemplate.includes("$l->t('Outside links')") && !/<h2>[A-Za-z]/.test(adminTemplate), 'Admin settings template text must be translated.')
 expect(!/getName\(\): string \{\s*return '/.test(await read('lib/Settings/AdminSection.php')), 'Admin section name must be translated.')
+
+// Every change set bumps the version and documents it.
+expect(changelog.includes(`## [${infoVersion}]`), `CHANGELOG.md must have a section for the current app version ${infoVersion}.`)
+
+// 0.1.15 item groups.
+const itemGroupService = await read('lib/Service/ItemGroupService.php')
+expect(itemGroupService.includes('ItemGroupTree::assertMove(') && (await read('lib/Service/ItemGroupTree.php')).includes('function wouldCycle('), 'Item group moves must be checked for cycles.')
+expect(itemGroupService.includes('membershipsInGroup(') && itemGroupService.includes("'movedItems'"), 'Deleting an item group must move its items up instead of deleting them.')
+expect(importPolicy.includes("'item_groups' => ['parent_id' => 'item_groups']") && importPolicy.includes("PARENT_FIRST = ['item_groups' => 'parent_id']") && importService.includes('parentsFirst('), 'Restore must remap item group parents and insert parents before children.')
+for (const eventType of ['item_group.created', 'item_group.moved', 'item_group.archived', 'asset.group_changed']) {
+	expect(auditEvents.includes(`'${eventType}'`), `Audit event vocabulary must include ${eventType}.`)
+}
+expect(api.includes('/item-groups/{uuid}/move') && api.includes('PUT /assets/{assetUuid}/group'), 'API documentation must cover the item group endpoints.')
 
 try {
 	await access('.github/workflows/ci.yml')

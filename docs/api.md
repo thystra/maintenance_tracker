@@ -138,6 +138,50 @@ needed for offline synchronization.
 
 These resources remain experimental. Update/archive contracts for categories, components, and specifications will be completed before the OCS API is declared stable.
 
+## Item groups (0.1.15)
+
+Item groups are workspace-scoped organisational containers that nest to any
+depth ("Vehicles > Fleet 1", "House > Basement"). Every role with
+`inventory.read` reads them; changes need `inventory.manage` (Owner, Manager).
+Writes are journaled and audited (`item_group.created`, `item_group.updated`,
+`item_group.moved` with `parentUuid`, `item_group.archived`, and
+`asset.group_changed` with `groupUuid`).
+
+### `GET /item-groups?workspace=<uuid>`
+
+Returns `items` (active groups with `uuid`, `parentUuid`, `name`, `sort`,
+`revision`, `createdAt`, `updatedAt`) and `assignments`, a list of
+`{assetUuid, groupUuid}` for active items that are in a group. Clients build
+the tree from `parentUuid` and count items per group, including subgroups.
+
+### `POST /item-groups?workspace=<uuid>`
+
+Body `{"group": {"name": "...", "parentUuid": "...|null", "sort": 0, "uuid": "..."}}`.
+`name` is 1–120 characters; `uuid` makes retries idempotent. A workspace can
+have at most 1000 groups.
+
+### `PATCH /item-groups/{uuid}?workspace=<uuid>`
+
+Body `{"expectedRevision": n, "group": {"name": "...", "sort": 0}}` renames or
+re-sorts a group.
+
+### `POST /item-groups/{uuid}/move?workspace=<uuid>`
+
+Body `{"expectedRevision": n, "parentUuid": "...|null", "sort": 0}`. Moves the
+group (with its subgroups and items) under another group or to the top level.
+A move into the group itself or one of its subgroups is refused with 400.
+
+### `DELETE /item-groups/{uuid}?workspace=<uuid>&expectedRevision=n`
+
+Deletes (tombstones) the group. Nothing else is deleted: its subgroups and
+items move up to its parent; items of a deleted top-level group become
+ungrouped. Returns `movedGroups`, `movedItems` and `ungroupedItems`.
+
+### `PUT /assets/{assetUuid}/group?workspace=<uuid>`
+
+Body `{"groupUuid": "...|null"}`. Puts the item into a group or takes it out.
+An item is in at most one group.
+
 ## Meter and reading endpoints
 
 Meter configuration and observations are separate resources. Initial dimensions

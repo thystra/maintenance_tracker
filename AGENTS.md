@@ -214,6 +214,12 @@ For a release:
 Do not treat an unsigned CI artifact as a published App Store release, and do
 not silently rebuild equivalent-looking bytes after qualification.
 
+Every change set bumps the app version by one patch level in all four places
+(`appinfo/info.xml`, `Application::APP_VERSION`, `package.json`,
+`package-lock.json`), rebuilds the bundle, regenerates `openapi.json`, and adds
+a `CHANGELOG.md` section for that version (the validator checks both). Do not
+create tags for these versions.
+
 ## 9. Roadmap authority
 
 `docs/roadmap.md` owns planned milestones and foundation exit criteria.
@@ -288,6 +294,13 @@ Workspace export is a read-only, explicitly requested projection. `workspace.exp
 
 The web UI follows `docs/ui.md`: `NcAppNavigation` pages (Dashboard, Items, Parts, Vendors, Settings) on hash routes, built from `@nextcloud/vue` components. Keep common tasks quick (logging maintenance is one dialog from the dashboard, the item list, or an item) and put structural or rare setup in an item's Setup tab or in Settings. Every page sets its heading through `NcAppContent`'s page heading and receives focus on navigation; server-wide options stay in Nextcloud admin settings. Hide actions the role cannot perform (`src/store.ts` mirrors `AuthorizationCatalog`), but never rely on that for authorization. Extend `tests/browser/app-mount.mjs` when adding a page or main flow.
 
+
+## Item group invariant
+
+Item groups are organisational only. They never carry maintenance semantics,
+permissions or schedules. Membership stays in `maint_asset_grp` (one row per
+asset), moves are cycle-checked, and deleting a group moves its subgroups and
+items up a level; a group delete never deletes items.
 
 ## Installability invariant
 
