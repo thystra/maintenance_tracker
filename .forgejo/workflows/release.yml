@@ -1,0 +1,110 @@
+# Build, check, sign, and publish a release when a version tag is pushed.
+# See docs/releasing.md for the process and the secrets.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release ${{ forgejo.ref_name }}
+    runs-on: forgejo-workstation
+    timeout-minutes: 30
+    container:
+      # Same qualified PHP 8.2 + Node 24 image as the CI php job.
+      image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:d957cf0537413a4154e7c8fad4991b3489ed43cd4f4ab82cff0de355868be1a7
+
+    steps:
+      - name: Check out repository
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
+        with:
+          persist-credentials: false
+
+      - name: Verify toolchain
+        run: |
+          set -euo pipefail
+          test "$(node --version | cut -d. -f1)" = 'v24'
+          for tool in php composer git tar gzip openssl curl sha256sum; do command -v "$tool" >/dev/null || { echo "Missing $tool" >&2; exit 1; }; done
+          tar --version | head -1 | grep -q 'GNU tar'
+
+      - name: Check that the tag matches the app version
+        id: version
+        run: |
+          set -euo pipefail
+          tag='${{ forgejo.ref_name }}'
+          version="$(php -r 'echo (string)simplexml_load_file("appinfo/info.xml")->version;')"
+          if [ "$tag" != "v$version" ]; then
+            echo "Tag $tag does not match appinfo/info.xml version $version (expected v$version)." >&2
+            exit 1
+          fi
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no '## [$version]' section." >&2; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          composer install --no-interaction --no-progress --prefer-dist
+          composer check-platform-reqs --no-dev
+          npm ci
+
+      - name: Run checks
+        run: |
+          set -euo pipefail
+          composer validate --strict
+          composer test
+          composer openapi:install --no-progress
+          composer openapi
+          git diff --exit-code -- openapi.json
+          npm run validate:project
+          bash tests/validate-project-selftest.sh
+          npm run validate:profiles
+          npm run typecheck
+          npm run lint
+          npm run stylelint
+          npm run check:a11y
+          npm run l10n:check
+          npm run build
+          git diff --check
+          git diff --exit-code -- js css
+
+      - name: Build and sign the App Store archive
+        env:
+          APP_SIGNING_KEY_PEM: ${{ secrets.APP_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "$APP_SIGNING_KEY_PEM" ]; then
+            key="$(mktemp)"
+            chmod 600 "$key"; (printf '%s\n' "$APP_SIGNING_KEY_PEM" > "$key")
+            APP_SIGNING_KEY="$key" bash scripts/build-appstore.sh
+            rm -f "$key"
+          else
+            echo '::warning::APP_SIGNING_KEY is not set; the release archive is unsigned.'
+            bash scripts/build-appstore.sh
+          fi
+          ls -l build/artifacts
+
+      - name: Create the Forgejo release
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN || forgejo.token }}
+          API: ${{ forgejo.server_url }}/api/v1/repos/${{ forgejo.repository }}
+          TAG: ${{ forgejo.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Release notes: the CHANGELOG section for this version.
+          notes="$(awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md)"
+          case "$VERSION" in 0.*) prerelease=true ;; *) prerelease=false ;; esac
+          body="$(php -r 'echo json_encode(["tag_name" => $argv[1], "name" => $argv[1], "body" => $argv[2], "draft" => false, "prerelease" => $argv[3] === "true"]);' "$TAG" "$notes" "$prerelease")"
+          release="$(curl -sS --fail-with-body -X POST "$API/releases" \
+            -H "Authorization: token $TOKEN" -H 'Content-Type: application/json' -d "$body")"
+          id="$(printf '%s' "$release" | php -r 'echo json_decode(stream_get_contents(STDIN), true)["id"];')"
+          for file in build/artifacts/*; do
+            curl -sS --fail-with-body -X POST "$API/releases/$id/assets?name=$(basename "$file")" \
+              -H "Authorization: token $TOKEN" -F "attachment=@$file" > /dev/null
+            echo "Attached $(basename "$file")"
+          done
