@@ -245,6 +245,18 @@ expect(lifecycleService.includes('$this->orphanWorkspace($workspaceId, $userUid)
 expect(ownerMatch !== null && contributorMatch !== null && viewerMatch !== null && contributorMatch[1].includes('EVIDENCE_CREATE') && !contributorMatch[1].includes('EVIDENCE_MANAGE') && !viewerMatch[1].includes('EVIDENCE_CREATE'), 'Contributors attach evidence; only Owner/Manager manage others\' evidence; Viewers read only.')
 const outsideLinksVue = await read('src/components/OutsideLinks.vue')
 expect(outsideLinksVue.includes('target="_blank" rel="noopener noreferrer"') && outsideLinksVue.includes("url.startsWith('https://')"), 'Outside links must render https-only with rel="noopener noreferrer" target="_blank".')
+const vendorService = await read('lib/Service/VendorService.php')
+expect(vendorService.includes('OutsideLinkPolicy') && vendorService.includes('assertEnabled()') && vendorService.includes('FILTER_VALIDATE_EMAIL'), 'Vendor websites must pass the outside-link policy and switch, and vendor e-mail addresses must be validated.')
+const vendorsView = await read('src/views/VendorsView.vue')
+expect(vendorsView.includes('target="_blank" rel="noopener noreferrer"') && vendorsView.includes("url.startsWith('https://')"), 'Vendor websites must render https-only with rel="noopener noreferrer" target="_blank".')
+expect((await read('docs/privacy-policy.md')).includes('contact person'), 'The privacy policy must name vendor contact details as personal data.')
+
+// UI structure: Nextcloud navigation, routed pages, and a design note.
+const appVue = await read('src/App.vue')
+expect(appVue.includes('NcAppNavigation') && appVue.includes('NcAppContent') && appVue.includes(':pageHeading=') && appVue.includes('[data-page-heading]'), 'App.vue must use Nextcloud navigation, set the page heading/title, and move focus to the page heading on navigation.')
+expect((await read('src/router.ts')).includes('createWebHashHistory'), 'The app router must use hash history; the app has one page route.')
+const uiDoc = await read('docs/ui.md')
+expect(uiDoc.includes('## Information architecture') && uiDoc.includes('## Main flows'), 'docs/ui.md must describe the information architecture and main flows.')
 
 for (const capability of [
 	'maintenance_definition.*',
@@ -499,6 +511,7 @@ expect(exportService.includes("unset($item['file']['filesUrl'], $item['file']['d
 expect(exportService.includes('ExportPolicy::MAX_FILE_BYTES') && exportService.includes('ExportPolicy::MAX_TOTAL_FILE_BYTES') && exportPolicy.includes('function fileEntry('), 'Evidence files in export ZIPs must be size-bounded and use sanitized entry names.')
 expect(exportController.includes('AuthorizationCatalog::WORKSPACE_EXPORT') && exportController.includes('->authorize(') && !exportController.includes('runWithCapability('), 'Export endpoint must authorize workspace.export and run outside an app transaction.')
 expect(exportController.includes("'Cache-Control', 'no-store'"), 'Export downloads must not be cached.')
+expect(exportPolicy.includes("'vendors' => 'website'"), 'Exports must blank vendor websites while the administrator disables outside links.')
 
 // Installability: `git archive` must ship every runtime path.
 for (const runtime of ['appinfo', 'lib', 'templates', 'img', 'js', 'css', 'l10n', 'profiles', 'fitment', 'fitment/core-v1.json']) {

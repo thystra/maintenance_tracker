@@ -47,6 +47,7 @@ fixture_paths=(
 	tests/integration/nextcloud-smoke.sh tests/integration/upgrade-smoke.sh
 	scripts/l10n.mjs .l10nignore templates lib/Settings/AdminSection.php
 	lib/Controller docs AGENTS.md README.md CHANGELOG.md
+	lib/Service/VendorService.php src/App.vue src/router.ts src/views/VendorsView.vue
 )
 
 copy_fixture() {
@@ -646,5 +647,17 @@ expect_rejected 'import of non-owner exports' 'Import must accept only complete 
 copy_fixture
 printf '/js export-ignore\n' >> "$tmp/fixture/.gitattributes"
 expect_rejected 'export-ignored runtime bundles' '.gitattributes must not export-ignore the runtime path js; git archive installs would miss it.' "$tmp/gitattributes-js.out"
+
+copy_fixture
+sed -i "s/, 'vendors' => 'website'//" "$tmp/fixture/lib/Service/ExportPolicy.php"
+expect_rejected 'vendor websites exported while links are off' 'Exports must blank vendor websites while the administrator disables outside links.' "$tmp/export-vendor-website.out"
+
+copy_fixture
+sed -i 's/rel="noopener noreferrer"/rel="noopener"/' "$tmp/fixture/src/views/VendorsView.vue"
+expect_rejected 'vendor websites without noreferrer' 'Vendor websites must render https-only with rel="noopener noreferrer" target="_blank".' "$tmp/vendor-link.out"
+
+copy_fixture
+sed -i 's/createWebHashHistory/createWebHistory/g' "$tmp/fixture/src/router.ts"
+expect_rejected 'a router without hash history' 'The app router must use hash history; the app has one page route.' "$tmp/router-history.out"
 
 echo 'Project validator self-tests passed.'

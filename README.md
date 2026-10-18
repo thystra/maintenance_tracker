@@ -14,6 +14,10 @@ Nextcloud database and Files.
 
 ## Features
 
+- **A Nextcloud-style interface** – a dashboard of what is overdue, due and
+  coming up; pages for items, parts, vendors and settings in the left
+  navigation; and one quick “Log maintenance” dialog from the dashboard, the item
+  list or an item. See [docs/ui.md](docs/ui.md).
 - **Inventory** – maintained items with categories (built-in and custom), broad
   asset classes, nested components, structured specifications, typed
   relationships between items (for example a trailer towed by a truck), and
@@ -34,8 +38,9 @@ Nextcloud database and Files.
   from the bundled generic profile or your own JSON file) to create
   work definitions and parts in one step, with a preview before anything is
   written.
-- **Parts, vendors, and fitment** – a parts and vendors catalog, compatible parts
-  per item, and portable fitment compatibility packs in JSON or a spreadsheet-
+- **Parts, vendors, and fitment** – a parts catalog (usual vendor, typical price,
+  which items a part fits), vendors with website, address, phone, e-mail and
+  contact person, compatible parts per item, and portable fitment compatibility packs in JSON or a spreadsheet-
   friendly CSV/ZIP format.
 - **Costs** – a cost ledger per item with exact amounts. By default one currency
   (USD) without tax lines; a workspace owner can choose the default currency and
@@ -44,8 +49,8 @@ Nextcloud database and Files.
 - **Receipts, photos, and documents** – attach files to items, service records, and
   costs, either by uploading them or by picking files you already have in
   Nextcloud Files.
-- **Shared workspaces** – every user gets a private workspace. Shared workspaces
-  have Owner, Manager, Contributor, and Viewer roles, an append-only audit trail,
+- **Shared workspaces** – every user gets a private workspace and can create
+  shared ones, add members and rename them in Settings. Shared workspaces have Owner, Manager, Contributor, and Viewer roles, an append-only audit trail,
   and an ownership transfer that the new owner must accept.
 - **Nextcloud integration** – changes appear in the Activity app, due and overdue
   tasks send Nextcloud notifications, and each user can choose one of their own
@@ -63,8 +68,8 @@ No screenshots are published yet.
 
 ### Current limitations
 
-- Adding members to a shared workspace and importing fitment packs are available
-  through the [OCS API](docs/api.md) only; there is no UI for them yet.
+- Importing fitment packs and mapping them to items are available through the
+  [OCS API](docs/api.md) only; there is no UI for them yet.
 - Calendar entries are not removed when a task is completed, because Nextcloud's
   public Calendar API does not support it.
 - Restoring an export does not restore workspace members or the audit trail.

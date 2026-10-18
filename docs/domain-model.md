@@ -181,7 +181,14 @@ and source bindings just as profile installation does.
   community truth.
 
 `maint_vendors`
-: A user-defined supplier.
+: A user-defined supplier or service provider: name, notes, https `website`,
+  `address`, `phone`, `email`, and a point-of-contact `contact_name`
+  (migration `Version1130`).
+
+Canonical parts also carry local, non-exported-to-community catalog facts:
+`notes`, a preferred `vendor_id`, and a typical `unit_price_minor` with its
+`currency` (integer minor units, like the cost ledger). Manual "fits this item"
+facts are stored in `maint_part_compat` with subject type `asset`.
 
 `maint_offers`
 : Vendor/store SKU and HTTPS product URL metadata. Current/reference shopping

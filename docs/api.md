@@ -51,7 +51,15 @@ Returns the app/API version, stability, and feature flags. Clients must check th
 
 ### `GET /workspaces`
 
-Returns every workspace accessible to the current user, creating the personal workspace on first use. Each item includes the caller's normalized role.
+Returns every workspace accessible to the current user, creating the personal workspace on first use. Each item includes the caller's normalized role and the workspace `revision`.
+
+### `POST /workspaces`
+
+Creates a shared workspace owned by the caller from `{"name"}` (1–120 printable characters) and returns it with HTTP 201. Any user may create one. Audit event `workspace.created`.
+
+### `PATCH /workspaces/{uuid}`
+
+Renames a workspace from `{"expectedRevision", "name"}`. Owner only (`workspace.settings.manage`); a stale revision is a 409 conflict. Audit event `workspace.renamed`.
 
 ### `GET /assets?workspace=<uuid>&limit=100&cursor=<opaque>`
 
@@ -616,6 +624,8 @@ States are `inactive`, `unscheduled`, `baseline_required`, `upcoming`, `due`, `o
 
 The default policy is explicit and server-owned: 14 calendar days and 10 percent of the configured meter interval. `GET /reminder-policy` returns the effective values with `revision: 0` and `source: default` until a workspace policy is stored. `PATCH /reminder-policy` requires `expectedRevision`; Owner and Manager may set `calendarLeadDays` from 0 through 3650 and `meterLeadPercent` from 0 through 100. Contributor and Viewer may read but not change policy.
 
+`GET /maintenance-forecast` summarizes the whole workspace for the dashboard in one call: every active, scheduled task of up to 500 items (`scannedAssets`, `truncated`), ordered `overdue`, `due`, `due_soon`, `blocked`, `setup_required`, then `not_due`, each with `asset {uuid, name, category}`, `definition {uuid, title, kind}`, `state`, `reason`, `lastPerformedAt`, `dueOn`, `remainingDays`, and `meter` when a meter rule triggers. It needs `maintenance_forecast.read` (every role) and also returns the effective `policy`.
+
 `GET /assets/{assetUuid}/maintenance-occurrences` returns the materialized work queue. By default only open occurrences are returned; `includeClosed=true` includes history. Each occurrence exposes its UUID, work-definition UUID, completion-baseline activity UUID, lifecycle timestamps/reason, revision, and a `current` field containing the live forecast/status projection. Occurrence storage does not contain due dates, due state, remaining values, or meter thresholds.
 
 `POST /assets/{assetUuid}/maintenance-occurrences/reconcile` is an explicit serialized projection write for Owner/Manager. Reconciliation creates an occurrence when the current forecast is `due_soon`, `due`, or `overdue`; preserves the existing row while the same completion baseline remains actionable; closes it as `completed` when a later linked activity becomes the baseline; and closes it as `not_actionable` or `definition_unavailable` when configuration no longer warrants an open work item. A database uniqueness constraint enforces one open occurrence per work definition.
@@ -627,9 +637,11 @@ Parts and vendors are workspace records. Every member may read them (`part.read`
 - `GET /parts?includeArchived=false` — list canonical parts ordered by manufacturer and part number.
 - `GET /parts/{uuid}` — read one part, including an archived one.
 - `POST /parts` with `{"part": {"uuid", "manufacturer", "partNumber", "description"}}` — create a canonical part. Identity is manufacturer + part number under the fitment-pack normalization (Unicode NFKC, whitespace collapse, case fold). When the identity already exists the existing record is returned with HTTP 200 instead of 201; an archived identity is restored. A client UUID already used by a different record is a precondition conflict.
-- `PATCH /parts/{uuid}` with `expectedRevision` and `{"part": {"description"}}` — only the description is mutable; identity fields are rejected as unknown.
+- `PATCH /parts/{uuid}` with `expectedRevision` and `{"part": {...}}` — `description`, `notes`, `vendorUuid` (preferred vendor, must be an active vendor of the workspace, or `null`), `unitPrice` (typical price as a decimal string, zero allowed, or `null`) and `currency` (ISO 4217, defaults to the workspace currency) are mutable; identity fields are rejected as unknown. `POST /parts` accepts the same optional fields.
+- Part responses include `notes`, `vendorUuid`, `vendorName`, `unitPrice`, `currency`, and `fits`: the items the part fits, each `{assetUuid, assetName, source}` where `source` is `manual` (recorded on the part) or `profile` (from a profile or fitment data).
+- `POST /parts/{uuid}/fits` with `{"expectedRevision", "assetUuid"}` marks the part as fitting an item; `DELETE /parts/{uuid}/fits/{assetUuid}?expectedRevision=` removes a manual fit. Both bump the part revision and need `part.manage`.
 - `DELETE /parts/{uuid}` with `expectedRevision` — archive. Archived parts stay referenced by fitments, recorded part usage, and costs.
-- `GET /vendors`, `GET /vendors/{uuid}`, `POST /vendors` (`uuid`, `name`, optional `notes`), `PATCH /vendors/{uuid}` (`name`, `notes`), `DELETE /vendors/{uuid}` — same revision and archive semantics. Vendor names are not unique; vendors are identified by UUID.
+- `GET /vendors`, `GET /vendors/{uuid}`, `POST /vendors`, `PATCH /vendors/{uuid}`, `DELETE /vendors/{uuid}` — same revision and archive semantics. Vendor names are not unique; vendors are identified by UUID. Fields: `name`, `notes`, `website` (https only, validated with the outside-link policy; refused while the administrator disables outside links and returned as `null` meanwhile), `address`, `phone` (digits, spaces and `+-()./` only), `email`, and `contactName`. The list response also carries `websitesEnabled`. Contact names, phone numbers and e-mail addresses can be personal data; see the privacy policy.
 
 ## Parts used per activity — v0.1.10
 
