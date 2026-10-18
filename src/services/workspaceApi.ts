@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import type { OwnershipTransfer, WorkspaceMemberSummary, WorkspaceSummary } from '../workspaceTypes.ts'
+import type { OwnershipTransfer, WorkspaceMemberSummary, WorkspaceRole, WorkspaceSummary } from '../workspaceTypes.ts'
 import type { OcsEnvelope } from './api.ts'
 
 import axios from '@nextcloud/axios'
@@ -111,4 +111,24 @@ export async function importWorkspace(file: File, name: string): Promise<ImportR
 		form.append('name', name.trim())
 	}
 	return data(await axios.post<OcsEnvelope<ImportResult>>(endpoint('/import'), form, requestOptions))
+}
+
+export async function createWorkspace(name: string): Promise<WorkspaceSummary> {
+	return data(await axios.post<OcsEnvelope<WorkspaceSummary>>(endpoint('/workspaces'), { name }, requestOptions))
+}
+
+export async function renameWorkspace(uuid: string, expectedRevision: number, name: string): Promise<WorkspaceSummary> {
+	return data(await axios.patch<OcsEnvelope<WorkspaceSummary>>(endpoint(`/workspaces/${encodeURIComponent(uuid)}`), { expectedRevision, name }, requestOptions))
+}
+
+export async function addMember(workspace: string, userUid: string, role: WorkspaceRole): Promise<WorkspaceMemberSummary> {
+	return data(await axios.post<OcsEnvelope<WorkspaceMemberSummary>>(endpoint(`/workspaces/${encodeURIComponent(workspace)}/members`), { member: { userUid, role } }, requestOptions))
+}
+
+export async function changeMemberRole(workspace: string, userUid: string, role: WorkspaceRole): Promise<WorkspaceMemberSummary> {
+	return data(await axios.patch<OcsEnvelope<WorkspaceMemberSummary>>(endpoint(`/workspaces/${encodeURIComponent(workspace)}/members/${encodeURIComponent(userUid)}`), { member: { role } }, requestOptions))
+}
+
+export async function removeMember(workspace: string, userUid: string): Promise<void> {
+	await axios.delete(endpoint(`/workspaces/${encodeURIComponent(workspace)}/members/${encodeURIComponent(userUid)}`), requestOptions)
 }

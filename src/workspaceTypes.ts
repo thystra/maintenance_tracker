@@ -12,6 +12,7 @@ export interface WorkspaceSummary {
 	role: WorkspaceRole
 	ownerUid: string
 	orphaned: boolean
+	revision?: number
 }
 
 export interface WorkspaceMemberSummary {
