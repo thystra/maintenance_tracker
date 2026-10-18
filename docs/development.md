@@ -83,12 +83,14 @@ NC_SMOKE_DATABASE=pgsql bash tests/integration/nextcloud-smoke.sh
 NC_SMOKE_DATABASE=mysql bash tests/integration/nextcloud-smoke.sh   # MariaDB 11.4
 ```
 
-The upgrade test installs the app as of v0.1.10 (commit `6fc011d`; override with
-`NC_UPGRADE_FROM`), adds data, upgrades to the working tree, and checks the
-result. It needs the full git history:
+The upgrade test installs an earlier app state, adds data, upgrades to the
+working tree, and checks the result, once per starting point (see
+[Upgrade policy](#upgrade-policy)). It needs the full git history and tags:
 
 ```bash
 NC_SMOKE_DATABASE=mysql bash tests/integration/upgrade-smoke.sh
+NC_UPGRADE_FROM='v1.0.0 v1.3.0' NC_UPGRADE_LATEST_TAG=1 bash tests/integration/upgrade-smoke.sh
+bash tests/integration/upgrade-bases.sh   # just print the resolved starting points
 ```
 
 Add `NC_SMOKE_BROWSER=1` (after `npm ci`) to also open the app in headless
@@ -128,11 +130,45 @@ The harness stages the runtime app and copies it in with `docker cp`, so it does
 not need to bind-mount the checkout and works with a remote or isolated Docker
 daemon.
 
+## Upgrade policy
+
+The upgrade job starts from a short list of earlier versions, kept in one place:
+`NC_UPGRADE_FROM` in the top-level `env:` of `.forgejo/workflows/ci.yml` (space-
+separated git refs). The rule:
+
+- **always the latest tagged release plus the oldest supported release** (for
+  example the first 1.0 tag once 1.x is supported), and nothing else;
+- after a release, add its tag (or replace the previous latest tag) in that one
+  line, as step 7 of [releasing.md](releasing.md#each-release) says;
+- when support for the oldest release ends, replace it with the new oldest one.
+
+Until the first release tag exists, the only entry is `6fc011d`, the v0.1.10
+completion merge. (`v0.1.0` is an old foundation tag that predates the upgrade
+baseline; it is never used.) With `NC_UPGRADE_LATEST_TAG=1`, set in CI,
+`tests/integration/upgrade-bases.sh` also adds the newest `vX.Y.Z` tag
+reachable from HEAD when its app version is newer than every listed base, so a
+fresh tag is tested even before the list is updated. The explicit list is the
+fallback and always runs. Duplicate commits are tested once.
+
+**When it runs.** The fresh-install matrix (`nextcloud` job) runs on every pull
+request. The upgrade matrix runs on pushes to `main`, nightly (`schedule`), on
+`workflow_dispatch`, and on pull requests that change `lib/Migration/**`,
+`lib/Db/**`, `appinfo/info.xml`, the upgrade harness (`upgrade-smoke.sh`,
+`upgrade-bases.sh`, `pull-images.sh`, `tests/integration/lib/**`,
+`scripts/upgrade-needed.sh`), or `.forgejo/workflows/ci.yml`. The decision is
+made by the `changes` job (`scripts/upgrade-needed.sh`), not by an
+`on.pull_request.paths` filter. Forgejo supports such filters, but they skip the
+whole workflow, which would also skip the fresh-install matrix and leave
+required checks pending. On other pull requests the upgrade jobs still run, skip
+their steps, and pass in seconds, so their checks always report. If the pull
+request base cannot be resolved, the upgrade test runs.
+
 ## Continuous integration
 
 Forgejo CI is authoritative. It repeats the checks above, runs the integration
-suite and the upgrade test on Nextcloud 33, 34, and 35 with SQLite, PostgreSQL,
-and MariaDB, checks that `openapi.json` is current, and builds an explicitly
+suite on Nextcloud 33, 34, and 35 with SQLite, PostgreSQL, and MariaDB, the
+upgrade test on the same matrix when the [upgrade policy](#upgrade-policy) says
+so, checks that `openapi.json` is current, and builds an explicitly
 **unsigned** install-candidate archive with a checksum. That archive is for
 testing only; App Store releases need a separate signing step.
 

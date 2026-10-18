@@ -3,13 +3,16 @@
 # SPDX-FileCopyrightText: 2026 Alan Johnson
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# Upgrade-migration test: install an earlier released app state (default: the
-# v0.1.10 completion merge), create data through its API, replace the code with
-# the working tree, run `occ upgrade`, and check that every migration ran, the
-# old data survived, and features added since then work on the upgraded data.
+# Upgrade-migration test: install an earlier released app state, create data
+# through its API, replace the code with the working tree, run `occ upgrade`,
+# and check that every migration ran, the old data survived, and features added
+# since then work on the upgraded data. Runs once per starting point from
+# NC_UPGRADE_FROM (space-separated refs, default the v0.1.10 completion merge
+# 6fc011d) plus, with NC_UPGRADE_LATEST_TAG=1, the newest release tag; see
+# tests/integration/upgrade-bases.sh and docs/development.md#upgrade-policy.
 # Same environment knobs as nextcloud-smoke.sh (NC_SMOKE_DATABASE,
 # NC_SMOKE_IMAGE, NC_SMOKE_NETWORK_MODE, NC_SMOKE_READY_TIMEOUT). Needs git
-# history for the old commit.
+# history and tags.
 
 set -Eeuo pipefail
 
@@ -23,7 +26,21 @@ case "$network_mode" in
 	network|bridge) ;;
 	*) echo "Unsupported NC_SMOKE_NETWORK_MODE: $network_mode" >&2; exit 2 ;;
 esac
-from_commit="${NC_UPGRADE_FROM:-6fc011d}"
+# One run per starting point; each child run tests a single resolved commit.
+if [ -z "${NC_UPGRADE_SINGLE:-}" ]; then
+	bases=$(bash "$(dirname "${BASH_SOURCE[0]}")/upgrade-bases.sh")
+	failed=()
+	for base in $bases; do
+		NC_UPGRADE_SINGLE=1 NC_UPGRADE_FROM="$base" bash "${BASH_SOURCE[0]}" || failed+=("${base:0:12}")
+	done
+	if [ "${#failed[@]}" -gt 0 ]; then
+		echo "Upgrade test failed from: ${failed[*]}" >&2
+		exit 1
+	fi
+	exit 0
+fi
+from_commit="${NC_UPGRADE_FROM}"
+from_label=$(git describe --tags --exact-match "$from_commit" 2>/dev/null || git rev-parse --short "$from_commit")
 image="${NC_SMOKE_IMAGE:-nextcloud:34.0.5-apache}"
 nc_label="${image##*:}"; nc_label="${nc_label%%-*}"
 # shellcheck source=tests/integration/lib/docker-ready.sh
@@ -75,7 +92,9 @@ new_version=$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' "$staging_root/new/m
 # Intermediate states share a version string; Nextcloud only migrates when the
 # version increases, so the old install is labelled as a lower version.
 if [ "$old_version" = "$new_version" ]; then
-	sed -i "s:<version>${old_version}</version>:<version>${old_version%.*}.0</version>:" "$staging_root/old/maintenance_tracker/appinfo/info.xml"
+	lower_version="${old_version%.*}.0"
+	[ "$lower_version" != "$old_version" ] || lower_version=0.0.0
+	sed -i "s:<version>${old_version}</version>:<version>${lower_version}</version>:" "$staging_root/old/maintenance_tracker/appinfo/info.xml"
 fi
 
 # Pull first (retried) so registry time never counts against readiness, then
@@ -176,7 +195,13 @@ executed_migrations() {
 }
 expected_migrations=$(ls "$staging_root/new/maintenance_tracker/lib/Migration" | sed -n 's/^Version\([0-9]*Date[0-9]*\)\.php$/\1/p' | sort)
 before=$(executed_migrations)
-[ "$before" != "$expected_migrations" ] || fail 'Upgrade base already has every migration; pick an older NC_UPGRADE_FROM.'
+# A recent base (typically the latest release tag) may already have every
+# migration; that is still a valid version-only upgrade. Set
+# NC_UPGRADE_REQUIRE_MIGRATIONS=1 to insist on pending migrations.
+if [ "$before" = "$expected_migrations" ]; then
+	[ "${NC_UPGRADE_REQUIRE_MIGRATIONS:-0}" != '1' ] || fail 'Upgrade base already has every migration; pick an older NC_UPGRADE_FROM.'
+	echo "Upgrade base ${from_label} already has every migration; checking a version-only upgrade." >&2
+fi
 
 install_app "$staging_root/new"
 occ upgrade --no-interaction >/dev/null
@@ -204,4 +229,4 @@ occ app:disable maintenance_tracker >/dev/null
 occ app:enable maintenance_tracker >/dev/null
 assert_contains "$(ocs GET /assets)" 'After upgrade' 'data survives disable/enable'
 
-echo "Upgrade ${from_commit} (${old_version}) -> working tree (${new_version}) passed on Nextcloud ${nc_label} (${database})."
+echo "Upgrade ${from_label} (${old_version}) -> working tree (${new_version}) passed on Nextcloud ${nc_label} (${database})."

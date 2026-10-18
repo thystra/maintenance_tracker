@@ -12,6 +12,15 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.19] - 2026-10-18
+
+### Changed
+
+- CI upgrade-test policy: the starting versions come from one documented list, `NC_UPGRADE_FROM` in the top-level `env:` of `.forgejo/workflows/ci.yml`. The rule is the latest tagged release plus the oldest supported release, and adding a tag after a release is a one-line change. Until the first release tag it holds only `6fc011d` (v0.1.10). `tests/integration/upgrade-bases.sh` resolves the list and, with `NC_UPGRADE_LATEST_TAG=1` (set in CI), also adds the newest `vX.Y.Z` tag when its app version is newer than every listed base. The list is the fallback. The old `v0.1.0` foundation tag is therefore ignored. `upgrade-smoke.sh` runs once per resolved base. A base that already has every migration (usual for the latest tag) is now a valid version-only upgrade instead of an error (`NC_UPGRADE_REQUIRE_MIGRATIONS=1` restores the check). A base whose version equals the working tree's and ends in `.0` is relabelled `0.0.0` so the upgrade still runs.
+- The upgrade matrix now runs on pushes to `main`, nightly (new `schedule` trigger), on `workflow_dispatch`, and on pull requests that touch `lib/Migration/**`, `lib/Db/**`, `appinfo/info.xml`, the upgrade harness or the workflow. A new `changes` job (`scripts/upgrade-needed.sh`) makes the decision. On other pull requests the upgrade jobs still run but skip their steps, so their checks always report. There is no `on.pull_request.paths` filter, because a skipped workflow would leave required checks pending. The fresh-install matrix still runs on every pull request.
+- The upgrade jobs are renamed from "Upgrade from v0.1.10 on Nextcloud …" to "Upgrade on Nextcloud …", and their limit is raised from 40 to 60 minutes (at most two starting points).
+- `docs/development.md` gains an *Upgrade policy* section, and the release checklist (`docs/releasing.md`, step 7) adds the new tag to `NC_UPGRADE_FROM`.
+
 ## [0.1.18] - 2026-10-18
 
 ### Fixed

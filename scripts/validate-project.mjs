@@ -552,6 +552,28 @@ const readyHelper = await read('tests/integration/lib/docker-ready.sh')
 expect(forgejoCi.includes('tests/integration/pull-images.sh') && forgejoCi.includes("NC_SMOKE_READY_TIMEOUT: '600'") && [smokeHarness, upgradeHarness].every((harness) => harness.includes('lib/docker-ready.sh') && harness.includes('wait_for_nextcloud') && harness.includes('pull_image')) && readyHelper.includes('NC_SMOKE_READY_TIMEOUT') && readyHelper.includes('dump_nextcloud_diagnostics') && readyHelper.includes('status.php'), 'CI must pre-pull images in a retried step and the smoke harnesses must use the configurable readiness wait with a diagnostics dump.')
 expect([smokeHarness, upgradeHarness].every((harness) => harness.includes('${NC_SMOKE_RUN_ID}') && harness.includes('remove_run_resources') && harness.includes('--label "$smoke_label"') && !/docker network create|docker rm --force "\$(container|db_container)"/.test(harness)) && readyHelper.includes('ensure_run_network') && readyHelper.includes('--filter "label=${smoke_label}"'), 'Smoke harness Docker names must be unique per run (NC_SMOKE_RUN_ID) and cleanup must only remove resources labelled with this run.')
 expect([smokeHarness, upgradeHarness].every((harness) => harness.includes('--network-alias "$NC_SMOKE_DB_ALIAS"') && /db_host="?\$NC_SMOKE_DB_ALIAS"?/.test(harness) && !/db_host="?\$db_container"?/.test(harness) && /assert_dns_name "\$container" "\$network" "\$db_container"/.test(harness) && harness.includes('mt-${NC_SMOKE_RUN_ID}-nc')) && readyHelper.includes('-gt 63') && readyHelper.includes('sha256sum | cut -c1-8') && readyHelper.includes(': "${NC_SMOKE_DB_ALIAS:=db}"'), 'Smoke harness names used as hostnames must stay within the 63-character DNS label limit: short run ids and names, the database reached by a short network alias, and a fail-fast length guard.')
+// Upgrade-test policy (docs/development.md#upgrade-policy).
+function ciJob(name) {
+	const start = forgejoCi.indexOf(`\n  ${name}:\n`)
+	if (start < 0) {
+		return ''
+	}
+	const rest = forgejoCi.slice(start + 1)
+	const next = rest.slice(1).search(/\n {2}[a-z][\w-]*:\n/)
+	return next < 0 ? rest : rest.slice(0, next + 1)
+}
+const ciTriggers = forgejoCi.slice(forgejoCi.indexOf('\non:\n'), forgejoCi.indexOf('\npermissions:'))
+const upgradeBases = await read('tests/integration/upgrade-bases.sh')
+const upgradeNeeded = await read('scripts/upgrade-needed.sh')
+const upgradeJob = ciJob('upgrade')
+const releasingDoc = await read('docs/releasing.md')
+const developmentDoc = await read('docs/development.md')
+expect((forgejoCi.match(/^ {2}NC_UPGRADE_FROM: '[^'\n]+'$/gm) ?? []).length === 1 && /\nenv:\n(?: {2}.*\n)*? {2}NC_UPGRADE_FROM: /.test(forgejoCi) && upgradeHarness.includes('upgrade-bases.sh') && upgradeBases.includes('NC_UPGRADE_FROM') && upgradeBases.includes('NC_UPGRADE_LATEST_TAG') && upgradeBases.includes('--merged HEAD'), 'CI must keep the upgrade starting points in one top-level NC_UPGRADE_FROM list, resolved (with the optional latest tag) by tests/integration/upgrade-bases.sh.')
+expect(ciTriggers.includes('  schedule:\n') && /cron: '[^']+'/.test(ciTriggers) && ciTriggers.includes('  workflow_dispatch:') && /push:\n {4}branches:\n {6}- main/.test(ciTriggers) && !/paths(-ignore)?:/.test(ciTriggers), 'CI must run on push to main, a nightly schedule and workflow_dispatch, and must not path-filter pull_request (skipped workflows leave required checks pending).')
+const upgradeSteps = upgradeJob.split('\n      - name: ').slice(1)
+expect(ciJob('changes').includes('bash scripts/upgrade-needed.sh >> "$GITHUB_OUTPUT"') && /needs:\n(?: {6}- .*\n)*? {6}- changes\n/.test(upgradeJob) && !/^ {4}if:/m.test(upgradeJob) && upgradeSteps.length > 1 && upgradeSteps.every((step) => step.includes('if: needs.changes.outputs.upgrade')) && !ciJob('nextcloud').includes('needs.changes'), 'The upgrade job must always run and gate every step on the changes job, while the fresh-install matrix runs on every pull request.')
+expect(['lib/Migration/', 'lib/Db/', 'appinfo/info\\.xml', 'upgrade-smoke\\.sh', 'upgrade-bases\\.sh', 'tests/integration/(', 'lib/)', '\\.forgejo/workflows/ci\\.yml'].every((path) => upgradeNeeded.includes(path)) && upgradeNeeded.includes("!= 'pull_request'"), 'scripts/upgrade-needed.sh must run the upgrade test for migration, database-layer, version, upgrade-harness and workflow changes, and on every non-PR event.')
+expect(developmentDoc.includes('## Upgrade policy') && developmentDoc.includes('latest tagged release plus the oldest supported release') && releasingDoc.includes('NC_UPGRADE_FROM'), 'docs/development.md must document the upgrade policy and docs/releasing.md must add each new tag to NC_UPGRADE_FROM.')
 expect(forgejoCi.includes('tests/integration/upgrade-smoke.sh') && forgejoCi.includes('fetch-depth: 0') && upgradeHarness.includes('occ upgrade') && upgradeHarness.includes('expected_migrations'), 'CI must run the upgrade-migration test, which must verify every shipped migration ran.')
 
 // 1.0 prep: localization.
