@@ -42,6 +42,7 @@ otherwise.
 | Meters and readings | Distance, runtime hours, usage counts, with reading dates |
 | Maintenance plans and history | Work groups, work definitions and schedules, completed maintenance records with notes, parts used, and meter values |
 | Parts, vendors, and links | Part numbers, typical prices, vendor names, addresses, phone numbers, e-mail addresses, contact person names, and store or vendor web addresses entered by users. A vendor's contact person, phone number and e-mail address can identify a person and are personal data. |
+| Fuel log | Fill-up date and time, odometer value, amount and type of fuel, full or partial fill, operating regime names (such as "Towing"), notes, and an optional **station** entered as free text (for example a brand and street). Together the fill-up times and stations can show where and when a vehicle was refuelled, which can reveal a person's movements; the field is optional and never filled in automatically (no location services are used). The price is stored as a cost entry. |
 | Costs | Amounts, currencies, dates, and descriptions |
 | Evidence references | Which Nextcloud file is attached to which item, record, or cost, with its type (photo, receipt, invoice, ...) |
 | Profiles and fitment packs | Maintenance profiles and parts-compatibility data that members install or import |
@@ -96,7 +97,7 @@ Access is controlled per workspace:
 - A **personal** workspace is visible only to its user.
 - In a **shared** workspace, every member can read the workspace's items,
   plans, history, parts, costs, and evidence. Contributors can also add
-  readings, maintenance records, costs, and evidence. Managers can also manage
+  readings, maintenance records, fill-ups, costs, and evidence. Managers can also manage
   items, plans, parts, vendors, and corrections, and can see the member list and
   the audit trail. The Owner can also add and remove members, change workspace
   settings, and transfer ownership.
@@ -124,7 +125,7 @@ The app keeps data until it is deleted; it has no automatic expiry.
 
 When a Nextcloud user account is deleted:
 
-- the user's **personal workspace** and all of its records are deleted;
+- the user's **personal workspace** and all of its records, including fill-ups, fuel regimes and fuel settings, are deleted;
 - shared workspaces **owned** by the user that have no other members are deleted;
 - shared workspaces owned by the user that **do** have other members are not
   deleted. Ownership passes to the longest-standing Manager, or, if there is no

@@ -182,6 +182,111 @@ ungrouped. Returns `movedGroups`, `movedItems` and `ungroupedItems`.
 Body `{"groupUuid": "...|null"}`. Puts the item into a group or takes it out.
 An item is in at most one group.
 
+## Fuel log (0.1.16)
+
+The fuel log records fill-ups ("fuel tickets") per item, groups them into
+operating regimes and computes fuel economy. Reads need `activity.read`;
+adding a fill-up needs `activity.create` (Owner, Manager, Contributor);
+editing and deleting fill-ups need `activity.manage`; fuel settings and
+regimes need `inventory.manage`. Writes are journaled and audited
+(`fuel.created`, `fuel.updated`, `fuel.archived`, `fuel_regime.created`,
+`fuel_regime.updated`, `fuel_regime.archived`, `fuel_settings.updated`).
+
+Canonical storage is integer millimetres (odometer) and microlitres (volume);
+the original value and unit are kept. Units: distance `mi`/`km`, volume
+`gal` (US gallon)/`l`, economy `mpg`/`km_l`/`l_100km`; fuel types `gasoline`,
+`diesel`, `e85`, `lpg`, `cng`, `other`. Economy is computed only between two
+valid full fills: a fill-up marked `missedPrevious` or a non-increasing
+odometer leaves that stretch unmeasured (`invalidReason` `missed_fill` or
+`odometer`), and partial fills between full fills add their volume to the
+stretch. A fill-up's regime describes the driving since the previous fill-up;
+a stretch whose fill-ups name different regimes is `mixed` and counts in the
+overall figures only.
+
+### `GET /assets/{assetUuid}/fuel-settings?workspace=<uuid>`
+
+Returns `settings`: `fuelTab` (`auto`, `on`, `off`), `shown` (whether the
+Fuel tab is shown: `on`, or `auto` with a vehicle category/profile or a
+distance meter), `distanceUnit`, `volumeUnit`, `economyUnit`, `fuelType`,
+`odometerMeter` (the meter fill-ups record readings on, or `null`) and
+`revision` (0 before the first change). Defaults are US units, or metric when
+the item's odometer meter displays kilometres.
+
+### `PUT /assets/{assetUuid}/fuel-settings?workspace=<uuid>`
+
+Body `{"expectedRevision": n, "settings": {"fuelTab": "on", "distanceUnit":
+"km", "volumeUnit": "l", "economyUnit": "l_100km", "fuelType": "diesel"}}`;
+any subset of the fields. Units only change display and defaults; stored
+fill-ups keep their own units.
+
+### `GET /assets/{assetUuid}/fuel-regimes?workspace=<uuid>`
+
+Returns `items`: `uuid`, `name`, `isDefault`, `sort`, `revision`. Exactly one
+active regime is the default when any exist.
+
+### `POST /assets/{assetUuid}/fuel-regimes?workspace=<uuid>`
+
+Body `{"regime": {"uuid": "...", "name": "Towing", "isDefault": false, "sort": 0}}`.
+The first regime of an item becomes the default; at most 50 per item.
+
+### `PATCH /fuel-regimes/{uuid}?workspace=<uuid>`
+
+Body `{"expectedRevision": n, "regime": {"name": "...", "sort": 0, "isDefault": true}}`.
+Setting `isDefault: true` moves the default; it cannot be unset directly.
+
+### `DELETE /fuel-regimes/{uuid}?workspace=<uuid>&expectedRevision=n`
+
+Tombstones the regime. Fill-ups keep their reference (history shows the
+name); the default moves to the first remaining regime.
+
+### `GET /assets/{assetUuid}/fuel?workspace=<uuid>`
+
+Returns `items` (fill-ups, newest first, each with a `segment` annotation:
+`economy`, `distance`, `mixed`, `valid`, `invalidReason` for the stretch that
+ends there), `openFills`, `settings` and `regimes`.
+
+### `POST /assets/{assetUuid}/fuel?workspace=<uuid>`
+
+Body `{"ticket": {...}}` with `uuid` (required, makes retries idempotent),
+`filledAt` (ISO 8601, required), `volume` (decimal string, up to 3 decimals,
+required), `volumeUnit`, `odometer` + optional `odometerUnit` and `meterUuid`
+**or** `readingUuid`, `fullFill` (default true), `missedPrevious` (default
+false), `fuelType`, `station` (≤255), `regimeUuid` (default: the default
+regime), `totalCost` (decimal) + optional `currency`, and `notes` (≤2000).
+
+The odometer creates a reading of source type `fuel` on `meterUuid` or on the
+item's odometer meter, so schedules see the distance; monotonic meters refuse
+a decreasing value with 400. Without a distance meter the value is kept on the
+fill-up only. `readingUuid` links an existing reading instead. `totalCost`
+creates a cost entry of category `fuel` linked from the fill-up (`cost`); the
+price is never stored on the fill-up itself. Receipts are evidence with
+`targetType` `fuel` (see Evidence endpoints).
+
+### `GET|PATCH|DELETE /fuel/{uuid}?workspace=<uuid>`
+
+`PATCH` takes `{"expectedRevision": n, "ticket": {...}}` with any create field
+except `uuid` and `readingUuid`. Changing the odometer or time corrects the
+reading the fill-up created (through the reading correction chain) or
+detaches a linked reading; changing `totalCost` updates, creates or (with
+`null`) archives the linked cost entry. `DELETE ...&expectedRevision=n`
+tombstones the fill-up and archives its cost entry; the odometer reading
+stays, because it is a valid observation. A stale revision returns 412.
+
+### `GET /assets/{assetUuid}/fuel-stats?workspace=<uuid>&period=90d&unit=mpg`
+
+`period` is `30d`, `90d`, `365d`, `year`, `all` or `custom` (with `from` and
+`to` dates). Returns `period` (`from`, `to`), `overall` (`economy`, `best`,
+`worst`, `segments`, `distance`), `regimes` (per regime `economy`, `best`,
+`worst`, `segments`, `distance`), `mixedSegments`, `invalidSegments`,
+`openFills`, `fills`, `volume`, `spend` and `costPerDistance` (per currency),
+and `chart` (up to the last 60 measured stretches: `date`, `economy`,
+`mixed`). Stretches belong to the period in which they end.
+
+### `GET /fuel-summary?workspace=<uuid>`
+
+For the dashboard: per item with fill-ups, `assetUuid`, `name`,
+`lastFilledAt`, `economyUnit`, `lastEconomy` and `economy90d`.
+
 ## Meter and reading endpoints
 
 Meter configuration and observations are separate resources. Initial dimensions

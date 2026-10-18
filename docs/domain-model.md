@@ -247,22 +247,41 @@ records reference costs rather than duplicating amounts.
 
 ## Vehicle extension
 
+Implemented in 0.1.16 (migration `Version1160`), the first slice of the
+vehicle extension:
+
 `maint_vehicle`
-: VIN, plate metadata, propulsion/fuel type, default units, and annual odometer
-  reconciliation settings.
+: One optional row per item (`asset_id` unique) with fuel display settings:
+  `fuel_tab` (`auto`, `on`, `off`), `distance_unit` (`mi`, `km`), `volume_unit`
+  (`gal`, `l`), `economy_unit` (`mpg`, `km_l`, `l_100km`), default `fuel_type`
+  and `revision`. Without a row the defaults apply (US units, or metric when
+  the item's odometer meter displays kilometres). With `auto` the Fuel tab
+  shows for vehicle categories/profiles and items with a distance meter.
+  VIN, plate metadata and annual odometer reconciliation remain planned.
 
 `maint_contexts`
-: Named operating configuration: empty, hauling, towing a specific trailer, or
-  a custom load.
+: User-defined operating regimes per item (empty, loaded, towing a specific
+  trailer, a custom load): `uuid`, `asset_id`, `name`, `is_default` (exactly
+  one active default per item when any exist), `sort_order`, `revision`,
+  `deleted_at`. Deleting a regime tombstones it so fill-ups keep their history.
 
 `maint_fuel`
-: Fill time, odometer reading, exact volume, full/partial flag, missed-fill flag,
-  fuel/energy type, station, context, notes, and linked cost.
+: A fuel ticket: `filled_at`, odometer (`odometer_value`/`odometer_unit` as
+  entered, canonical `odometer_mm`), the reading it created or linked
+  (`meter_id`, `reading_id`; created readings have source type `fuel` and the
+  ticket uuid as reference), volume (`volume_value`/`volume_unit`, canonical
+  `volume_ul` in microlitres), `full_fill`, `missed_previous`, `fuel_type`,
+  optional `station` (free text, up to 255 characters), `context_id`
+  (regime), `cost_id`, `notes`, `revision`, `deleted_at`. The price lives only
+  in the linked `maint_costs` row (category `fuel`); receipts are evidence
+  links with target type `fuel`.
 
 Fuel economy is calculated only across valid full-fill boundaries and visibly
-marks incomplete sequences. A fill's context alone cannot accurately describe
-mixed driving; advanced mode therefore allows trip or odometer segments to carry
-the operating configuration.
+marks incomplete sequences (a missed fill-up or a non-increasing odometer).
+A fill's regime describes the driving since the previous fill-up; a stretch
+whose fill-ups name different regimes is marked *mixed* and is counted in the
+overall figures but excluded from per-regime figures. Trip or odometer
+segments carrying the operating configuration (advanced mode) remain planned.
 
 `maint_trips`
 : Vehicle, driver, start/end local time and timezone, odometer values or exact

@@ -12,6 +12,19 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.16] - 2026-10-18
+
+### Added
+
+- Fuel log: per-item fuel settings (`maint_vehicle`: Fuel tab automatic/on/off, distance, volume and economy units, default fuel type), user-defined operating regimes per item with one default (`maint_contexts`, for example Empty, Loaded, Towing) and fuel tickets (`maint_fuel`) in migration `Version1160`. A ticket records date and time, odometer (it creates a reading of source type `fuel` on the item's odometer meter, or links an existing reading, so schedules see the distance), volume, full or partial fill, a missed-previous-fill flag, fuel type, optional station, regime, total price and notes. The price is stored once as a cost entry of the new category `fuel` linked from the ticket (`cost_id`), never duplicated; receipts attach through the evidence API (target type `fuel`), so no Files calls happen inside the fuel transactions.
+- Fuel economy is computed only between two valid full fills; a missed fill-up or a non-increasing odometer leaves the stretch unmeasured. A stretch whose fill-ups name different regimes is marked mixed: it counts in the overall figures but not per regime. Units: MPG (US gallons and miles) by default, km/L and L/100 km supported, stored canonically in millimetres and microlitres and converted for display; new items with a kilometre odometer default to metric units.
+- OCS endpoints `GET/PUT /assets/{assetUuid}/fuel-settings`, `GET/POST /assets/{assetUuid}/fuel-regimes`, `PATCH/DELETE /fuel-regimes/{uuid}`, `GET/POST /assets/{assetUuid}/fuel`, `GET/PATCH/DELETE /fuel/{uuid}`, `GET /assets/{assetUuid}/fuel-stats` (periods 30/90/365 days, this year, all time or a custom range; overall average/best/worst, per-regime average/best/worst with sample counts and distance, fuel spend, cost per distance and chart points) and `GET /fuel-summary`. Fill-ups need `activity.create`, editing and deleting them `activity.manage`, settings and regimes `inventory.manage`. Audit events `fuel.*`, `fuel_regime.*` and `fuel_settings.updated`. Export and restore carry the three tables (regime and cost references remapped); the account-deletion purge covers them.
+- Interface: a Fuel tab on items whose category or profile is a vehicle or that have a distance (odometer) meter, with a per-item *Show/Hide the Fuel tab* action; period and unit filters, economy and spend cards, a per-regime table, an accessible economy chart (with a data table for screen readers), the fill-up list with receipts, *Add fill-up* and edit dialogs (price per unit computes the total), an *Operating regimes* dialog and *Fuel settings*. The dashboard gains a *Fuel economy* card with the latest and 90-day economy per item.
+
+### Fixed
+
+- Dialogs no longer close themselves 300 ms after a button is pressed. `NcDialog` hides itself after any button callback that does not return `false`, which could close a dialog that had just been reopened and, for a failed save, briefly flashed the error before closing. The add/edit item, log maintenance, task, reading, meter, cost, component and specification, linked item, task group, part, vendor and confirmation dialogs now close only after a successful save (or on Cancel), so save errors stay visible.
+
 ## [0.1.15] - 2026-10-18
 
 ### Added
