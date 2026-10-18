@@ -31,6 +31,9 @@ version only.
 
 ## Scope
 
+How the app handles personal data is described in the
+[privacy policy](docs/privacy-policy.md).
+
 The app's security and privacy design is described in
 [docs/security.md](docs/security.md).
 

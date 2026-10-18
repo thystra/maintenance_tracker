@@ -643,4 +643,8 @@ copy_fixture
 sed -i "s/!== 'owner'/=== 'viewer'/" "$tmp/fixture/lib/Service/ImportPolicy.php"
 expect_rejected 'import of non-owner exports' 'Import must accept only complete Owner exports.' "$tmp/import-owner.out"
 
+copy_fixture
+printf '/js export-ignore\n' >> "$tmp/fixture/.gitattributes"
+expect_rejected 'export-ignored runtime bundles' '.gitattributes must not export-ignore the runtime path js; git archive installs would miss it.' "$tmp/gitattributes-js.out"
+
 echo 'Project validator self-tests passed.'

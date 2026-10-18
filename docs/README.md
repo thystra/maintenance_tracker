@@ -5,6 +5,7 @@ configuration.
 
 ## Users and administrators
 
+- [Privacy policy](privacy-policy.md) – what data the app stores, who can see it, retention, deletion, and your rights
 - [Security and privacy](security.md) – roles and permissions, where data is stored, what exports contain
 - [Accessibility](accessibility.md)
 - [Localization](localization.md) – translation status and how to help
