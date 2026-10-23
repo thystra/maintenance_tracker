@@ -24,7 +24,8 @@ use OCP\IRequest;
  * Fuel log. Every member who can read activity history reads fuel tickets
  * and statistics; Contributors and above add tickets (activity.create);
  * Owners and Managers correct or delete tickets (activity.manage) and manage
- * regimes and per-item fuel settings (inventory.manage).
+ * regimes and per-item fuel settings (inventory.manage). Linking earlier
+ * tickets to an odometer creates meters and readings (meter.manage).
  */
 final class FuelController extends OCSController {
 	use OcsErrorMapping;
@@ -231,6 +232,37 @@ final class FuelController extends OCSController {
 	#[ApiRoute(verb: 'GET', url: '/api/v1/assets/{assetUuid}/fuel-stats')]
 	public function stats(string $assetUuid, string $period = '90d', ?string $from = null, ?string $to = null, ?string $unit = null, ?string $workspace = null): DataResponse {
 		return $this->run(AuthorizationCatalog::ACTIVITY_READ, $workspace, fn ($c): DataResponse => new DataResponse($this->service->stats($c, $assetUuid, $period, $from, $to, $unit)));
+	}
+
+	/**
+	 * Items with the Fuel tab, for the quick "Log fuel" dialog: settings, regimes and the latest fill-up of each
+	 *
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array{items: list<array<string, mixed>>}, array{}>
+	 *
+	 * 200: Items returned
+	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/fuel-vehicles')]
+	public function vehicles(?string $workspace = null): DataResponse {
+		return $this->run(AuthorizationCatalog::ACTIVITY_READ, $workspace, fn ($c): DataResponse => new DataResponse($this->service->vehicles($c)));
+	}
+
+	/**
+	 * Record the odometer of earlier fill-ups that have no reading, creating the item's Odometer meter if it has no distance meter
+	 *
+	 * Tickets are linked oldest first; a value that would decrease the meter is skipped and listed. Repeating the call does nothing new.
+	 *
+	 * @param string $assetUuid UUID of the item
+	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+	 *
+	 * 200: Tickets linked
+	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/assets/{assetUuid}/fuel-odometer')]
+	public function linkOdometer(string $assetUuid, ?string $workspace = null): DataResponse {
+		return $this->run(AuthorizationCatalog::METER_MANAGE, $workspace, fn ($c): DataResponse => new DataResponse($this->service->linkOdometer($c, $assetUuid)));
 	}
 
 	/**

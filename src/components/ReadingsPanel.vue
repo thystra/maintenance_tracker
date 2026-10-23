@@ -42,7 +42,9 @@ const dimensionOptions = (['distance', 'runtime', 'usage_count'] as MeterDimensi
 const unitOptions = computed(() => meterUnits((meterDraft.dimension ?? 'distance') as MeterDimension).map((value) => ({ value, label: value })))
 const componentOptions = computed(() => props.components.map((component) => ({ value: component.uuid, label: component.name })))
 
-const latest = (uuid: string): Reading | null => (readings.value[uuid] ?? []).find((reading) => reading.effective) ?? null
+// Readings arrive oldest first; the meter's current value is the newest
+// effective one (it used to show the oldest).
+const latest = (uuid: string): Reading | null => [...(readings.value[uuid] ?? [])].reverse().find((reading) => reading.effective) ?? null
 
 watch(() => meterDraft.dimension, () => {
 	meterDraft.unit = meterUnits((meterDraft.dimension ?? 'distance') as MeterDimension)[0] ?? null

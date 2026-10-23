@@ -9,7 +9,7 @@
 import type { CostSettings } from '../catalogTypes.ts'
 import type { FuelPeriod, FuelSettings, FuelStats, FuelTicket, FuelTicketList } from '../fuelTypes.ts'
 
-import { mdiCogOutline, mdiDeleteOutline, mdiGasStationOutline, mdiPaperclip, mdiPencilOutline, mdiPlus, mdiTagMultipleOutline } from '@mdi/js'
+import { mdiCogOutline, mdiCounter, mdiDeleteOutline, mdiGasStationOutline, mdiPaperclip, mdiPencilOutline, mdiPlus, mdiTagMultipleOutline } from '@mdi/js'
 import { computed, onMounted, ref, watch } from 'vue'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActions from '@nextcloud/vue/components/NcActions'
@@ -29,11 +29,13 @@ import { errorMessage, formatDate, today } from '../format.ts'
 import { distanceUnitLabel, ECONOMY_UNITS, economyUnitLabel, formatEconomy, formatNumber, fuelTypeLabel, periodLabel, PERIODS, volumeUnitLabel } from '../fuelFormat.ts'
 import { n, t } from '../l10n.ts'
 import { getCostSettings } from '../services/catalogApi.ts'
-import { deleteFuelTicket, getFuelStats, getFuelTickets } from '../services/fuelApi.ts'
+import { deleteFuelTicket, getFuelStats, getFuelTickets, linkFuelOdometer } from '../services/fuelApi.ts'
 import { can } from '../store.ts'
 
 const props = defineProps<{ assetUuid: string }>()
-const emit = defineEmits<{ (event: 'settings', settings: FuelSettings): void }>()
+// `changed`: a fill-up was added, corrected or deleted, so meter readings
+// (and with them the forecast) may have changed too.
+const emit = defineEmits<{ (event: 'settings', settings: FuelSettings): void, (event: 'changed'): void }>()
 
 const list = ref<FuelTicketList | null>(null)
 const stats = ref<FuelStats | null>(null)
@@ -54,6 +56,9 @@ const filesFor = ref<string | null>(null)
 
 const periodOptions = PERIODS.map((value) => ({ value, label: periodLabel(value) }))
 const unitOptions = ECONOMY_UNITS.map((value) => ({ value, label: economyUnitLabel(value) }))
+// Fill-ups whose odometer is not a meter reading (logged before the item had
+// a distance meter). Owners and managers can record them in one go.
+const unlinked = computed(() => (list.value?.items ?? []).filter((ticket) => ticket.readingUuid === null).length)
 const regimeNames = computed(() => Object.fromEntries((list.value?.regimes ?? []).map((regime) => [regime.uuid, regime.name])))
 
 async function loadStats(): Promise<void> {
@@ -96,6 +101,7 @@ function openEdit(ticket: FuelTicket): void {
 async function saved(ticket: FuelTicket, created: boolean): Promise<void> {
 	status.value = created ? t('maintenance_tracker', 'Fill-up added.') : t('maintenance_tracker', 'Fill-up saved.')
 	await load()
+	emit('changed')
 	if (created) {
 		// Offer the receipt right away.
 		filesFor.value = ticket.uuid
@@ -105,6 +111,30 @@ async function saved(ticket: FuelTicket, created: boolean): Promise<void> {
 async function changed(message: string): Promise<void> {
 	status.value = message
 	await load()
+	emit('changed')
+}
+
+/**
+ * Record the odometer of earlier fill-ups as readings (creating the
+ * "Odometer" meter when needed); values that would go backwards are skipped.
+ */
+async function linkOdometer(): Promise<void> {
+	busy.value = true
+	error.value = ''
+	try {
+		const result = await linkFuelOdometer(props.assetUuid)
+		const parts = [n('maintenance_tracker', '%n fill-up recorded on “{meter}”.', '%n fill-ups recorded on “{meter}”.', result.linked, { meter: result.meterName })]
+		if (result.skipped.length > 0) {
+			parts.push(n('maintenance_tracker', '%n skipped because the odometer would go backwards.', '%n skipped because the odometer would go backwards.', result.skipped.length))
+		}
+		status.value = parts.join(' ')
+		await load()
+		emit('changed')
+	} catch (reason) {
+		error.value = errorMessage(reason)
+	} finally {
+		busy.value = false
+	}
 }
 
 function settingsSaved(settings: FuelSettings): void {
@@ -125,6 +155,7 @@ async function remove(): Promise<void> {
 		removing.value = null
 		status.value = t('maintenance_tracker', 'Fill-up deleted.')
 		await load()
+		emit('changed')
 	} catch (reason) {
 		removing.value = null
 		error.value = errorMessage(reason)
@@ -228,9 +259,28 @@ onMounted(async () => {
 						</template>
 						{{ t('maintenance_tracker', 'Fuel settings') }}
 					</NcActionButton>
+					<NcActionButton
+						v-if="unlinked > 0"
+						closeAfterClick
+						:disabled="busy"
+						@click="linkOdometer">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiCounter" />
+						</template>
+						{{ t('maintenance_tracker', 'Record odometer readings') }}
+					</NcActionButton>
 				</NcActions>
 			</div>
 		</div>
+
+		<NcNoteCard v-if="unlinked > 0 && can.manageInventory" type="info" data-test="fuel-unlinked">
+			<p>
+				{{ n('maintenance_tracker', '%n fill-up has an odometer value that is not a meter reading yet, so maintenance schedules do not see it.', '%n fill-ups have odometer values that are not meter readings yet, so maintenance schedules do not see them.', unlinked) }}
+			</p>
+			<NcButton :disabled="busy" @click="linkOdometer">
+				{{ t('maintenance_tracker', 'Record odometer readings') }}
+			</NcButton>
+		</NcNoteCard>
 
 		<NcEmptyContent
 			v-if="list && list.items.length === 0"

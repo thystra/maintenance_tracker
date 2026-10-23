@@ -5,7 +5,8 @@
  * Headless browser check: log in, open the app, visit every page, run the
  * main create/delete flows (vendor, part, item with a task, item deletion,
  * item groups, fuel log with regimes and fill-ups, profile builder with
- * save-as-profile and copy-setup-from),
+ * save-as-profile and copy-setup-from, dashboard Log fuel creating the
+ * odometer meter and moving a distance task into the due list),
  * and assert that nothing from this app logs a console error, throws, or
  * gets an HTTP error. Run by tests/integration/nextcloud-smoke.sh when
  * NC_SMOKE_BROWSER=1, inside the Playwright image on the Nextcloud
@@ -342,6 +343,129 @@ try {
 		await page.locator('#maintenance-main', { hasText: 'Latest tank:' }).first().waitFor({ timeout: 10000 })
 		await page.waitForLoadState('networkidle')
 		await shot('45-dashboard-fuel-label')
+	})
+
+	await step('dashboard log fuel', async () => {
+		// An item with the Fuel tab and no meter: the first quick fill-up
+		// creates the Odometer meter; a distance task on it then follows the
+		// next fill-up onto the dashboard's due list without a page reload.
+		const name = `Quick car ${stamp}`
+		const task = `Odometer task ${stamp}`
+		const local = (hoursAgo) => {
+			const date = new Date(Date.now() - hoursAgo * 3600000)
+			const pad = (value) => String(value).padStart(2, '0')
+			return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+		}
+		const api = (method, path, body) => page.evaluate(async ([method, path, body]) => {
+			const response = await fetch(`${window.OC.webroot}/ocs/v2.php/apps/maintenance_tracker/api/v1${path}${path.includes('?') ? '&' : '?'}format=json`, {
+				method,
+				headers: { 'OCS-APIRequest': 'true', Accept: 'application/json', 'Content-Type': 'application/json', requesttoken: window.OC.requestToken },
+				body: body === null ? undefined : JSON.stringify(body),
+			})
+			return { status: response.status, data: (await response.json()).ocs?.data }
+		}, [method, path, body ?? null])
+		const pickVehicle = async () => {
+			const picker = dialog().getByLabel('Vehicle', { exact: true })
+			if (await picker.count() > 0) {
+				await picker.fill(name)
+				await page.getByRole('option', { name }).first().click()
+			}
+			await dialog().getByText(name).first().waitFor({ timeout: 5000 }).catch(() => {})
+		}
+		await nav('Items').click()
+		await heading('Items').waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main').getByRole('button', { name: 'Add item' }).first().click()
+		await dialog().getByLabel('Name', { exact: true }).fill(name)
+		await dialog().getByRole('button', { name: 'Add item' }).click()
+		await heading(name).waitFor({ state: 'visible', timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		const assetUuid = /items\/([0-9a-f-]{36})/.exec(page.url())?.[1]
+		if (!assetUuid) {
+			throw new Error(`no item uuid in ${page.url()}`)
+		}
+		await page.getByRole('button', { name: `More actions for ${name}` }).click()
+		await page.getByRole('menuitem', { name: 'Edit item' }).waitFor({ timeout: 10000 })
+		const showFuel = page.getByRole('menuitem', { name: 'Show the Fuel tab' })
+		if (await showFuel.count() > 0) {
+			await showFuel.click()
+		} else {
+			await page.keyboard.press('Escape')
+		}
+		await page.getByRole('tab', { name: 'Fuel', exact: true }).waitFor({ timeout: 10000 })
+
+		// First fill-up from the dashboard: the dialog says a meter will be made.
+		await nav('Dashboard').click()
+		await heading('Dashboard').waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('[data-test="dashboard-log-fuel"]').click()
+		await dialog().getByLabel('Odometer', { exact: true }).waitFor({ timeout: 10000 })
+		await pickVehicle()
+		await dialog().locator('[data-test="fuel-meter-hint"]', { hasText: 'creates an “Odometer” meter' }).waitFor({ timeout: 10000 })
+		await dialog().locator('input[type=datetime-local]').fill(local(3))
+		await dialog().getByLabel('Odometer', { exact: true }).fill('30000')
+		await dialog().getByLabel('Fuel added', { exact: true }).fill('10')
+		await shot('51-dashboard-log-fuel-new-meter')
+		await dialog().getByRole('button', { name: 'Add fill-up' }).click()
+		await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 })
+		const meters = await api('GET', `/assets/${assetUuid}/meters`)
+		const meter = (meters.data?.items ?? []).find((candidate) => candidate.key === 'odometer')
+		if (!meter || meter.dimension !== 'distance' || meter.monotonic !== true) {
+			throw new Error(`no monotonic odometer meter after the first fill-up: ${JSON.stringify(meters)}`)
+		}
+		// A distance task, done at 30000, due every 5000 mi.
+		const definition = crypto.randomUUID()
+		const created = await api('POST', `/assets/${assetUuid}/work-definitions`, { definition: { uuid: definition, key: `odo_${stamp}`, title: task, kind: 'maintenance', schedule: { combination: 'any', rules: [{ type: 'meter', meterUuid: meter.uuid, interval: { value: 5000, unit: 'mi' } }] } } })
+		const done = await api('POST', `/assets/${assetUuid}/activities`, { activity: { uuid: crypto.randomUUID(), performedAt: new Date(Date.now() - 2 * 3600000).toISOString().replace(/\.\d{3}Z$/, 'Z'), summary: 'Oil change', items: [{ uuid: crypto.randomUUID(), definitionUuid: definition }], meters: [{ uuid: crypto.randomUUID(), meterUuid: meter.uuid, reading: { uuid: crypto.randomUUID(), value: '30000', unit: 'mi' } }] } })
+		if (created.status >= 300 || done.status >= 300) {
+			throw new Error(`task setup failed: ${created.status} ${done.status}`)
+		}
+		await page.goto(`${base}/index.php/apps/maintenance_tracker/#/`, { waitUntil: 'networkidle' })
+		await heading('Dashboard').waitFor({ state: 'visible', timeout: 10000 })
+		const attention = page.locator('section[aria-labelledby="attention-heading"]')
+		await attention.waitFor({ timeout: 10000 })
+		if (await attention.getByText(task).count() > 0) {
+			throw new Error('the task is due before the second fill-up')
+		}
+
+		// Second fill-up from the fuel card: the vehicle is preselected and the
+		// reading goes to the new meter; the task becomes overdue in place.
+		await page.locator('[data-test="fuel-card-log-fuel"]').click()
+		await dialog().locator('[data-test="fuel-meter-hint"]', { hasText: 'Also records an odometer reading on “Odometer”' }).waitFor({ timeout: 10000 })
+		if (await dialog().getByLabel('Vehicle', { exact: true }).count() > 0) {
+			await dialog().getByText(name).first().waitFor({ timeout: 5000 })
+		}
+		await dialog().locator('input[type=datetime-local]').fill(local(1))
+		await dialog().getByLabel('Odometer', { exact: true }).fill('35100')
+		await dialog().getByLabel('Fuel added', { exact: true }).fill('11')
+		await shot('52-dashboard-log-fuel-existing-meter')
+		await dialog().getByRole('button', { name: 'Add fill-up' }).click()
+		await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 })
+		await attention.getByText(task).waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('53-dashboard-due-after-fill-up')
+
+		// The item: header Log fuel, the meter's value and the readings.
+		await page.locator('#maintenance-main .list-item', { hasText: task }).first().click()
+		await heading(name).waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('[data-test="item-log-fuel"]').waitFor({ timeout: 10000 })
+		await page.getByRole('tab', { name: 'Readings', exact: true }).click()
+		await page.locator('#maintenance-main', { hasText: /35,?100/ }).first().waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('54-item-readings-from-fuel')
+		// Log fuel from the item header while the Fuel tab is open: the tab,
+		// the readings and the forecast refresh without a reload.
+		await page.getByRole('tab', { name: 'Fuel', exact: true }).click()
+		await page.locator('#maintenance-main', { hasText: 'at 35100' }).first().waitFor({ timeout: 10000 })
+		await page.locator('[data-test="item-log-fuel"]').click()
+		await dialog().getByLabel('Odometer', { exact: true }).fill('35400')
+		await dialog().getByLabel('Fuel added', { exact: true }).fill('9')
+		await shot('55-item-header-log-fuel')
+		await dialog().getByRole('button', { name: 'Add fill-up' }).click()
+		await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 10000 })
+		await page.locator('#maintenance-main', { hasText: 'at 35400' }).first().waitFor({ timeout: 10000 })
+		await page.getByRole('tab', { name: 'Readings', exact: true }).click()
+		await page.locator('#maintenance-main', { hasText: /35,?400/ }).first().waitFor({ timeout: 10000 })
+		await page.waitForLoadState('networkidle')
+		await shot('56-item-readings-after-header-log')
 	})
 
 	await step('settings sections', async () => {

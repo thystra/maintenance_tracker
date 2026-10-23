@@ -630,6 +630,19 @@ for (const eventType of ['workspace_profile.created', 'workspace_profile.updated
 }
 expect(api.includes('## Profile builder (0.1.17)') && api.includes('/profile-library') && api.includes('/save-as-profile') && api.includes('copySetupFrom') && (await read('docs/privacy-policy.md')).includes('Workspace profiles'), 'API and privacy documentation must cover the profile builder.')
 
+// 0.1.20 fuel quick log and odometer meter.
+const fuelController = await read('lib/Controller/FuelController.php')
+const fuelPanel = await read('src/components/FuelPanel.vue')
+const itemDetailView = await read('src/views/ItemDetailView.vue')
+const dashboardView = await read('src/views/DashboardView.vue')
+expect(/'dimension' => 'distance',[\s\S]{0,120}'monotonic' => true/.test(fuelService) && fuelService.includes('AuthorizationCatalog::METER_MANAGE'), 'The odometer meter created by a first fill-up must be a monotonic distance meter, and only for callers who may manage meters.')
+expect(/catch \(ValidationException \$exception\)[\s\S]{0,120}\$skipped\[\]/.test(fuelService) && fuelService.includes("if ($row['reading_id'] !== null)") && fuelService.includes("'fuel.odometer_linked'"), 'Linking earlier fill-ups to the odometer must skip decreasing values, leave linked fill-ups alone (idempotent) and audit each link.')
+expect(auditEvents.includes("'fuel.odometer_linked'"), 'Audit event vocabulary must include fuel.odometer_linked.')
+expect(/AuthorizationCatalog::METER_MANAGE[^\n]*linkOdometer/.test(fuelController), 'POST /assets/{assetUuid}/fuel-odometer must require meter.manage.')
+expect(fuelPanel.includes("emit('changed')") && /<FuelPanel[\s\S]{0,240}@changed="load"/.test(itemDetailView), 'Saving a fill-up must refresh the item (meters, readings, forecast) without a page reload.')
+expect(dashboardView.includes('<LogFuelDialog') && dashboardView.includes('@saved="fuelSaved"'), 'The dashboard must offer Log fuel and reload the due list after a fill-up.')
+expect(api.includes('/fuel-vehicles') && api.includes('/fuel-odometer') && (await read('docs/domain-model.md')).includes('Odometer meter (0.1.20)') && smokeHarness.includes('/fuel-odometer'), 'API, domain model and smoke test must cover the fuel odometer meter.')
+
 try {
 	await access('.github/workflows/ci.yml')
 	failures.push('GitHub mirror must not retain a competing automatic CI workflow.')

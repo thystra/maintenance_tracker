@@ -190,7 +190,8 @@ adding a fill-up needs `activity.create` (Owner, Manager, Contributor);
 editing and deleting fill-ups need `activity.manage`; fuel settings and
 regimes need `inventory.manage`. Writes are journaled and audited
 (`fuel.created`, `fuel.updated`, `fuel.archived`, `fuel_regime.created`,
-`fuel_regime.updated`, `fuel_regime.archived`, `fuel_settings.updated`).
+`fuel_regime.updated`, `fuel_regime.archived`, `fuel_settings.updated`,
+`fuel.odometer_linked`).
 
 Canonical storage is integer millimetres (odometer) and microlitres (volume);
 the original value and unit are kept. Units: distance `mi`/`km`, volume
@@ -208,8 +209,10 @@ overall figures only.
 Returns `settings`: `fuelTab` (`auto`, `on`, `off`), `shown` (whether the
 Fuel tab is shown: `on`, or `auto` with a vehicle category/profile or a
 distance meter), `distanceUnit`, `volumeUnit`, `economyUnit`, `fuelType`,
-`odometerMeter` (the meter fill-ups record readings on, or `null`) and
-`revision` (0 before the first change). Defaults are US units, or metric when
+`odometerMeter` (the meter fill-ups record readings on, or `null`),
+`createsOdometer` (0.1.20: `true` when there is no distance meter, the Fuel
+tab is shown and the caller may manage meters, so the next fill-up creates
+one) and `revision` (0 before the first change). Defaults are US units, or metric when
 the item's odometer meter displays kilometres.
 
 ### `PUT /assets/{assetUuid}/fuel-settings?workspace=<uuid>`
@@ -256,8 +259,16 @@ regime), `totalCost` (decimal) + optional `currency`, and `notes` (≤2000).
 
 The odometer creates a reading of source type `fuel` on `meterUuid` or on the
 item's odometer meter, so schedules see the distance; monotonic meters refuse
-a decreasing value with 400. Without a distance meter the value is kept on the
-fill-up only. `readingUuid` links an existing reading instead. `totalCost`
+a decreasing value with 400. The odometer meter is the distance meter keyed
+`odometer`, else the item's first distance meter. Since 0.1.20, when the item
+has no distance meter and `createsOdometer` is true (no `meterUuid` key in the
+body), the fill-up first creates a monotonic distance meter *Odometer* (key
+`odometer`, or `fuel-odometer` when that key is taken; display unit = the
+fill-up's distance unit; audited `meter.created`), links the item's earlier
+fill-ups to it as in `POST .../fuel-odometer`, and then records this reading
+on it, all in one transaction. Otherwise (a Contributor, or `"meterUuid":
+null`) the value is kept on the fill-up only. `readingUuid` links an existing
+reading instead. `totalCost`
 creates a cost entry of category `fuel` linked from the fill-up (`cost`); the
 price is never stored on the fill-up itself. Receipts are evidence with
 `targetType` `fuel` (see Evidence endpoints).
@@ -286,6 +297,27 @@ and `chart` (up to the last 60 measured stretches: `date`, `economy`,
 
 For the dashboard: per item with fill-ups, `assetUuid`, `name`,
 `lastFilledAt`, `economyUnit`, `lastEconomy` and `economy90d`.
+
+### `GET /fuel-vehicles?workspace=<uuid>` (0.1.20)
+
+For the quick *Log fuel* dialog (`activity.read`): `items`, one per item
+whose Fuel tab is shown (up to 500), with `assetUuid`, `name`, `settings` (as
+`fuel-settings`), `regimes`, `lastFilledAt`, `lastOdometer` and
+`lastOdometerUnit` (`null` before the first fill-up).
+
+### `POST /assets/{assetUuid}/fuel-odometer?workspace=<uuid>` (0.1.20)
+
+Records the odometer of earlier fill-ups that have no reading (`readingUuid`
+`null`; logged before the item had a distance meter). Needs `meter.manage`
+(Owner, Manager). Without a distance meter it first creates the *Odometer*
+meter as above, in the item's fuel distance unit. Fill-ups are processed
+oldest first: a reading with the same time and value is linked, otherwise a
+reading of source type `fuel` is recorded; a value the meter refuses (it would
+go backwards) is skipped and listed. Each linked fill-up gets a new revision
+and an audit entry `fuel.odometer_linked` (`meterUuid`, `readingUuid`). The
+call is idempotent: linked fill-ups are never touched again, so repeating it
+links nothing new. Returns `assetUuid`, `meterUuid`, `meterName`,
+`meterCreated`, `linked` and `skipped` (`uuid`, `reason`).
 
 ## Profile builder (0.1.17)
 

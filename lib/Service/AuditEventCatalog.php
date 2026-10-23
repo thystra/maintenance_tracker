@@ -73,6 +73,7 @@ final class AuditEventCatalog {
 		'fuel.created' => ['subjectType' => 'fuel', 'level' => 'info', 'detailKeys' => []],
 		'fuel.updated' => ['subjectType' => 'fuel', 'level' => 'info', 'detailKeys' => []],
 		'fuel.archived' => ['subjectType' => 'fuel', 'level' => 'info', 'detailKeys' => []],
+		'fuel.odometer_linked' => ['subjectType' => 'fuel', 'level' => 'info', 'detailKeys' => ['meterUuid', 'readingUuid']],
 		'fuel_regime.created' => ['subjectType' => 'fuel_regime', 'level' => 'info', 'detailKeys' => []],
 		'fuel_regime.updated' => ['subjectType' => 'fuel_regime', 'level' => 'info', 'detailKeys' => []],
 		'fuel_regime.archived' => ['subjectType' => 'fuel_regime', 'level' => 'info', 'detailKeys' => []],

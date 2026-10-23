@@ -13,6 +13,7 @@ use DateTimeImmutable;
 use OCA\MaintenanceTracker\Db\Asset;
 use OCA\MaintenanceTracker\Db\Meter;
 use OCA\MaintenanceTracker\Db\MeterMapper;
+use OCA\MaintenanceTracker\Db\ReadingMapper;
 use OCA\MaintenanceTracker\Exception\NotFoundException;
 use OCA\MaintenanceTracker\Exception\RevisionConflictException;
 use OCA\MaintenanceTracker\Exception\ValidationException;
@@ -25,7 +26,10 @@ use OCP\AppFramework\Utility\ITimeFactory;
  * A ticket's price lives in the cost ledger (maint_costs, category "fuel");
  * the ticket only links to it. The odometer creates a meter reading on the
  * item's odometer (source type "fuel") or links an existing reading, so the
- * fuel log feeds distance-based maintenance schedules. No Files calls happen
+ * fuel log feeds distance-based maintenance schedules. An item with the Fuel
+ * tab but no distance meter gets an "Odometer" meter on its first fill-up
+ * (when the caller may manage meters); earlier tickets are then linked to it
+ * in time order, skipping values that would decrease the meter. No Files calls happen
  * here: receipts are evidence linked to the ticket (target type "fuel") and
  * go through EvidenceService, outside these transactions.
  */
@@ -46,6 +50,8 @@ final class FuelService {
 		private UuidGenerator $uuids,
 		private ChangeJournal $journal,
 		private ITimeFactory $timeFactory,
+		private ReadingMapper $readingRows,
+		private AuthorizationCatalog $authorization,
 	) {
 	}
 
@@ -421,7 +427,128 @@ final class FuelService {
 		return ['items' => array_slice($items, 0, $limit)];
 	}
 
+	/**
+	 * Record the odometer of earlier tickets that have no reading: create the
+	 * item's "Odometer" meter if it has no distance meter, then add a reading
+	 * per ticket in time order. A value that would decrease the meter is
+	 * skipped and stays on the ticket only. Safe to repeat: linked tickets are
+	 * never touched again.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function linkOdometer(WorkspaceContext $context, string $assetUuid): array {
+		$asset = $this->assets->find($context, $assetUuid);
+		$meter = $this->odometerMeter($context->workspace()->getId(), $asset->getId());
+		$created = false;
+		if ($meter === null) {
+			$settings = $this->settingsFor($context, $asset);
+			$meter = $this->createOdometer($context, $asset, (string)$settings['distanceUnit']);
+			$created = true;
+		}
+		$result = $this->linkTickets($context, $asset, $meter);
+		return ['assetUuid' => $asset->getUuid(), 'meterUuid' => $meter->getUuid(), 'meterName' => $meter->getName(), 'meterCreated' => $created] + $result;
+	}
+
+	/**
+	 * Items whose Fuel tab is shown, with what the quick "Log fuel" dialog
+	 * needs: settings, regimes and the latest fill-up.
+	 *
+	 * @return array{items: list<array<string,mixed>>}
+	 */
+	public function vehicles(WorkspaceContext $context): array {
+		$workspaceId = $context->workspace()->getId();
+		$latest = [];
+		foreach ($this->repository->tickets($workspaceId, null) as $row) {
+			$latest[(int)$row['asset_id']] = $row;
+		}
+		$items = [];
+		$cursor = null;
+		do {
+			$page = $this->assets->findPage($context, $cursor, 100);
+			foreach ($page['items'] as $asset) {
+				$settings = $this->settingsFor($context, $asset);
+				if (!$settings['shown']) {
+					continue;
+				}
+				$last = $latest[$asset->getId()] ?? null;
+				$items[] = [
+					'assetUuid' => $asset->getUuid(),
+					'name' => $asset->getName(),
+					'settings' => $settings,
+					'regimes' => array_map(fn (array $r): array => $this->regimeToApi($r, $asset->getUuid()), $this->repository->contexts($workspaceId, $asset->getId())),
+					'lastFilledAt' => $last === null ? null : CatalogInput::formatTimestamp((int)$last['filled_at']),
+					'lastOdometer' => $last === null ? null : (string)$last['odometer_value'],
+					'lastOdometerUnit' => $last === null ? null : (string)$last['odometer_unit'],
+				];
+			}
+			$cursor = $page['nextCursor'];
+		} while ($cursor !== null && count($items) < 500);
+		return ['items' => $items];
+	}
+
 	// ---------------------------------------------------------------- helpers
+
+	private function createOdometer(WorkspaceContext $context, Asset $asset, string $unit): Meter {
+		// Another dimension may already use the key "odometer" (an hour meter
+		// named that way, say); the new meter then gets "fuel-odometer".
+		$key = $this->meters->findByTargetAndKey($context->workspace()->getId(), $asset->getId(), null, 'odometer') === [] ? 'odometer' : 'fuel-odometer';
+		$created = $this->meterService->create($context, $asset->getUuid(), [
+			'uuid' => $this->uuids->generate(),
+			'key' => $key,
+			'name' => 'Odometer',
+			'dimension' => 'distance',
+			'displayUnit' => $unit,
+			'monotonic' => true,
+		]);
+		return $this->meterService->find($context, (string)$created['uuid']);
+	}
+
+	/**
+	 * Link every active ticket of the item that has no reading to the meter,
+	 * oldest first: reuse a reading with the same time and value, else record
+	 * one. Values the meter rejects (a decrease) are skipped.
+	 *
+	 * @return array{linked: int, skipped: list<array{uuid: string, reason: string}>}
+	 */
+	private function linkTickets(WorkspaceContext $context, Asset $asset, Meter $meter): array {
+		$workspaceId = $context->workspace()->getId();
+		$linked = 0;
+		$skipped = [];
+		foreach ($this->repository->tickets($workspaceId, $asset->getId()) as $row) {
+			if ($row['reading_id'] !== null) {
+				continue;
+			}
+			$observedAt = (int)$row['filled_at'];
+			$value = $this->values->toCanonical('distance', (string)$row['odometer_value'], (string)$row['odometer_unit']);
+			$same = $this->readingRows->findEffectivePredecessor($workspaceId, $meter->getId(), $observedAt, null);
+			if ($same !== null && $same->getObservedAt() === $observedAt && $same->getCanonicalValue() === (int)$row['odometer_mm']) {
+				$reading = $same;
+			} else {
+				try {
+					$created = $this->readings->create($context, $meter->getUuid(), [
+						'uuid' => $this->uuids->generate(),
+						'observedAt' => gmdate('Y-m-d\TH:i:s\Z', $observedAt),
+						'value' => $value['originalValue'],
+						'unit' => $value['originalUnit'],
+						'source' => ['type' => 'fuel', 'reference' => (string)$row['uuid']],
+					]);
+				} catch (ValidationException $exception) {
+					$skipped[] = ['uuid' => (string)$row['uuid'], 'reason' => $exception->getMessage()];
+					continue;
+				}
+				$reading = $this->readings->find($context, (string)$created['uuid']);
+			}
+			$revision = (int)$row['revision'];
+			$now = $this->timeFactory->getTime();
+			if (!$this->repository->updateTicket($workspaceId, (int)$row['id'], $revision, ['meter_id' => $meter->getId(), 'reading_id' => $reading->getId(), 'revision' => $revision + 1, 'updated_at' => $now])) {
+				throw new RevisionConflictException('A fuel ticket changed while its odometer was being recorded');
+			}
+			$this->journal->record($workspaceId, 'fuel', (string)$row['uuid'], 'upsert', $revision + 1, $now, 'fuel.odometer_linked', ['meterUuid' => $meter->getUuid(), 'readingUuid' => $reading->getUuid()]);
+			$linked++;
+		}
+		return ['linked' => $linked, 'skipped' => $skipped];
+	}
+
 
 	/** @return array<string,mixed> */
 	private function settingsFor(WorkspaceContext $context, Asset $asset): array {
@@ -437,16 +564,20 @@ final class FuelService {
 			$odometer !== null => 'odometer',
 			default => null,
 		};
+		$shown = $mode === 'on' || ($mode === 'auto' && $reason !== null);
 		return [
 			'assetUuid' => $asset->getUuid(),
 			'fuelTab' => $mode,
-			'shown' => $mode === 'on' || ($mode === 'auto' && $reason !== null),
+			'shown' => $shown,
 			'reason' => $reason,
 			'distanceUnit' => $row === null ? ($metric ? 'km' : 'mi') : (string)$row['distance_unit'],
 			'volumeUnit' => $row === null ? ($metric ? 'l' : 'gal') : (string)$row['volume_unit'],
 			'economyUnit' => $row === null ? ($metric ? 'l_100km' : 'mpg') : (string)$row['economy_unit'],
 			'fuelType' => $row === null || $row['fuel_type'] === null ? null : (string)$row['fuel_type'],
 			'odometerMeter' => $odometer === null ? null : ['uuid' => $odometer->getUuid(), 'name' => $odometer->getName(), 'displayUnit' => $odometer->getDisplayUnit()],
+			// The next fill-up creates an "Odometer" meter: the Fuel tab is on,
+			// there is no distance meter and the caller may add meters.
+			'createsOdometer' => $odometer === null && $shown && $this->authorization->allows($context->role(), AuthorizationCatalog::METER_MANAGE),
 			'revision' => $row === null ? 0 : (int)$row['revision'],
 		];
 	}
@@ -499,6 +630,12 @@ final class FuelService {
 			$meter = $this->odometerMeter($workspaceId, $asset->getId());
 		}
 		$value = $this->values->toCanonical('distance', $input['odometer'] ?? null, $unit);
+		if ($meter === null && !array_key_exists('meterUuid', $input) && ($settings['createsOdometer'] ?? false) === true) {
+			// First fill-up of an item without a distance meter: create the
+			// odometer in the fill-up's unit and link the earlier tickets.
+			$meter = $this->createOdometer($context, $asset, $unit);
+			$this->linkTickets($context, $asset, $meter);
+		}
 		if ($meter === null) {
 			return ['odometer_value' => $value['originalValue'], 'odometer_unit' => $value['originalUnit'], 'odometer_mm' => $value['canonicalValue'], 'meter_id' => null, 'reading_id' => null];
 		}
