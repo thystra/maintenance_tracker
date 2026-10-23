@@ -52,6 +52,7 @@ fixture_paths=(
 	lib/Migration/Version1130Date20261018000000.php lib/Migration/Version1150Date20261018120000.php lib/Service/ItemGroupService.php lib/Service/ItemGroupTree.php
 	lib/Migration/Version1160Date20261018180000.php lib/Service/FuelService.php lib/Service/FuelEconomy.php
 	lib/Migration/Version1170Date20261018220000.php lib/Service/ProfileLibraryService.php lib/Service/SetupCopyService.php lib/Service/ProfileSnapshotBuilder.php
+	src/components/FuelPanel.vue src/views/ItemDetailView.vue src/views/DashboardView.vue
 )
 
 copy_fixture() {
@@ -759,6 +760,18 @@ expect_rejected 'an upgrade path filter without lib/Db' 'scripts/upgrade-needed.
 copy_fixture
 sed -i 's/NC_UPGRADE_FROM/NC_UPGRADE_BASES/g' "$tmp/fixture/docs/releasing.md"
 expect_rejected 'a release checklist that forgets the upgrade list' 'docs/releasing.md must add each new tag' "$tmp/upgrade-release-doc.out"
+
+copy_fixture
+sed -i "s/'monotonic' => true,/'monotonic' => false,/" "$tmp/fixture/lib/Service/FuelService.php"
+expect_rejected 'a non-monotonic fuel odometer meter' 'The odometer meter created by a first fill-up must be a monotonic distance meter' "$tmp/fuel-odometer-monotonic.out"
+
+copy_fixture
+sed -i "s/if (\$row\['reading_id'\] !== null) {/if (false) {/" "$tmp/fixture/lib/Service/FuelService.php"
+expect_rejected 'an odometer backfill that relinks fill-ups' 'Linking earlier fill-ups to the odometer must skip decreasing values' "$tmp/fuel-odometer-idempotent.out"
+
+copy_fixture
+sed -i 's/@changed="load" \/>/\/>/' "$tmp/fixture/src/views/ItemDetailView.vue"
+expect_rejected 'a fuel tab that does not refresh the item' 'Saving a fill-up must refresh the item' "$tmp/fuel-refresh.out"
 
 # Behaviour of the upgrade-path detector.
 needed() { printf '%s\n' "$@" | bash "$root/scripts/upgrade-needed.sh" --paths 2>/dev/null; }

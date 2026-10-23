@@ -2566,6 +2566,87 @@ assert_contains "$fuel_audit" 'fuel.created' 'fill-up audited'
 assert_contains "$fuel_audit" 'fuel_regime.created' 'regime audited'
 assert_contains "$fuel_audit" 'fuel.archived' 'fill-up deletion audited'
 
+# Fuel odometer meter (0.1.20): an item with the Fuel tab but no distance
+# meter. A Contributor's fill-up keeps the odometer on the ticket only; the
+# first fill-up by an Owner creates a monotonic "Odometer" meter, links the
+# earlier fill-ups oldest first (skipping a value that would go backwards) and
+# records its own reading, so a distance task's forecast follows fill-ups.
+# The explicit backfill action is idempotent. Restore is checked below.
+odo_car='a1b2c3d4-0000-4000-8000-0000000fc001'
+odo_van='a1b2c3d4-0000-4000-8000-0000000fc002'
+odo_def='a1b2c3d4-0000-4000-8000-0000000fc003'
+odo_t1='a1b2c3d4-0000-4000-8000-0000000fc011'
+odo_t2='a1b2c3d4-0000-4000-8000-0000000fc012'
+odo_t3='a1b2c3d4-0000-4000-8000-0000000fc013'
+odo_t4='a1b2c3d4-0000-4000-8000-0000000fc014'
+odo_v1='a1b2c3d4-0000-4000-8000-0000000fc021'
+odo_v2='a1b2c3d4-0000-4000-8000-0000000fc022'
+odo_ticket() { # uuid date odometer
+	printf '{"ticket":{"uuid":"%s","filledAt":"%s","odometer":"%s","volume":"10","fullFill":true}}' "$1" "$2" "$3"
+}
+odo_forecast() { # prints "<state> <remaining miles>" of the odometer task
+	ocs_as "$na" GET "/maintenance-forecast?${nws}" | python3 -c 'import json,sys
+for i in json.load(sys.stdin)["ocs"]["data"]["items"]:
+	if i["definition"]["uuid"]==sys.argv[1]:
+		m=i.get("meter") or {}; r=m.get("remainingCanonicalValue")
+		print(i["state"], "none" if r is None else round(int(r)/1609344))' "$odo_def"
+}
+assert_contains "$(ocs_as "$na" POST "/assets?${nws}" "{\"asset\":{\"uuid\":\"${odo_car}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Odometer test car\"}}")" '"statuscode":201' 'odometer test car created'
+assert_contains "$(ocs_as "$na" GET "/assets/${odo_car}/fuel-settings?${nws}")" '"createsOdometer":true' 'owner fill-up would create the odometer'
+assert_contains "$(ocs_as "$nb" GET "/assets/${odo_car}/fuel-settings?${nws}")" '"createsOdometer":false' 'contributor fill-up would not create a meter'
+odo_c1=$(ocs_as "$nb" POST "/assets/${odo_car}/fuel?${nws}" "$(odo_ticket "$odo_t1" 2026-08-01T08:00:00Z 20000)")
+assert_contains "$odo_c1" '"readingUuid":null' 'contributor fill-up without a meter keeps the odometer on the ticket'
+assert_contains "$(ocs_as "$nb" POST "/assets/${odo_car}/fuel?${nws}" "$(odo_ticket "$odo_t2" 2026-08-10T08:00:00Z 19000)")" '"statuscode":201' 'ticket-only fill-up with a lower odometer'
+odo_vehicles=$(ocs_as "$nb" GET "/fuel-vehicles?${nws}")
+assert_contains "$odo_vehicles" '"name":"Odometer test car"' 'quick log lists the vehicle'
+assert_contains "$odo_vehicles" '"lastOdometer":"19000"' 'quick log shows the latest fill-up'
+odo_c3=$(ocs_as "$na" POST "/assets/${odo_car}/fuel?${nws}" "$(odo_ticket "$odo_t3" 2026-09-01T08:00:00Z 21000)")
+assert_contains "$odo_c3" '"statuscode":201' 'first owner fill-up on an item without a meter'
+assert_not_contains "$odo_c3" '"meterUuid":null' 'first fill-up records its odometer on a meter'
+odo_meter=$(printf '%s' "$odo_c3" | json_field meterUuid)
+odo_meters=$(ocs_as "$na" GET "/assets/${odo_car}/meters?${nws}")
+assert_contains "$odo_meters" '"key":"odometer"' 'odometer meter created with key odometer'
+assert_contains "$odo_meters" '"name":"Odometer"' 'odometer meter named Odometer'
+assert_contains "$odo_meters" '"monotonic":true' 'odometer meter is monotonic'
+assert_contains "$odo_meters" '"displayUnit":"mi"' 'odometer meter uses the distance unit'
+assert_contains "$(ocs_as "$na" GET "/assets/${odo_car}/fuel-settings?${nws}")" '"createsOdometer":false' 'no second meter is offered'
+odo_readings=$(ocs_as "$na" GET "/meters/${odo_meter}/readings?${nws}")
+assert_contains "$odo_readings" '"originalValue":"21000"' 'new fill-up reading on the meter'
+assert_contains "$odo_readings" '"originalValue":"20000"' 'earlier fill-up linked to the new meter'
+assert_not_contains "$odo_readings" '"originalValue":"19000"' 'decreasing earlier value skipped'
+assert_not_contains "$(ocs_as "$na" GET "/fuel/${odo_t1}?${nws}")" '"readingUuid":null' 'earlier fill-up now has a reading'
+assert_contains "$(ocs_as "$na" GET "/fuel/${odo_t2}?${nws}")" '"readingUuid":null' 'skipped fill-up keeps the value on the ticket'
+odo_audit=$(ocs_as "$na" GET "/audit?${nws}&limit=20")
+assert_contains "$odo_audit" 'meter.created' 'odometer meter creation audited'
+assert_contains "$odo_audit" 'fuel.odometer_linked' 'odometer link audited'
+assert_contains "$(ocs_as "$na" POST "/assets/${odo_car}/work-definitions?${nws}" "{\"definition\":{\"uuid\":\"${odo_def}\",\"key\":\"odo_oil\",\"title\":\"Odometer oil change\",\"kind\":\"maintenance\",\"schedule\":{\"combination\":\"any\",\"rules\":[{\"type\":\"meter\",\"meterUuid\":\"${odo_meter}\",\"interval\":{\"value\":5000,\"unit\":\"mi\"}}]}}}")" '"statuscode":201' 'distance task on the new odometer'
+assert_contains "$(ocs_as "$na" POST "/assets/${odo_car}/activities?${nws}" "{\"activity\":{\"uuid\":\"a1b2c3d4-0000-4000-8000-0000000fc031\",\"performedAt\":\"2026-09-01T10:00:00Z\",\"summary\":\"Oil change\",\"items\":[{\"uuid\":\"a1b2c3d4-0000-4000-8000-0000000fc032\",\"definitionUuid\":\"${odo_def}\"}],\"meters\":[{\"uuid\":\"a1b2c3d4-0000-4000-8000-0000000fc033\",\"meterUuid\":\"${odo_meter}\",\"reading\":{\"uuid\":\"a1b2c3d4-0000-4000-8000-0000000fc034\",\"value\":\"21000\",\"unit\":\"mi\"}}]}}")" '"statuscode":201' 'oil change logged at the odometer'
+assert_contains "$(odo_forecast)" 'not_due 5000' 'forecast counts from the oil change'
+assert_contains "$(ocs_as "$nb" POST "/assets/${odo_car}/fuel?${nws}" "$(odo_ticket "$odo_t4" 2026-09-20T08:00:00Z 25700)")" '"statuscode":201' 'contributor fill-up on the new meter'
+odo_after=$(odo_forecast)
+assert_contains "$odo_after" ' 300' 'forecast follows the fill-up reading'
+assert_not_contains "$odo_after" 'not_due' 'fill-up moves the task into the due list'
+odo_link=$(ocs_as "$na" POST "/assets/${odo_car}/fuel-odometer?${nws}")
+assert_contains "$odo_link" '"linked":0' 'backfill links nothing new'
+assert_contains "$odo_link" "\"uuid\":\"${odo_t2}\"" 'backfill reports the skipped fill-up'
+assert_contains "$(ocs_as "$nb" POST "/assets/${odo_car}/fuel-odometer?${nws}")" '"statuscode":403' 'contributor cannot run the backfill'
+assert_contains "$(ocs_as "$nb" POST "/assets/${odo_van}/fuel?${nws}" "$(odo_ticket "$odo_v1" 2026-08-01T08:00:00Z 500)")" '"statuscode":404' 'fill-up for an unknown item'
+assert_contains "$(ocs_as "$na" POST "/assets?${nws}" "{\"asset\":{\"uuid\":\"${odo_van}\",\"category\":\"vehicle\",\"assetClass\":\"vehicle\",\"name\":\"Odometer test van\"}}")" '"statuscode":201' 'backfill test van created'
+assert_contains "$(ocs_as "$nb" POST "/assets/${odo_van}/fuel?${nws}" "$(odo_ticket "$odo_v2" 2026-08-05T08:00:00Z 900)")" '"readingUuid":null' 'later ticket-only fill-up'
+assert_contains "$(ocs_as "$nb" POST "/assets/${odo_van}/fuel?${nws}" "$(odo_ticket "$odo_v1" 2026-08-01T08:00:00Z 500)")" '"readingUuid":null' 'earlier ticket-only fill-up'
+odo_backfill=$(ocs_as "$na" POST "/assets/${odo_van}/fuel-odometer?${nws}")
+assert_contains "$odo_backfill" '"meterCreated":true' 'backfill creates the odometer'
+assert_contains "$odo_backfill" '"linked":2' 'backfill links both fill-ups'
+assert_contains "$odo_backfill" '"skipped":[]' 'backfill in time order skips nothing'
+odo_van_meter=$(printf '%s' "$odo_backfill" | json_field meterUuid)
+odo_van_readings=$(ocs_as "$na" GET "/meters/${odo_van_meter}/readings?${nws}")
+assert_contains "$odo_van_readings" '"originalValue":"500"' 'backfill reading 500'
+assert_contains "$odo_van_readings" '"originalValue":"900"' 'backfill reading 900'
+odo_again=$(ocs_as "$na" POST "/assets/${odo_van}/fuel-odometer?${nws}")
+assert_contains "$odo_again" '"meterCreated":false' 'backfill reuses the meter'
+assert_contains "$odo_again" '"linked":0' 'backfill is idempotent'
+assert_contains "$(ocs_as "$na" GET "/meters/${odo_van_meter}/readings?${nws}" | python3 -c 'import json,sys;print("count=%d" % len(json.load(sys.stdin)["ocs"]["data"]["items"]))')" 'count=2' 'backfill adds no duplicate readings'
+
 # Profile builder (0.1.17): workspace profile library CRUD with idempotent
 # retries and stale revisions, strict validation (bundled ids reserved, size
 # cap, unknown fields, https-only provenance, nothing fetched), role
@@ -2780,6 +2861,15 @@ assert_contains "$imp_fuel_fix" '"odometer":"10010"' 'restored fill-up odometer 
 assert_not_contains "$imp_fuel_fix" '"meterUuid":null' 'restored fill-up stays on its odometer meter'
 assert_not_contains "$imp_fuel_fix" "\"readingUuid\":\"${imp_fuel_t1_reading}\"" 'restored fill-up reading corrected, not detached'
 assert_not_contains "$imp_fuel_fix" '"readingUuid":null' 'restored fill-up still linked to a reading'
+imp_odo_car=$(printf '%s' "$imp_assets" | python3 -c 'import json,sys;print([a["uuid"] for a in json.load(sys.stdin)["ocs"]["data"]["items"] if a["name"]=="Odometer test car"][0])')
+imp_odo_meters=$(ocs_as "$na" GET "/assets/${imp_odo_car}/meters?${iws}")
+assert_contains "$imp_odo_meters" '"key":"odometer"' 'restored fuel-created odometer meter'
+assert_not_contains "$imp_odo_meters" "$odo_meter" 'restored odometer meter gets a new UUID'
+imp_odo_check=$(ocs_as "$na" GET "/assets/${imp_odo_car}/fuel?${iws}" | python3 -c 'import json,sys
+items=json.load(sys.stdin)["ocs"]["data"]["items"]
+print("linked=%d unlinked=%d" % (sum(1 for t in items if t["readingUuid"]), sum(1 for t in items if not t["readingUuid"])))')
+assert_contains "$imp_odo_check" 'linked=3 unlinked=1' 'restored fill-ups keep their odometer readings'
+assert_contains "$(ocs_as "$na" GET "/assets/${imp_odo_car}/fuel-settings?${iws}")" '"createsOdometer":false' 'restored item keeps its odometer meter'
 imp_profiles=$(ocs_as "$na" GET "/profiles?${iws}")
 assert_contains "$imp_profiles" '"name":"Pickup setup"' 'restored workspace profiles'
 assert_not_contains "$imp_profiles" "$pb_saved" 'restored workspace profiles get new UUIDs'

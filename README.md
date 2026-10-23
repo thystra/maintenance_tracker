@@ -35,7 +35,10 @@ Nextcloud database and Files.
   loaded, towing) and see fuel economy overall and per regime (MPG, km/L or
   L/100 km), best and worst, fuel spend and cost per distance, with a chart and
   a dashboard card. Economy is measured only between full tanks; a stretch with
-  a missed fill-up is left out.
+  a missed fill-up is left out. *Log fuel* on the dashboard picks the vehicle,
+  and every fill-up's odometer becomes a reading on the vehicle's odometer
+  meter (created on the first fill-up if missing), so distance-based tasks
+  stay current.
 - **Maintenance schedules** – work groups and work definitions scheduled by
   calendar interval, business days, or meter interval, or left unscheduled for
   ad-hoc work.

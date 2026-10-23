@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import type { FuelPeriod, FuelRegime, FuelSettings, FuelStats, FuelSummaryItem, FuelTicket, FuelTicketInput, FuelTicketList } from '../fuelTypes.ts'
+import type { FuelOdometerLink, FuelPeriod, FuelRegime, FuelSettings, FuelStats, FuelSummaryItem, FuelTicket, FuelTicketInput, FuelTicketList, FuelVehicle } from '../fuelTypes.ts'
 import type { OcsEnvelope } from './api.ts'
 
 import axios from '@nextcloud/axios'
@@ -53,4 +53,12 @@ export async function getFuelStats(assetUuid: string, period: FuelPeriod, unit: 
 
 export async function getFuelSummary(): Promise<{ items: FuelSummaryItem[] }> {
 	return data(await axios.get<OcsEnvelope<{ items: FuelSummaryItem[] }>>(endpoint('/fuel-summary'), requestOptions))
+}
+
+export async function getFuelVehicles(): Promise<{ items: FuelVehicle[] }> {
+	return data(await axios.get<OcsEnvelope<{ items: FuelVehicle[] }>>(endpoint('/fuel-vehicles'), requestOptions))
+}
+
+export async function linkFuelOdometer(assetUuid: string): Promise<FuelOdometerLink> {
+	return data(await axios.post<OcsEnvelope<FuelOdometerLink>>(asset(assetUuid, 'fuel-odometer'), {}, requestOptions))
 }

@@ -5,8 +5,8 @@
 
 <script setup lang="ts">
 // Landing page: what needs attention now, what is coming up, and the quick
-// actions people use most (log maintenance, add an item).
-import type { FuelSummaryItem } from '../fuelTypes.ts'
+// actions people use most (log maintenance, log fuel, add an item).
+import type { FuelSummaryItem, FuelVehicle } from '../fuelTypes.ts'
 import type { AuditEntry, WorkspaceForecast, WorkspaceForecastItem } from '../types.ts'
 
 import { mdiCalendarClock, mdiFolderOutline, mdiGasStationOutline, mdiPlus, mdiWrenchOutline } from '@mdi/js'
@@ -19,6 +19,7 @@ import NcListItem from '@nextcloud/vue/components/NcListItem'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import ItemFormDialog from '../components/ItemFormDialog.vue'
+import LogFuelDialog from '../components/LogFuelDialog.vue'
 import LogMaintenanceDialog from '../components/LogMaintenanceDialog.vue'
 import OwnershipBanner from '../components/OwnershipBanner.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -27,7 +28,7 @@ import { assetClassLabel, dueText, errorMessage, forecastLabel, formatDate } fro
 import { formatEconomy } from '../fuelFormat.ts'
 import { n, t } from '../l10n.ts'
 import { getAudit, getWorkspaceForecast } from '../services/api.ts'
-import { getFuelSummary } from '../services/fuelApi.ts'
+import { getFuelSummary, getFuelVehicles } from '../services/fuelApi.ts'
 import { activeWorkspace, assetName, can, childGroups, groupSubtree, loadAssets, loadGroups, loadWorkspaces, state } from '../store.ts'
 
 const router = useRouter()
@@ -40,6 +41,9 @@ const addOpen = ref(false)
 const logOpen = ref(false)
 const logAsset = ref<string | null>(null)
 const logDefinition = ref<string | null>(null)
+const fuelVehicles = ref<FuelVehicle[]>([])
+const fuelOpen = ref(false)
+const fuelAsset = ref<string | null>(null)
 
 const attention = computed(() => (forecast.value?.items ?? []).filter((item) => ['overdue', 'due', 'due_soon'].includes(item.state)))
 const upcoming = computed(() => (forecast.value?.items ?? []).filter((item) => item.state === 'not_due' && item.dueOn !== null && (item.remainingDays ?? 999) <= 60).slice(0, 8))
@@ -116,6 +120,8 @@ const auditLabels: Record<string, () => string> = {
 	'item_group.created': () => t('maintenance_tracker', 'Group created'),
 	'asset.group_changed': () => t('maintenance_tracker', 'Item group changed'),
 	'fuel.created': () => t('maintenance_tracker', 'Fill-up added'),
+	'fuel.odometer_linked': () => t('maintenance_tracker', 'Fill-up odometer recorded as a reading'),
+	'meter.created': () => t('maintenance_tracker', 'Meter added'),
 }
 const recent = computed(() => audit.value.filter((entry) => auditLabels[entry.eventType] !== undefined).slice(0, 8))
 
@@ -132,6 +138,13 @@ async function load(): Promise<void> {
 	} catch {
 		fuel.value = []
 	}
+	if (can.log) {
+		try {
+			fuelVehicles.value = (await getFuelVehicles()).items
+		} catch {
+			fuelVehicles.value = []
+		}
+	}
 	if (can.readAudit) {
 		try {
 			audit.value = await getAudit(40)
@@ -146,6 +159,19 @@ function log(assetUuid: string | null = null, definitionUuid: string | null = nu
 	logAsset.value = assetUuid
 	logDefinition.value = definitionUuid
 	logOpen.value = true
+}
+
+function logFuel(assetUuid: string | null = null): void {
+	fuelAsset.value = assetUuid
+	fuelOpen.value = true
+}
+
+/**
+ * A fill-up may have added a reading (and an odometer meter): refresh the
+ * due list, the forecast and the fuel card, and the item list's meters.
+ */
+async function fuelSaved(): Promise<void> {
+	await Promise.all([load(), loadAssets()])
 }
 
 async function added(asset: { uuid: string }): Promise<void> {
@@ -170,6 +196,12 @@ onMounted(load)
 						<NcIconSvgWrapper :path="mdiWrenchOutline" />
 					</template>
 					{{ t('maintenance_tracker', 'Log maintenance') }}
+				</NcButton>
+				<NcButton v-if="can.log && fuelVehicles.length > 0" data-test="dashboard-log-fuel" @click="logFuel()">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiGasStationOutline" />
+					</template>
+					{{ t('maintenance_tracker', 'Log fuel') }}
 				</NcButton>
 				<NcButton v-if="can.manageInventory" @click="addOpen = true">
 					<template #icon>
@@ -301,12 +333,27 @@ onMounted(load)
 					</ul>
 				</section>
 
-				<section v-if="fuel.length > 0" class="card" aria-labelledby="fuel-heading">
-					<h3 id="fuel-heading">
-						<NcIconSvgWrapper :path="mdiGasStationOutline" :size="20" inline />
-						{{ t('maintenance_tracker', 'Fuel economy') }}
-					</h3>
-					<ul class="list">
+				<section v-if="fuel.length > 0 || fuelVehicles.length > 0" class="card" aria-labelledby="fuel-heading">
+					<div class="card__header">
+						<h3 id="fuel-heading">
+							<NcIconSvgWrapper :path="mdiGasStationOutline" :size="20" inline />
+							{{ t('maintenance_tracker', 'Fuel economy') }}
+						</h3>
+						<NcButton
+							v-if="can.log && fuelVehicles.length > 0"
+							variant="tertiary"
+							data-test="fuel-card-log-fuel"
+							@click="logFuel()">
+							<template #icon>
+								<NcIconSvgWrapper :path="mdiPlus" />
+							</template>
+							{{ t('maintenance_tracker', 'Log fuel') }}
+						</NcButton>
+					</div>
+					<p v-if="fuel.length === 0" class="muted">
+						{{ t('maintenance_tracker', 'No fill-ups yet.') }}
+					</p>
+					<ul v-else class="list">
 						<NcListItem
 							v-for="row in fuel"
 							:key="row.assetUuid"
@@ -320,6 +367,11 @@ onMounted(load)
 							</template>
 							<template v-if="row.lastEconomy !== null" #details>
 								<span>{{ t('maintenance_tracker', 'Latest tank: {economy}', { economy: formatEconomy(row.lastEconomy, row.economyUnit) }) }}</span>
+							</template>
+							<template v-if="can.log && fuelVehicles.some((vehicle) => vehicle.assetUuid === row.assetUuid)" #extra-actions>
+								<NcButton variant="tertiary" :aria-label="t('maintenance_tracker', 'Log fuel for {item}', { item: row.name })" @click.stop.prevent="logFuel(row.assetUuid)">
+									{{ t('maintenance_tracker', 'Log fuel') }}
+								</NcButton>
 							</template>
 						</NcListItem>
 					</ul>
@@ -371,10 +423,21 @@ onMounted(load)
 			:assetUuid="logAsset"
 			:definitionUuid="logDefinition"
 			@saved="load" />
+		<LogFuelDialog
+			v-model:open="fuelOpen"
+			:assetUuid="fuelAsset"
+			@saved="fuelSaved" />
 	</div>
 </template>
 
 <style scoped>
+.card__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
 .summary {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

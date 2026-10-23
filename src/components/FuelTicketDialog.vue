@@ -5,8 +5,9 @@
 
 <script setup lang="ts">
 // Add or correct a fuel ticket (a fill-up). The price becomes a cost entry
-// and the odometer a meter reading; both are handled by the server.
-import type { DistanceUnit, FuelRegime, FuelSettings, FuelTicket, FuelTicketInput, FuelType, VolumeUnit } from '../fuelTypes.ts'
+// and the odometer a meter reading; both are handled by the server. With
+// `vehicles` (the quick "Log fuel" dialog) it also shows an item picker.
+import type { DistanceUnit, FuelRegime, FuelSettings, FuelTicket, FuelTicketInput, FuelType, FuelVehicle, VolumeUnit } from '../fuelTypes.ts'
 
 import { computed, reactive, ref, watch } from 'vue'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
@@ -14,7 +15,7 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import SelectField from './SelectField.vue'
-import { errorMessage, localNow, toIso } from '../format.ts'
+import { errorMessage, formatDate, localNow, toIso } from '../format.ts'
 import { distanceUnitLabel, FUEL_TYPES, fuelTypeLabel, volumeUnitLabel } from '../fuelFormat.ts'
 import { t } from '../l10n.ts'
 import { createFuelTicket, updateFuelTicket } from '../services/fuelApi.ts'
@@ -27,8 +28,9 @@ const props = defineProps<{
 	regimes: FuelRegime[]
 	multiCurrency: boolean
 	defaultCurrency: string
+	vehicles?: FuelVehicle[]
 }>()
-const emit = defineEmits<{ (event: 'update:open', value: boolean): void, (event: 'saved', ticket: FuelTicket, created: boolean): void }>()
+const emit = defineEmits<{ (event: 'update:open', value: boolean): void, (event: 'update:assetUuid', value: string): void, (event: 'saved', ticket: FuelTicket, created: boolean): void }>()
 
 const DECIMAL = /^\d+(\.\d+)?$/
 const busy = ref(false)
@@ -54,6 +56,35 @@ const distanceOptions = (['mi', 'km'] as DistanceUnit[]).map((value) => ({ value
 const volumeOptions = (['gal', 'l'] as VolumeUnit[]).map((value) => ({ value, label: volumeUnitLabel(value) }))
 const fuelTypeOptions = FUEL_TYPES.map((value) => ({ value, label: fuelTypeLabel(value) }))
 const regimeOptions = computed(() => props.regimes.map((regime) => ({ value: regime.uuid, label: regime.isDefault ? t('maintenance_tracker', '{name} (default)', { name: regime.name }) : regime.name })))
+const vehicleOptions = computed(() => (props.vehicles ?? []).map((vehicle) => ({ value: vehicle.assetUuid, label: vehicle.name })))
+const lastFillUp = computed(() => {
+	const vehicle = props.vehicles?.find((candidate) => candidate.assetUuid === props.assetUuid)
+	if (!vehicle || vehicle.lastFilledAt === null || vehicle.lastOdometer === null) {
+		return ''
+	}
+	return t('maintenance_tracker', 'Last fill-up {date} at {odometer} {unit}.', { date: formatDate(vehicle.lastFilledAt), odometer: vehicle.lastOdometer, unit: distanceUnitLabel(vehicle.lastOdometerUnit ?? props.settings.distanceUnit) })
+})
+const selectedVehicle = computed<string | null>({
+	get: () => props.assetUuid,
+	set: (value) => {
+		if (value !== null) {
+			emit('update:assetUuid', value)
+		}
+	},
+})
+// Where the odometer value goes, so the reading on the meter is no surprise.
+const meterHint = computed(() => {
+	if (props.ticket) {
+		return ''
+	}
+	if (props.settings.odometerMeter) {
+		return t('maintenance_tracker', 'Also records an odometer reading on “{meter}”.', { meter: props.settings.odometerMeter.name })
+	}
+	if (props.settings.createsOdometer) {
+		return t('maintenance_tracker', 'This item has no odometer meter yet: saving creates an “Odometer” meter ({unit}) and records this reading on it.', { unit: distanceUnitLabel(props.settings.distanceUnit) })
+	}
+	return t('maintenance_tracker', 'This item has no odometer meter, so the value is kept on the fill-up only. An owner or manager can add the meter.')
+})
 const computedTotal = computed(() => {
 	if (!DECIMAL.test(draft.unitPrice.trim()) || !DECIMAL.test(draft.volume.trim())) {
 		return ''
@@ -65,6 +96,25 @@ watch(() => props.open, (open) => {
 	if (!open) {
 		return
 	}
+	reset()
+}, { immediate: true })
+
+// Another item picked in the quick dialog: take over its units and defaults.
+watch(() => props.assetUuid, () => {
+	if (props.open && props.ticket === null) {
+		Object.assign(draft, {
+			odometerUnit: props.settings.distanceUnit,
+			volumeUnit: props.settings.volumeUnit,
+			fuelType: props.settings.fuelType,
+			regimeUuid: props.regimes.find((regime) => regime.isDefault)?.uuid ?? null,
+		})
+	}
+})
+
+/**
+ * Fill the form from the ticket being edited, or with the item's defaults.
+ */
+function reset(): void {
 	error.value = ''
 	const ticket = props.ticket
 	const local = ticket ? new Date(new Date(ticket.filledAt).getTime() - new Date(ticket.filledAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : localNow()
@@ -84,7 +134,7 @@ watch(() => props.open, (open) => {
 		currency: ticket?.currency ?? props.defaultCurrency,
 		notes: ticket?.notes ?? '',
 	})
-}, { immediate: true })
+}
 
 /**
  * Validate the form and save the ticket; the dialog stays open with the
@@ -156,6 +206,18 @@ const buttons = computed(() => [
 					{{ error }}
 				</p>
 			</NcNoteCard>
+			<SelectField
+				v-if="vehicles && vehicles.length > 1 && !ticket"
+				v-model="selectedVehicle"
+				:options="vehicleOptions"
+				:label="t('maintenance_tracker', 'Vehicle')"
+				required />
+			<p v-else-if="vehicles && vehicles.length === 1 && !ticket" class="muted">
+				{{ t('maintenance_tracker', 'Fill-up for {name}', { name: vehicles[0].name }) }}
+			</p>
+			<p v-if="lastFillUp" class="muted hint">
+				{{ lastFillUp }}
+			</p>
 			<label class="native-field">
 				<span>{{ t('maintenance_tracker', 'Date and time') }}</span>
 				<input v-model="draft.filledAt" type="datetime-local" required>
@@ -168,8 +230,8 @@ const buttons = computed(() => [
 					required />
 				<SelectField v-model="draft.odometerUnit" :options="distanceOptions" :label="t('maintenance_tracker', 'Distance unit')" />
 			</div>
-			<p v-if="settings.odometerMeter && !ticket" class="muted hint">
-				{{ t('maintenance_tracker', 'The odometer is also saved as a reading of “{meter}”.', { meter: settings.odometerMeter.name }) }}
+			<p v-if="meterHint" class="muted hint" data-test="fuel-meter-hint">
+				{{ meterHint }}
 			</p>
 			<div class="form-row">
 				<NcTextField

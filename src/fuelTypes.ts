@@ -20,7 +20,29 @@ export interface FuelSettings {
 	economyUnit: EconomyUnit
 	fuelType: FuelType | null
 	odometerMeter: { uuid: string, name: string, displayUnit: string } | null
+	/** The next fill-up creates an "Odometer" meter (no distance meter yet and the caller may add one). */
+	createsOdometer: boolean
 	revision: number
+}
+
+/** An item with the Fuel tab, as listed for the quick "Log fuel" dialog. */
+export interface FuelVehicle {
+	assetUuid: string
+	name: string
+	settings: FuelSettings
+	regimes: FuelRegime[]
+	lastFilledAt: string | null
+	lastOdometer: string | null
+	lastOdometerUnit: DistanceUnit | null
+}
+
+export interface FuelOdometerLink {
+	assetUuid: string
+	meterUuid: string
+	meterName: string
+	meterCreated: boolean
+	linked: number
+	skipped: { uuid: string, reason: string }[]
 }
 
 export interface FuelRegime { uuid: string, assetUuid: string, name: string, isDefault: boolean, sort: number, revision: number }

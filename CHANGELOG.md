@@ -12,6 +12,23 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.20] - 2026-10-18
+
+### Added
+
+- *Log fuel* on the Dashboard: in the header, in the *Fuel economy* card heading and on each card row. It opens the add fill-up dialog with a *Vehicle* picker of the items that show the Fuel tab. The vehicle used last on this device is preselected (else the one filled up most recently). With a single vehicle there is no picker. Items with the Fuel tab also get *Log fuel* in their header. New endpoint `GET /api/v1/fuel-vehicles`.
+- *Record odometer readings* (Fuel tab → *Fuel options*, plus a note when it applies; Owner, Manager; `POST /api/v1/assets/{assetUuid}/fuel-odometer`, `meter.manage`): adds the odometer of earlier fill-ups that have no reading to the item's odometer meter, creating the meter if needed. Fill-ups are processed oldest first, a value that would make the meter go backwards is skipped and reported, and repeating it changes nothing. Each link is audited as `fuel.odometer_linked`.
+
+### Changed
+
+- A fill-up's odometer now always reaches the vehicle's maintenance meters. Until now it became a reading only when the item already had a distance meter; otherwise it stayed on the fill-up, and distance-based tasks never saw it. Now, when an item with the Fuel tab has no distance meter, the first fill-up by an Owner or Manager creates a monotonic *Odometer* meter (key `odometer`, or `fuel-odometer` if that key is taken, in the fill-up's distance unit; audited `meter.created`). It links the item's earlier fill-ups to that meter and records the new reading on it, all in one transaction. A Contributor (who cannot add meters) still saves the value on the fill-up only, and the dialog says so. `fuel-settings` gains `createsOdometer`. The meter and the links are ordinary rows, so export and restore keep them. There is no automatic migration backfill, because a repair step has no acting user for the permission check and the audit trail.
+- The fill-up dialog says where the odometer goes: *Also records an odometer reading on “Odometer”*, *…creates an “Odometer” meter (mi)…*, or *kept on the fill-up only*.
+
+### Fixed
+
+- After saving, editing or deleting a fill-up, the item page reloads its meters, the Readings tab, the meter's current value and the task forecasts, with no page reload needed. The Fuel tab did not tell the item page before. The dashboard reloads its due list and fuel card after *Log fuel*.
+- The Readings tab showed a meter's *oldest* reading as its current value (the list comes oldest first and the panel took the first effective entry). It now shows the newest.
+
 ## [0.1.19] - 2026-10-18
 
 ### Changed

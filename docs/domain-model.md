@@ -293,6 +293,25 @@ vehicle extension:
   in the linked `maint_costs` row (category `fuel`); receipts are evidence
   links with target type `fuel`.
 
+Odometer meter (0.1.20)
+: A fill-up's odometer is recorded as a reading on the item's odometer meter
+  (the distance meter keyed `odometer`, else its first distance meter). When a
+  fuel-enabled item has no distance meter and the person logging may manage
+  meters (Owner, Manager), the first fill-up creates an ordinary meter:
+  *Odometer*, key `odometer` (`fuel-odometer` if that key is taken), dimension
+  `distance`, monotonic, display unit = the fill-up's distance unit. It is
+  audited as `meter.created`. Earlier fill-ups without a reading are then
+  linked to it oldest first (`fuel.odometer_linked`), skipping values that
+  would decrease the meter, and the new reading is recorded; everything runs in
+  one transaction. The same linking is available on demand (*Record odometer
+  readings*, `POST /assets/{uuid}/fuel-odometer`) and is idempotent. For a
+  Contributor without such a meter the value stays on the fill-up only, as
+  before. Because the meter, its readings and the fill-ups' `meter_id` and
+  `reading_id` are ordinary rows, export and restore carry them unchanged
+  (the generic `meter_id`/`reading_id` reference remapping keeps the links).
+  There is no migration-time backfill: a repair step has no acting user for
+  the audit trail and permission check, so it is an explicit action instead.
+
 Fuel economy is calculated only across valid full-fill boundaries and visibly
 marks incomplete sequences (a missed fill-up or a non-increasing odometer).
 A fill's regime describes the driving since the previous fill-up; a stretch

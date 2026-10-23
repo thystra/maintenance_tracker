@@ -27,6 +27,7 @@ import FuelPanel from '../components/FuelPanel.vue'
 import GroupBreadcrumbs from '../components/GroupBreadcrumbs.vue'
 import HistoryPanel from '../components/HistoryPanel.vue'
 import ItemFormDialog from '../components/ItemFormDialog.vue'
+import LogFuelDialog from '../components/LogFuelDialog.vue'
 import LogMaintenanceDialog from '../components/LogMaintenanceDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import ReadingsPanel from '../components/ReadingsPanel.vue'
@@ -58,6 +59,9 @@ const logDefinition = ref<string | null>(null)
 const confirmDelete = ref(false)
 const busy = ref(false)
 const fuel = ref<FuelSettings | null>(null)
+const fuelOpen = ref(false)
+// Bumped after a quick "Log fuel" so an open Fuel tab reloads its list.
+const fuelRevision = ref(0)
 
 const tabs = computed(() => [
 	{ id: 'overview', label: t('maintenance_tracker', 'Overview') },
@@ -166,6 +170,15 @@ async function saved(): Promise<void> {
 	await Promise.all([load(), loadAssets(), loadGroups()])
 }
 
+/**
+ * A fill-up can add an odometer reading (and the meter itself): reload the
+ * meters, readings and forecast, and the Fuel tab.
+ */
+async function fuelLogged(): Promise<void> {
+	fuelRevision.value++
+	await load()
+}
+
 /** Show or hide the Fuel tab for this item (overrides the automatic choice). */
 async function toggleFuel(): Promise<void> {
 	const current = fuel.value
@@ -235,6 +248,12 @@ onMounted(load)
 							<NcIconSvgWrapper :path="mdiWrenchOutline" />
 						</template>
 						{{ t('maintenance_tracker', 'Log maintenance') }}
+					</NcButton>
+					<NcButton v-if="can.log && fuel?.shown" data-test="item-log-fuel" @click="fuelOpen = true">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiGasStationOutline" />
+						</template>
+						{{ t('maintenance_tracker', 'Log fuel') }}
 					</NcButton>
 					<NcActions v-if="can.manageInventory" :aria-label="t('maintenance_tracker', 'More actions for {name}', { name: asset.name })">
 						<NcActionButton closeAfterClick @click="editOpen = true">
@@ -374,7 +393,12 @@ onMounted(load)
 					:meters="meters"
 					:components="components"
 					@changed="load" />
-				<FuelPanel v-else-if="activeTab === 'fuel'" :assetUuid="asset.uuid" @settings="fuel = $event" />
+				<FuelPanel
+					v-else-if="activeTab === 'fuel'"
+					:key="fuelRevision"
+					:assetUuid="asset.uuid"
+					@settings="fuel = $event"
+					@changed="load" />
 				<CostsPanel v-else-if="activeTab === 'costs'" :assetUuid="asset.uuid" />
 				<EvidencePanel v-else-if="activeTab === 'files'" targetType="asset" :targetUuid="asset.uuid" />
 				<SetupPanel
@@ -386,6 +410,7 @@ onMounted(load)
 			</section>
 
 			<ItemFormDialog v-model:open="editOpen" :asset="asset" @saved="saved" />
+			<LogFuelDialog v-model:open="fuelOpen" :assetUuid="asset.uuid" @saved="fuelLogged" />
 			<LogMaintenanceDialog
 				v-model:open="logOpen"
 				:assetUuid="asset.uuid"
