@@ -34,8 +34,19 @@ final class CostPolicyTest extends TestCase {
 		self::assertSame('1200', CostPolicy::formatAmount(1200, 'JPY'));
 	}
 
+	public function testZeroAmountsAreRecorded(): void {
+		self::assertSame(0, CostPolicy::amountMinor('0', 'USD'));
+		self::assertSame(0, CostPolicy::amountMinor('0.00', 'USD'));
+		self::assertSame(0, CostPolicy::amountMinor(0, 'JPY'));
+		self::assertSame('0.00', CostPolicy::formatAmount(0, 'USD'));
+	}
+
+	public function testConsumablesIsAChargeCategory(): void {
+		self::assertSame(['lineType' => 'charge', 'category' => 'consumables'], CostPolicy::classify(null, 'consumables', self::SINGLE));
+	}
+
 	public function testFloatsAndExcessPrecisionAreRejected(): void {
-		foreach ([[12.5, 'USD'], ['1.005', 'USD'], ['1.5', 'JPY'], ['0', 'USD'], ['-3', 'USD'], ['1e3', 'USD']] as [$amount, $currency]) {
+		foreach ([[12.5, 'USD'], ['1.005', 'USD'], ['1.5', 'JPY'], ['-3', 'USD'], ['-0.01', 'USD'], ['1e3', 'USD']] as [$amount, $currency]) {
 			try {
 				CostPolicy::amountMinor($amount, $currency);
 				self::fail('accepted ' . var_export($amount, true) . ' ' . $currency);
