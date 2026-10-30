@@ -12,6 +12,16 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.21] - 2026-10-29
+
+### Added
+
+- Cost category *Consumables* (`consumables`) for small unscheduled supplies such as fuses, bulbs or wiper fluid. The item's *Costs* tab now says it is the place for costs that are not part of a task.
+
+### Changed
+
+- Cost entries accept an amount of `0` (for example warranty work, a free part, or a fuse from the spares drawer), both on the *Costs* tab and in the optional cost of *Log maintenance*. Negative amounts are still rejected. No schema change.
+
 ## [0.1.20] - 2026-10-18
 
 ### Added

@@ -19,7 +19,7 @@ use OCA\MaintenanceTracker\Exception\ValidationException;
 final class CostPolicy {
 	public const DEFAULT_CURRENCY = 'USD';
 	public const LINE_TYPES = ['charge', 'tax'];
-	public const CATEGORIES = ['parts', 'labor', 'fluids', 'fuel', 'service', 'fees', 'tax', 'other'];
+	public const CATEGORIES = ['parts', 'labor', 'fluids', 'consumables', 'fuel', 'service', 'fees', 'tax', 'other'];
 
 	/** @return array{defaultCurrency:string,taxEnabled:bool,multiCurrency:bool,revision:int} */
 	public static function defaults(): array {
@@ -62,14 +62,18 @@ final class CostPolicy {
 		}
 		$category = $category ?? 'other';
 		if (!is_string($category) || !in_array($category, self::CATEGORIES, true) || $category === 'tax') {
-			throw new ValidationException('category must be one of parts, labor, fluids, fuel, service, fees, other');
+			throw new ValidationException('category must be one of parts, labor, fluids, consumables, fuel, service, fees, other');
 		}
 		return ['lineType' => 'charge', 'category' => $category];
 	}
 
-	/** Positive exact amount in the currency's minor units. */
+	/**
+	 * Non-negative exact amount in the currency's minor units. Zero is a real
+	 * fact (warranty work, a free part, a fuse from the spares drawer) and is
+	 * recorded rather than rejected; negative amounts are still refused.
+	 */
 	public static function amountMinor(mixed $amount, string $currency): int {
-		return DecimalQuantity::parse($amount, CurrencyCatalog::exponent($currency), 'amount');
+		return DecimalQuantity::parse($amount, CurrencyCatalog::exponent($currency), 'amount', false, true);
 	}
 
 	public static function formatAmount(int $minor, string $currency): string {

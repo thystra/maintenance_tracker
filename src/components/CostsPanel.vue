@@ -43,13 +43,14 @@ const categoryLabels: Record<CostCategory, string> = {
 	parts: t('maintenance_tracker', 'Parts'),
 	labor: t('maintenance_tracker', 'Labor'),
 	fluids: t('maintenance_tracker', 'Fluids'),
+	consumables: t('maintenance_tracker', 'Consumables'),
 	fuel: t('maintenance_tracker', 'Fuel'),
 	service: t('maintenance_tracker', 'Service'),
 	fees: t('maintenance_tracker', 'Fees'),
 	tax: t('maintenance_tracker', 'Tax'),
 	other: t('maintenance_tracker', 'Other'),
 }
-const categoryOptions = (['parts', 'labor', 'fluids', 'fuel', 'service', 'fees', 'other'] as CostCategory[]).map((value) => ({ value, label: categoryLabels[value] }))
+const categoryOptions = (['parts', 'labor', 'fluids', 'consumables', 'fuel', 'service', 'fees', 'other'] as CostCategory[]).map((value) => ({ value, label: categoryLabels[value] }))
 const lineOptions = [
 	{ value: 'charge', label: t('maintenance_tracker', 'Charge') },
 	{ value: 'tax', label: t('maintenance_tracker', 'Tax') },
@@ -157,6 +158,9 @@ onMounted(load)
 				{{ t('maintenance_tracker', 'Add cost') }}
 			</NcButton>
 		</div>
+		<p v-if="can.addCosts" class="muted panel-hint">
+			{{ t('maintenance_tracker', 'Record any cost here, including ones that are not part of a task, such as fuses or wiper fluid. An amount of 0 is fine.') }}
+		</p>
 		<NcNoteCard v-if="error" type="error">
 			<p role="alert">
 				{{ error }}
@@ -260,6 +264,10 @@ onMounted(load)
 </template>
 
 <style scoped>
+.panel-hint {
+	margin: 0 0 8px;
+}
+
 .panel-bar {
 	display: flex;
 	flex-wrap: wrap;

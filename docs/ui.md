@@ -63,7 +63,7 @@ Item tabs:
 | History | Maintenance records (newest first) with readings, parts used and notes; files per record; delete. |
 | Readings | Meters with their latest reading, *Add reading*, reading history, add/delete meter. |
 | Fuel | Shown for items whose category or profile is a vehicle or that have a distance (odometer) meter; *Show/Hide the Fuel tab* in the item's actions menu overrides that per item. Period (30/90/365 days, this year, all time, custom range) and economy unit (MPG, km/L, L/100 km) filters; *Fuel economy* (average, best, worst, measured distance) and *Fuel spend* (spend, volume, cost per distance) cards; *By operating regime* table; *Economy over time* chart (hollow dots mark mixed stretches; a data table follows for screen readers); fill-ups with economy, price and receipts, edit/delete. *Add fill-up* (Contributor and up) and *Fuel options* → *Operating regimes* / *Fuel settings* / *Record odometer readings* (Owner, Manager). A note offers *Record odometer readings* when fill-ups have an odometer that is not a meter reading yet. |
-| Costs | Totals per currency, entries with receipts, add/delete. |
+| Costs | Totals per currency, entries with receipts, add/delete. Also the place for costs outside any task (fuses, wiper fluid, other consumables); amounts of 0 are accepted. |
 | Files | Evidence linked to the item (upload into the workspace folder or attach from Files). |
 | Setup | Maintenance profile (choose a bundled or workspace profile → preview → apply; paste JSON as an advanced option; *Save as profile* stores this item's setup in the workspace library), components and specifications, linked items (lasting relationships or time-bound assignments), task groups, parts that fit, work queue. |
 
