@@ -288,9 +288,12 @@ stays, because it is a valid observation. A stale revision returns 412.
 `period` is `30d`, `90d`, `365d`, `year`, `all` or `custom` (with `from` and
 `to` dates). Returns `period` (`from`, `to`), `overall` (`economy`, `best`,
 `worst`, `segments`, `distance`), `regimes` (per regime `economy`, `best`,
-`worst`, `segments`, `distance`), `mixedSegments`, `invalidSegments`,
-`openFills`, `fills`, `volume`, `spend` and `costPerDistance` (per currency),
-and `chart` (up to the last 60 measured stretches: `date`, `economy`,
+`worst`, `segments`, `distance` and its own `costPerDistance`), `mixedSegments`, `invalidSegments`,
+`openFills`, `fills`, `volume`, `spend` and `costPerDistance` (per currency:
+`currency`, `amount` per distance unit, and the costed `distance`; only
+stretches whose fill-ups all have a price in one currency count, and a regime's
+figure uses only that regime's stretches, so mixed stretches count overall
+only), and `chart` (up to the last 60 measured stretches: `date`, `economy`,
 `mixed`). Stretches belong to the period in which they end.
 
 ### `GET /fuel-summary?workspace=<uuid>`

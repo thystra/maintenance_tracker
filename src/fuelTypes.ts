@@ -105,6 +105,9 @@ export interface FuelTicketInput {
 
 export interface FuelAggregate { economy: number | null, best: number | null, worst: number | null, segments: number, distance: number }
 
+/** Fuel cost per distance unit in one currency, over the costed stretches (`distance`). */
+export interface FuelCostPerDistance { currency: string, amount: string, distance: number }
+
 export interface FuelStats {
 	assetUuid: string
 	period: FuelPeriod
@@ -114,12 +117,12 @@ export interface FuelStats {
 	distanceUnit: DistanceUnit
 	volumeUnit: VolumeUnit
 	overall: FuelAggregate
-	regimes: Array<FuelAggregate & { regimeUuid: string | null, name: string | null }>
+	regimes: Array<FuelAggregate & { regimeUuid: string | null, name: string | null, costPerDistance: FuelCostPerDistance[] }>
 	mixedSegments: number
 	fills: number
 	volume: number
 	spend: Array<{ currency: string, amount: string, amountMinor: number }>
-	costPerDistance: Array<{ currency: string, amount: string, distance: number }>
+	costPerDistance: FuelCostPerDistance[]
 	chart: Array<{ date: string, economy: number | null, regimeUuid: string | null, mixed: boolean }>
 	invalidSegments: number
 	openFills: number

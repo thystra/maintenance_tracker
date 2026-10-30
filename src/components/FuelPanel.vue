@@ -353,6 +353,9 @@ onMounted(async () => {
 							<th scope="col">
 								{{ t('maintenance_tracker', 'Distance') }}
 							</th>
+							<th scope="col">
+								{{ t('maintenance_tracker', 'Cost per {unit}', { unit: distanceUnitLabel(stats.distanceUnit) }) }}
+							</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -365,11 +368,24 @@ onMounted(async () => {
 							<td>{{ formatEconomy(regime.worst, stats.economyUnit) }}</td>
 							<td>{{ regime.segments }}</td>
 							<td>{{ formatNumber(regime.distance, 0) }} {{ distanceUnitLabel(stats.distanceUnit) }}</td>
+							<td>
+								<template v-if="regime.costPerDistance.length > 0">
+									<span v-for="entry in regime.costPerDistance" :key="entry.currency" class="regime-cost">
+										{{ entry.amount }} {{ entry.currency }}
+									</span>
+								</template>
+								<template v-else>
+									–
+								</template>
+							</td>
 						</tr>
 					</tbody>
 				</table>
 				<p v-if="stats.mixedSegments > 0" class="muted">
 					{{ n('maintenance_tracker', '%n stretch mixed regimes; it counts in the overall figure only.', '%n stretches mixed regimes; they count in the overall figure only.', stats.mixedSegments) }}
+				</p>
+				<p class="muted">
+					{{ t('maintenance_tracker', 'Cost per distance counts only the stretches of that regime whose fill-ups all have a price.') }}
 				</p>
 			</section>
 
@@ -537,6 +553,11 @@ onMounted(async () => {
 	padding: 6px 8px;
 	border-bottom: 1px solid var(--color-border);
 	text-align: start;
+}
+
+.regime-cost {
+	display: block;
+	white-space: nowrap;
 }
 
 .list {

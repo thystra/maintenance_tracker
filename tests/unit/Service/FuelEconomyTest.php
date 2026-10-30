@@ -97,6 +97,34 @@ final class FuelEconomyTest extends TestCase {
 		self::assertSame([['currency' => 'USD', 'amount' => '180.00', 'amountMinor' => 18000]], $stats['spend']);
 		// 140.00 over 750 mi of costed segments.
 		self::assertSame('0.1867', $stats['costPerDistance'][0]['amount']);
+		// Each regime gets its own cost per distance from its own stretches;
+		// the mixed stretch counts only in the overall figure.
+		self::assertSame([['currency' => 'USD', 'amount' => '0.1333', 'distance' => 300.0]], $byName['Empty']['costPerDistance']);
+		self::assertSame([['currency' => 'USD', 'amount' => '0.2667', 'distance' => 150.0]], $byName['Towing']['costPerDistance']);
+	}
+
+	public function testRegimeCostPerDistanceSkipsUncostedStretches(): void {
+		$fills = [
+			self::fill('a', 1, 1000, '10', true, false, 'empty', 4000),
+			self::fill('b', 5, 1300, '10', true, false, 'empty', 3000),   // empty, costed: 30.00 / 300 mi
+			self::fill('c', 9, 1600, '10', true, false, 'empty'),         // empty, no price: left out
+			self::fill('d', 12, 1750, '10', true, false, 'towing'),       // towing, no price at all
+			self::fill('e', 15, 1900, '10', true, false, 'towing', 0),    // towing, free fill: 0.00 / 150 mi
+		];
+		$segments = FuelEconomy::segments($fills)['segments'];
+		$stats = FuelEconomy::stats($segments, $fills, 0, 100 * self::DAY, 'mpg', 'mi', 'gal', ['empty' => 'Empty', 'towing' => 'Towing']);
+		$byName = array_column($stats['regimes'], null, 'name');
+		self::assertSame([['currency' => 'USD', 'amount' => '0.1000', 'distance' => 300.0]], $byName['Empty']['costPerDistance']);
+		self::assertSame(600.0, $byName['Empty']['distance']);
+		self::assertSame([['currency' => 'USD', 'amount' => '0.0000', 'distance' => 150.0]], $byName['Towing']['costPerDistance']);
+		self::assertSame('0.0667', $stats['costPerDistance'][0]['amount']);
+
+		// Only the unpriced towing stretch ends in this period.
+		$uncosted = FuelEconomy::stats($segments, $fills, 10 * self::DAY, 12 * self::DAY, 'mpg', 'mi', 'gal', []);
+		self::assertCount(1, $uncosted['regimes']);
+		self::assertSame('towing', $uncosted['regimes'][0]['regimeUuid']);
+		self::assertSame([], $uncosted['regimes'][0]['costPerDistance']);
+		self::assertSame([], $uncosted['costPerDistance']);
 	}
 
 	public function testBestAndWorstFollowEfficiencyForLitresPer100Km(): void {
