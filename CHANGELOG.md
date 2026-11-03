@@ -12,6 +12,12 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.22] - 2026-10-30
+
+### Added
+
+- *Cost per mi* / *Cost per km* column in the Fuel tab's *By operating regime* table: fuel cost per distance for each regime, from that regime's own stretches only (mixed stretches still count only in the overall figure in *Fuel spend*). Only stretches whose fill-ups all have a price in one currency count; a regime with none shows –. `GET /api/v1/assets/{assetUuid}/fuel-stats` returns `costPerDistance` (per currency: `currency`, `amount`, `distance`) on each entry of `regimes`. No schema change.
+
 ## [0.1.21] - 2026-10-29
 
 ### Added

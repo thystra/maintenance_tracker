@@ -171,7 +171,9 @@ final class FuelEconomy {
 		}
 		$regimes = [];
 		foreach ($byRegime as $uuid => $list) {
-			$regimes[] = ['regimeUuid' => $uuid === '' ? null : (string)$uuid, 'name' => $uuid === '' ? null : ($regimeNames[(string)$uuid] ?? null)] + self::aggregate($list, $economyUnit, $distanceUnit);
+			$regimes[] = ['regimeUuid' => $uuid === '' ? null : (string)$uuid, 'name' => $uuid === '' ? null : ($regimeNames[(string)$uuid] ?? null)]
+				+ self::aggregate($list, $economyUnit, $distanceUnit)
+				+ ['costPerDistance' => self::costPerDistance($list, $distanceUnit)];
 		}
 		usort($regimes, static fn (array $a, array $b): int => $b['distance'] <=> $a['distance']);
 
@@ -189,22 +191,6 @@ final class FuelEconomy {
 			}
 		}
 		ksort($spend);
-		$costPerDistance = [];
-		$costed = [];
-		foreach ($inPeriod as $s) {
-			if ($s['cost'] !== null) {
-				$c = $s['cost']['currency'];
-				$costed[$c] ??= ['minor' => 0, 'distance' => 0];
-				$costed[$c]['minor'] += $s['cost']['minor'];
-				$costed[$c]['distance'] += $s['distanceMm'];
-			}
-		}
-		ksort($costed);
-		foreach ($costed as $currency => $c) {
-			$exp = CurrencyCatalog::exponent($currency);
-			$perUnit = ($c['minor'] / (10 ** $exp)) / ($c['distance'] / self::DISTANCE_UNITS[$distanceUnit]);
-			$costPerDistance[] = ['currency' => $currency, 'amount' => number_format($perUnit, $exp + 2, '.', ''), 'distance' => self::distanceIn($c['distance'], $distanceUnit)];
-		}
 		return [
 			'from' => $from <= 0 ? null : gmdate('Y-m-d', $from),
 			'to' => $to === PHP_INT_MAX ? null : gmdate('Y-m-d', $to),
@@ -217,7 +203,7 @@ final class FuelEconomy {
 			'fills' => $count,
 			'volume' => self::volumeIn($volume, $volumeUnit),
 			'spend' => array_map(static fn (string $currency, int $minor): array => ['currency' => $currency, 'amount' => CostPolicy::formatAmount($minor, $currency), 'amountMinor' => $minor], array_keys($spend), array_values($spend)),
-			'costPerDistance' => $costPerDistance,
+			'costPerDistance' => self::costPerDistance($inPeriod, $distanceUnit),
 		];
 	}
 
@@ -280,6 +266,34 @@ final class FuelEconomy {
 			'segments' => count($segments),
 			'distance' => self::distanceIn($distance, $distanceUnit),
 		];
+	}
+
+	/**
+	 * Fuel cost per distance unit, per currency, over the segments whose fills
+	 * all carry a cost in one currency (see segmentCost()). Mixed-currency or
+	 * partly uncosted segments are left out of both cost and distance.
+	 *
+	 * @param list<array<string,mixed>> $segments
+	 * @return list<array{currency:string,amount:string,distance:float}>
+	 */
+	private static function costPerDistance(array $segments, string $distanceUnit): array {
+		$costed = [];
+		foreach ($segments as $s) {
+			if ($s['cost'] !== null && $s['distanceMm'] > 0) {
+				$c = $s['cost']['currency'];
+				$costed[$c] ??= ['minor' => 0, 'distance' => 0];
+				$costed[$c]['minor'] += $s['cost']['minor'];
+				$costed[$c]['distance'] += $s['distanceMm'];
+			}
+		}
+		ksort($costed);
+		$result = [];
+		foreach ($costed as $currency => $c) {
+			$exp = CurrencyCatalog::exponent((string)$currency);
+			$perUnit = ($c['minor'] / (10 ** $exp)) / ($c['distance'] / self::DISTANCE_UNITS[$distanceUnit]);
+			$result[] = ['currency' => (string)$currency, 'amount' => number_format($perUnit, $exp + 2, '.', ''), 'distance' => self::distanceIn($c['distance'], $distanceUnit)];
+		}
+		return $result;
 	}
 
 	/**

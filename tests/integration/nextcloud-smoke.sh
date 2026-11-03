@@ -2544,12 +2544,13 @@ import json, sys
 d = json.load(sys.stdin)["ocs"]["data"]
 r = {x["name"]: x for x in d["regimes"]}
 o = d["overall"]
-print("overall=%s/%.1f mixed=%s empty=%.1f/%s tow=%.1f/%s fills=%s chart=%s" % (o["segments"], float(o["economy"]), d["mixedSegments"], float(r["Empty"]["economy"]), r["Empty"]["segments"], float(r["Towing"]["economy"]), r["Towing"]["segments"], d["fills"], len(d["chart"])))')
+print("overall=%s/%.1f mixed=%s empty=%.1f/%s tow=%.1f/%s fills=%s chart=%s regimecpd=%s" % (o["segments"], float(o["economy"]), d["mixedSegments"], float(r["Empty"]["economy"]), r["Empty"]["segments"], float(r["Towing"]["economy"]), r["Towing"]["segments"], d["fills"], len(d["chart"]), all(isinstance(x.get("costPerDistance"), list) for x in d["regimes"])))')
 assert_contains "$fuel_check" 'overall=3/30.6' 'overall economy across full fills'
 assert_contains "$fuel_check" 'mixed=1' 'mixed-regime stretch counted'
 assert_contains "$fuel_check" 'empty=30.0/1' 'empty regime economy excludes the mixed stretch'
 assert_contains "$fuel_check" 'tow=25.0/1' 'towing regime economy'
 assert_contains "$fuel_check" 'chart=3' 'chart points'
+assert_contains "$fuel_check" 'regimecpd=True' 'per-regime cost per distance'
 assert_contains "$(ocs_as "$na" GET "/assets/${fuel_asset}/fuel-stats?${nws}&period=all&unit=l_100km")" '"economyUnit":"l_100km"' 'economy converted to L/100 km'
 assert_contains "$(ocs_as "$na" GET "/assets/${fuel_asset}/fuel-stats?${nws}&period=custom&from=2026-09-01&to=2026-09-06")" '"segments":1' 'custom period stats'
 docker exec "$container" sh -c "echo '${v0111_png}' | base64 -d > /tmp/fuel.png"
