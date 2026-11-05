@@ -4,11 +4,15 @@
 -->
 
 <script setup lang="ts">
-// Add or edit a maintenance task (work definition) and its repeat schedule.
-import type { CalendarScheduleUnit, Component, Meter, WorkDefinition, WorkGroup, WorkSchedule } from '../types.ts'
+// Add or edit a maintenance task and its repeat limits. Multiple limits use
+// combination:any (due when the earliest is reached)—same as profile schedules.
+import type { CalendarScheduleUnit, Component, Meter, WorkDefinition, WorkGroup, WorkSchedule, WorkScheduleRule } from '../types.ts'
 
+import { mdiDeleteOutline, mdiPlus } from '@mdi/js'
 import { computed, reactive, ref, watch } from 'vue'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
+import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
@@ -27,15 +31,20 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ (event: 'update:open', value: boolean): void, (event: 'saved', task: WorkDefinition): void }>()
 
-type Repeat = 'none' | 'time' | 'meter' | 'either'
+type LimitKind = 'time' | 'meter'
+interface LimitRow {
+	id: string
+	kind: LimitKind
+	every: string
+	unit: CalendarScheduleUnit | null
+	meterUuid: string | null
+	meterEvery: string
+}
+
 const draft = reactive({
 	title: '',
 	kind: 'maintenance' as string | null,
-	repeat: 'time' as Repeat | null,
-	every: '12',
-	unit: 'month' as CalendarScheduleUnit | null,
-	meterUuid: null as string | null,
-	meterEvery: '',
+	limits: [] as LimitRow[],
 	componentUuid: null as string | null,
 	groupUuid: null as string | null,
 	instructions: '',
@@ -53,15 +62,11 @@ const kindOptions = [
 	{ value: 'calibration', label: t('maintenance_tracker', 'Calibration') },
 	{ value: 'other', label: t('maintenance_tracker', 'Other') },
 ]
-const repeatOptions = computed(() => [
+const limitKindOptions = computed(() => [
 	{ value: 'time', label: t('maintenance_tracker', 'Every so often (time)') },
 	...(props.meters.length > 0
-		? [
-				{ value: 'meter', label: t('maintenance_tracker', 'By meter reading (distance, hours, uses)') },
-				{ value: 'either', label: t('maintenance_tracker', 'Time or meter, whichever comes first') },
-			]
+		? [{ value: 'meter', label: t('maintenance_tracker', 'By meter reading (distance, hours, uses)') }]
 		: []),
-	{ value: 'none', label: t('maintenance_tracker', 'No schedule (log it when needed)') },
 ])
 const unitOptions = [
 	{ value: 'day', label: t('maintenance_tracker', 'days') },
@@ -72,10 +77,115 @@ const unitOptions = [
 const meterOptions = computed(() => props.meters.map((meter) => ({ value: meter.uuid, label: `${meter.name} (${meter.displayUnit})` })))
 const componentOptions = computed(() => props.components.map((component) => ({ value: component.uuid, label: component.name })))
 const groupOptions = computed(() => props.groups.map((group) => ({ value: group.uuid, label: group.name })))
-const selectedMeter = computed(() => props.meters.find((meter) => meter.uuid === draft.meterUuid) ?? null)
-const usesTime = computed(() => draft.repeat === 'time' || draft.repeat === 'either')
-const usesMeter = computed(() => draft.repeat === 'meter' || draft.repeat === 'either')
+
+const usesTime = computed(() => draft.limits.some((limit) => limit.kind === 'time'))
+const usesMeter = computed(() => draft.limits.some((limit) => limit.kind === 'meter'))
+const selectedMeter = computed(() => {
+	const meterLimit = draft.limits.find((limit) => limit.kind === 'meter')
+	return props.meters.find((meter) => meter.uuid === meterLimit?.meterUuid) ?? null
+})
 const isBusinessDays = computed(() => props.task?.schedule !== 'none' && props.task?.schedule.rules.some((rule) => rule.type === 'business_days'))
+const canAddLimit = computed(() => !isBusinessDays.value && draft.limits.length < 8)
+const addLimitLabel = computed(() => {
+	if (draft.limits.length === 0) {
+		return t('maintenance_tracker', 'Add limit')
+	}
+	return t('maintenance_tracker', 'Add another limit')
+})
+
+function newId(): string {
+	return crypto.randomUUID()
+}
+
+function blankLimit(kind: LimitKind): LimitRow {
+	const meter = props.meters[0]
+	return {
+		id: newId(),
+		kind,
+		every: '3',
+		unit: 'month',
+		meterUuid: meter?.uuid ?? null,
+		meterEvery: meter?.dimension === 'distance' ? '5000' : '100',
+	}
+}
+
+function limitsFromSchedule(schedule: WorkDefinition['schedule']): LimitRow[] {
+	if (schedule === 'none') {
+		return []
+	}
+	const rows: LimitRow[] = []
+	for (const rule of schedule.rules) {
+		if (rule.type === 'calendar') {
+			rows.push({
+				id: newId(),
+				kind: 'time',
+				every: String(rule.interval.value),
+				unit: rule.interval.unit,
+				meterUuid: props.meters[0]?.uuid ?? null,
+				meterEvery: '',
+			})
+		} else if (rule.type === 'meter') {
+			const meter = props.meters.find((candidate) => candidate.uuid === rule.meterUuid)
+			rows.push({
+				id: newId(),
+				kind: 'meter',
+				every: '12',
+				unit: 'month',
+				meterUuid: rule.meterUuid,
+				meterEvery: String(rule.interval.value),
+			})
+			if (meter === undefined) {
+				// Keep the stored meter UUID even if the list has not loaded yet.
+			}
+		}
+		// business_days stays read-only via isBusinessDays; skip editing rows.
+	}
+	return rows
+}
+
+function setLimitKind(index: number, kind: string | null): void {
+	const next = kind === 'meter' ? 'meter' : 'time'
+	const current = draft.limits[index]
+	if (current === undefined || current.kind === next) {
+		return
+	}
+	draft.limits[index] = { ...blankLimit(next), id: current.id }
+}
+
+function removeLimit(index: number): void {
+	draft.limits.splice(index, 1)
+}
+
+function addLimit(): void {
+	const hasTime = draft.limits.some((limit) => limit.kind === 'time')
+	const hasMeter = draft.limits.some((limit) => limit.kind === 'meter')
+	if (draft.limits.length === 0) {
+		draft.limits.push(blankLimit('time'))
+		return
+	}
+	if (!hasMeter && props.meters.length > 0) {
+		draft.limits.push(blankLimit('meter'))
+		return
+	}
+	if (!hasTime) {
+		draft.limits.push(blankLimit('time'))
+		return
+	}
+	if (props.meters.length > 0) {
+		draft.limits.push(blankLimit('meter'))
+	}
+}
+
+function meterFor(limit: LimitRow): Meter | null {
+	return props.meters.find((meter) => meter.uuid === limit.meterUuid) ?? null
+}
+
+function meterEveryLabel(limit: LimitRow): string {
+	const meter = meterFor(limit)
+	return meter
+		? t('maintenance_tracker', 'Every ({unit})', { unit: meter.displayUnit })
+		: t('maintenance_tracker', 'Every')
+}
 
 watch(() => props.open, (open) => {
 	if (!open) {
@@ -84,16 +194,12 @@ watch(() => props.open, (open) => {
 	error.value = ''
 	const task = props.task
 	const schedule = task?.schedule ?? 'none'
-	const calendar = schedule === 'none' ? undefined : schedule.rules.find((rule) => rule.type === 'calendar')
-	const meter = schedule === 'none' ? undefined : schedule.rules.find((rule) => rule.type === 'meter')
 	Object.assign(draft, {
 		title: task?.title ?? '',
 		kind: task?.kind ?? 'maintenance',
-		repeat: task === null || task === undefined ? 'time' : (calendar && meter ? 'either' : calendar ? 'time' : meter ? 'meter' : 'none'),
-		every: calendar ? String(calendar.interval.value) : '12',
-		unit: calendar ? calendar.interval.unit : 'month',
-		meterUuid: meter ? meter.meterUuid : (props.meters[0]?.uuid ?? null),
-		meterEvery: meter ? String(meter.interval.value) : '',
+		limits: task === null || task === undefined
+			? [blankLimit('time')]
+			: limitsFromSchedule(schedule),
 		componentUuid: task?.componentUuid ?? null,
 		groupUuid: task?.groupUuid ?? null,
 		instructions: task?.instructions ?? '',
@@ -103,15 +209,27 @@ watch(() => props.open, (open) => {
 }, { immediate: true })
 
 function schedule(): WorkSchedule {
-	if (draft.repeat === 'none' || draft.repeat === null) {
+	if (draft.limits.length === 0) {
 		return 'none'
 	}
-	const rules: Exclude<WorkSchedule, 'none'>['rules'] = []
-	if (usesTime.value) {
-		rules.push({ type: 'calendar', interval: { value: Number(draft.every), unit: draft.unit ?? 'month' } })
+	const rules: WorkScheduleRule[] = []
+	for (const limit of draft.limits) {
+		if (limit.kind === 'time') {
+			rules.push({ type: 'calendar', interval: { value: Number(limit.every), unit: limit.unit ?? 'month' } })
+			continue
+		}
+		const meter = meterFor(limit)
+		if (meter === null) {
+			continue
+		}
+		rules.push({
+			type: 'meter',
+			meterUuid: meter.uuid,
+			interval: { value: limit.meterEvery.trim(), unit: meter.displayUnit },
+		})
 	}
-	if (usesMeter.value && selectedMeter.value !== null) {
-		rules.push({ type: 'meter', meterUuid: selectedMeter.value.uuid, interval: { value: draft.meterEvery.trim(), unit: selectedMeter.value.displayUnit } })
+	if (rules.length === 0) {
+		return 'none'
 	}
 	return { combination: 'any', rules }
 }
@@ -121,19 +239,24 @@ async function submit(): Promise<void> {
 		error.value = t('maintenance_tracker', 'Enter what needs to be done.')
 		return
 	}
-	if (usesTime.value && !/^[1-9]\d*$/.test(draft.every.trim())) {
-		error.value = t('maintenance_tracker', 'Enter how often as a whole number.')
-		return
-	}
-	if (usesMeter.value && (selectedMeter.value === null || draft.meterEvery.trim() === '')) {
-		error.value = t('maintenance_tracker', 'Choose a meter and enter the interval.')
-		return
+	for (const limit of draft.limits) {
+		if (limit.kind === 'time' && !/^[1-9]\d*$/.test(limit.every.trim())) {
+			error.value = t('maintenance_tracker', 'Enter how often as a whole number.')
+			return
+		}
+		if (limit.kind === 'meter') {
+			const meter = meterFor(limit)
+			if (meter === null || limit.meterEvery.trim() === '') {
+				error.value = t('maintenance_tracker', 'Choose a meter and enter the interval.')
+				return
+			}
+		}
 	}
 	busy.value = true
 	error.value = ''
 	try {
 		const nextDue = (() => {
-			if (props.task === null || props.task === undefined || draft.repeat === 'none') {
+			if (props.task === null || props.task === undefined || draft.limits.length === 0) {
 				return undefined
 			}
 			const dueOn = draft.nextDueOn.trim() === '' ? null : draft.nextDueOn.trim()
@@ -206,21 +329,62 @@ const buttons = computed(() => [
 				{{ t('maintenance_tracker', 'This task repeats on business days. Its schedule is kept as it is.') }}
 			</p>
 			<template v-else>
-				<SelectField v-model="draft.repeat" :options="repeatOptions" :label="t('maintenance_tracker', 'Repeat')" />
-				<div v-if="usesTime" class="form-row">
-					<NcTextField v-model="draft.every" :label="t('maintenance_tracker', 'Every')" inputmode="numeric" />
-					<SelectField v-model="draft.unit" :options="unitOptions" :label="t('maintenance_tracker', 'Unit')" />
-				</div>
-				<div v-if="usesMeter" class="form-row">
-					<SelectField v-model="draft.meterUuid" :options="meterOptions" :label="t('maintenance_tracker', 'Meter')" />
-					<NcTextField
-						v-model="draft.meterEvery"
-						:label="selectedMeter ? t('maintenance_tracker', 'Every ({unit})', { unit: selectedMeter.displayUnit }) : t('maintenance_tracker', 'Every')"
-						inputmode="decimal" />
-				</div>
-				<p v-if="meters.length === 0" class="muted">
-					{{ t('maintenance_tracker', 'To schedule by distance or hours, add a meter on the item\'s Readings tab first.') }}
-				</p>
+				<fieldset class="limits" data-test="task-limits">
+					<legend>{{ t('maintenance_tracker', 'Repeat limits') }}</legend>
+					<p v-if="draft.limits.length === 0" class="muted">
+						{{ t('maintenance_tracker', 'Does not repeat. Add a limit to make it recurring.') }}
+					</p>
+					<p v-else-if="draft.limits.length > 1" class="muted">
+						{{ t('maintenance_tracker', 'Due when the earliest limit is reached (for example 3 months or 5,000 miles).') }}
+					</p>
+					<div
+						v-for="(limit, index) in draft.limits"
+						:key="limit.id"
+						class="limit-row"
+						:data-test="'task-limit-' + index">
+						<SelectField
+							:modelValue="limit.kind"
+							:options="limitKindOptions"
+							:label="t('maintenance_tracker', 'Limit')"
+							@update:modelValue="setLimitKind(index, $event)" />
+						<template v-if="limit.kind === 'time'">
+							<NcTextField v-model="limit.every" :label="t('maintenance_tracker', 'Every')" inputmode="numeric" />
+							<SelectField v-model="limit.unit" :options="unitOptions" :label="t('maintenance_tracker', 'Unit')" />
+						</template>
+						<template v-else>
+							<SelectField v-model="limit.meterUuid" :options="meterOptions" :label="t('maintenance_tracker', 'Meter')" />
+							<NcTextField
+								v-model="limit.meterEvery"
+								:label="meterEveryLabel(limit)"
+								inputmode="decimal" />
+						</template>
+						<NcButton
+							variant="tertiary"
+							class="limit-remove"
+							type="button"
+							:aria-label="t('maintenance_tracker', 'Remove limit {number}', { number: index + 1 })"
+							data-test="task-limit-remove"
+							@click="removeLimit(index)">
+							<template #icon>
+								<NcIconSvgWrapper :path="mdiDeleteOutline" />
+							</template>
+						</NcButton>
+					</div>
+					<NcButton
+						v-if="canAddLimit"
+						variant="secondary"
+						type="button"
+						data-test="task-limit-add"
+						@click="addLimit">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiPlus" />
+						</template>
+						{{ addLimitLabel }}
+					</NcButton>
+					<p v-if="meters.length === 0" class="muted">
+						{{ t('maintenance_tracker', 'To schedule by distance or hours, add a meter on the item\'s Readings tab first.') }}
+					</p>
+				</fieldset>
 			</template>
 			<SelectField
 				v-if="!task && components.length > 0"
@@ -234,7 +398,7 @@ const buttons = computed(() => [
 				:options="groupOptions"
 				:label="t('maintenance_tracker', 'Group (optional)')"
 				clearable />
-			<div v-if="task && draft.repeat !== 'none'" class="next-due" data-test="task-next-due">
+			<div v-if="task && draft.limits.length > 0" class="next-due" data-test="task-next-due">
 				<p class="muted">
 					{{ t('maintenance_tracker', 'If this task has never been logged, set when it is next due. The dashboard uses these values until the first completion is recorded.') }}
 				</p>
@@ -280,5 +444,32 @@ const buttons = computed(() => [
 
 .muted {
 	color: var(--color-text-maxcontrast);
+}
+
+.limits {
+	margin: 0;
+	padding: 8px 10px 10px;
+	border: 1px dashed var(--color-border-dark);
+	border-radius: var(--border-radius-large);
+}
+
+.limits legend {
+	padding: 0 4px;
+}
+
+.limit-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: flex-end;
+	margin-bottom: 8px;
+}
+
+.limit-row > * {
+	flex: 1 1 140px;
+}
+
+.limit-row > .limit-remove {
+	flex: 0 0 auto;
 }
 </style>

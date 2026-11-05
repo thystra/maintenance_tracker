@@ -598,7 +598,7 @@ Creates a definition. Minimum unscheduled example:
 }
 ```
 
-Scheduled example uses OR semantics:
+Scheduled example uses OR / earliest-reached semantics (`combination: "any"`; up to 8 rules). The task editor exposes this as multiple *limits* (time and/or meter):
 
 ```json
 {

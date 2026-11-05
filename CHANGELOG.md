@@ -12,6 +12,16 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.25] - 2026-11-05
+
+### Changed
+
+- Edit/Add task: repeat schedules use **limits** with *Add another limit* /
+  remove, so a task can be “every 3 months **or** every 5,000 miles,
+  whichever comes first”. Backend `combination: any` was already supported;
+  the dialog no longer hides that behind a single Repeat choice. Business-day
+  schedules stay read-only as before.
+
 ## [0.1.23] - 2026-11-05
 
 ### Added

@@ -66,6 +66,50 @@ final class DueStatePolicyTest extends TestCase {
 		$this->assertSame('overdue', $this->policy->meter(1000, 1501, 500)['state']);
 	}
 
+
+	public function testCombineAnyPrefersOverdueWhenTimeLimitIsReachedFirst(): void {
+		// Calendar overdue, meter still upcoming → earliest (time) wins.
+		self::assertSame('overdue', $this->policy->combineAny(['overdue', 'upcoming']));
+	}
+
+	public function testCombineAnyPrefersOverdueWhenMeterLimitIsReachedFirst(): void {
+		self::assertSame('overdue', $this->policy->combineAny(['upcoming', 'overdue']));
+		self::assertSame('due', $this->policy->combineAny(['upcoming', 'due']));
+	}
+
+	public function testCombineAnyNeitherDueStaysUpcoming(): void {
+		self::assertSame('upcoming', $this->policy->combineAny(['upcoming', 'upcoming']));
+	}
+
+	public function testCombineAnyUnknownBlocksFalseUpcoming(): void {
+		self::assertSame('unknown', $this->policy->combineAny(['upcoming', 'unknown']));
+	}
+
+	public function testCalendarThenMeterIntervalsStayIndependent(): void {
+		// 3 months from a service vs 5000 mi (canonical mm) — units never mix.
+		$calendar = $this->policy->calendar(
+			$this->ts('2026-01-01T12:00:00Z'),
+			$this->ts('2026-03-15T12:00:00Z'),
+			3,
+			'month',
+		);
+		$meter = $this->policy->meter(0, 4_000 * 1_609_344, 5_000 * 1_609_344);
+		self::assertSame('upcoming', $calendar['state']);
+		self::assertSame('upcoming', $meter['state']);
+		self::assertSame('upcoming', $this->policy->combineAny([$calendar['state'], $meter['state']]));
+
+		$meterDue = $this->policy->meter(0, 5_000 * 1_609_344, 5_000 * 1_609_344);
+		self::assertSame('due', $this->policy->combineAny([$calendar['state'], $meterDue['state']]));
+
+		$calendarOverdue = $this->policy->calendar(
+			$this->ts('2026-01-01T12:00:00Z'),
+			$this->ts('2026-05-01T12:00:00Z'),
+			3,
+			'month',
+		);
+		self::assertSame('overdue', $this->policy->combineAny([$calendarOverdue['state'], $meter['state']]));
+	}
+
 	private function ts(string $value): int {
 		return (new DateTimeImmutable($value))->getTimestamp();
 	}
