@@ -239,11 +239,10 @@ const buttons = computed(() => [
 					{{ t('maintenance_tracker', 'If this task has never been logged, set when it is next due. The dashboard uses these values until the first completion is recorded.') }}
 				</p>
 				<div class="form-row">
-					<NcTextField
-						v-if="usesTime"
-						v-model="draft.nextDueOn"
-						type="date"
-						:label="t('maintenance_tracker', 'Next due date')" />
+					<label v-if="usesTime" class="field">
+						<span>{{ t('maintenance_tracker', 'Next due date') }}</span>
+						<input v-model="draft.nextDueOn" type="date" data-test="task-next-due-date">
+					</label>
 					<NcTextField
 						v-if="usesMeter"
 						v-model="draft.nextDueMeter"
@@ -260,6 +259,10 @@ const buttons = computed(() => [
 .field {
 	display: grid;
 	gap: 4px;
+}
+
+.field input {
+	width: 100%;
 }
 
 .form-stack {
