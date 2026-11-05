@@ -87,7 +87,9 @@ Nextcloud database and Files.
 
 ### Screenshots
 
-No screenshots are published yet.
+None yet. When App Store screenshots are ready they will live under
+`docs/screenshots/` and be referenced from `appinfo/info.xml` with public
+raw GitHub image URLs on this mirror.
 
 ### Current limitations
 
@@ -248,7 +250,10 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and
 ## Repositories
 
 - Primary repository, CI, and releases: <https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud>
-- GitHub mirror (issues and security reports): <https://github.com/thystra/maintenance_tracker>
+- Public GitHub mirror (App Store website/repository links, issues, and security reports): <https://github.com/thystra/maintenance_tracker>
+
+Forgejo does not accept outside account registration, so public metadata and
+bug reports use the GitHub mirror.
 
 ## License
 
