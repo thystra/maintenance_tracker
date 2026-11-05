@@ -236,7 +236,11 @@ onMounted(load)
 						<strong>{{ entry.amount }} {{ entry.currency }}</strong>
 					</template>
 					<template #actions>
-						<NcActionButton v-if="can.manageInventory" closeAfterClick data-test="cost-edit" @click="openEdit(entry)">
+						<NcActionButton
+							v-if="can.manageInventory"
+							closeAfterClick
+							data-test="cost-edit"
+							@click="openEdit(entry)">
 							<template #icon>
 								<NcIconSvgWrapper :path="mdiPencilOutline" />
 							</template>
@@ -279,8 +283,14 @@ onMounted(load)
 			</NcNoteCard>
 			<form class="form" @submit.prevent="save">
 				<div class="form-row">
-					<NcTextField v-model="draft.incurredOn" type="date" :label="t('maintenance_tracker', 'Date')" required />
-					<NcTextField v-model="draft.amount" :label="t('maintenance_tracker', 'Amount')" required />
+					<label class="field">
+						<span>{{ t('maintenance_tracker', 'Date') }}</span>
+						<input v-model="draft.incurredOn" type="date" required>
+					</label>
+					<NcTextField
+						v-model="draft.amount"
+						:label="t('maintenance_tracker', 'Amount')"
+						required />
 					<NcTextField
 						v-if="settings?.multiCurrency"
 						v-model="draft.currency"
@@ -312,7 +322,7 @@ onMounted(load)
 			:open="removing !== null"
 			:name="t('maintenance_tracker', 'Delete cost?')"
 			:message="t('maintenance_tracker', 'Delete the cost “{description}”?', { description: removing?.description ?? '' })"
-			:confirm-label="t('maintenance_tracker', 'Delete')"
+			:confirmLabel="t('maintenance_tracker', 'Delete')"
 			:busy="busy"
 			@update:open="(open) => { if (!open) removing = null }"
 			@confirm="remove" />
@@ -361,6 +371,15 @@ onMounted(load)
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 	gap: 12px;
+}
+
+.field {
+	display: grid;
+	gap: 4px;
+}
+
+.field input {
+	width: 100%;
 }
 
 .muted {
