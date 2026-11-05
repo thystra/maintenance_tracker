@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Public App Store metadata (`website`, `repository`, documentation, privacy
+  policy link, and author homepage) now points at the GitHub mirror
+  ([thystra/maintenance_tracker](https://github.com/thystra/maintenance_tracker)),
+  because Forgejo is not open for outside registration. Bug reports were
+  already on GitHub. Screenshots are not included yet.
+
 Every change set now bumps the app version by one patch level (in
 `appinfo/info.xml`, `Application::APP_VERSION`, `package.json` and
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
