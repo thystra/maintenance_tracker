@@ -107,6 +107,10 @@ final class MaintenanceStatusService {
 			return $this->projection($definitionApi, 'unscheduled', null, $completion, []);
 		}
 		if ($completion === null) {
+			$override = $this->overrideWithoutCompletion($context, $definition, $definitionApi, $asOf);
+			if ($override !== null) {
+				return $override;
+			}
 			return $this->projection($definitionApi, 'baseline_required', 'no_completed_activity', null, []);
 		}
 
@@ -287,6 +291,107 @@ final class MaintenanceStatusService {
 			}
 		}
 		return null;
+	}
+
+
+	/**
+	 * When a task has never been logged, an explicit next-due override
+	 * (date and/or meter threshold) drives the same due states as a
+	 * normal schedule projection. Calendar/business-day rules use
+	 * next_due_on as the due date itself (interval already applied by
+	 * the user when they chose that date). Meter rules use
+	 * next_due_canonical as the due threshold.
+	 *
+	 * @param array<string,mixed> $definitionApi
+	 * @return array<string,mixed>|null
+	 */
+	private function overrideWithoutCompletion(
+		WorkspaceContext $context,
+		WorkDefinition $definition,
+		array $definitionApi,
+		int $asOf,
+	): ?array {
+		$dueOn = $definition->getNextDueOn();
+		$dueCanonical = $definition->getNextDueCanonical();
+		if ($dueOn === null && $dueCanonical === null) {
+			return null;
+		}
+		$rules = [];
+		foreach ($this->scheduleRules->findForDefinition($definition->getWorkspaceId(), $definition->getId()) as $rule) {
+			$base = [
+				'position' => $rule->getPosition(),
+				'type' => $rule->getRuleType(),
+				'state' => 'unknown',
+				'reason' => null,
+			];
+			if (in_array($rule->getRuleType(), ['calendar', 'business_days'], true)) {
+				if ($dueOn === null) {
+					$rules[] = [...$base, 'reason' => 'next_due_date_missing'];
+					continue;
+				}
+				$due = \DateTimeImmutable::createFromFormat('!Y-m-d', $dueOn, new \DateTimeZone('UTC'));
+				if ($due === false) {
+					$rules[] = [...$base, 'reason' => 'next_due_date_invalid'];
+					continue;
+				}
+							$result = $this->policy->calendar($due->getTimestamp(), $asOf, 0, 'day');
+				$rules[] = [
+					...$base,
+					...$result,
+					'interval' => ['value' => (int)$rule->getIntervalValue(), 'unit' => $rule->getIntervalUnit()],
+					'reason' => 'next_due_override',
+				];
+				continue;
+			}
+			if ($rule->getRuleType() !== 'meter' || $rule->getMeterId() === null) {
+				$rules[] = [...$base, 'reason' => 'unsupported_schedule_rule'];
+				continue;
+			}
+			if ($dueCanonical === null) {
+				$rules[] = [...$base, 'reason' => 'next_due_meter_missing'];
+				continue;
+			}
+			$meter = $this->meters->findById($context, $rule->getMeterId(), true);
+			$current = $this->readings->findEffectivePredecessor(
+				$context->workspace()->getId(),
+				$meter->getId(),
+				$asOf,
+				null,
+			);
+			if ($current === null) {
+				$rules[] = [
+					...$base,
+					'reason' => 'meter_current_missing',
+					'meter' => $this->meterReference($meter->getUuid(), $meter->getName(), $meter->getCanonicalUnit(), $meter->getDisplayUnit()),
+					'dueCanonicalValue' => $dueCanonical,
+				];
+				continue;
+			}
+			$remaining = $dueCanonical - $current->getCanonicalValue();
+			$state = $remaining > 0 ? 'upcoming' : ($remaining === 0 ? 'due' : 'overdue');
+			$rules[] = [
+				...$base,
+				'state' => $state,
+				'reason' => 'next_due_override',
+				'interval' => [
+					'value' => $rule->getIntervalValue(),
+					'unit' => $rule->getIntervalUnit(),
+					'canonicalValue' => $rule->getCanonicalValue(),
+				],
+				'meter' => $this->meterReference($meter->getUuid(), $meter->getName(), $meter->getCanonicalUnit(), $meter->getDisplayUnit()),
+				'dueCanonicalValue' => $dueCanonical,
+				'remainingCanonicalValue' => $remaining,
+				'current' => $this->readingReference($current),
+			];
+		}
+		if ($rules === []) {
+			return null;
+		}
+		$state = $this->aggregateState($rules);
+		return [
+			...$this->projection($definitionApi, $state, 'next_due_override', null, $rules),
+			'triggerRulePosition' => $this->triggerRulePosition($rules, $state),
+		];
 	}
 
 	/** @param array<string,mixed> $definition @param list<array<string,mixed>> $rules @return array<string,mixed> */

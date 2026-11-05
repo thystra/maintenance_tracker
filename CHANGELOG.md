@@ -12,6 +12,35 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.23] - 2026-11-05
+
+### Added
+
+- Settings → *About* shows the app version from the capabilities API
+  (`Application::APP_VERSION` / `info.xml`), with a small matching footer on
+  the Dashboard.
+- Tasks with no logged completions can store a *next due* override (calendar
+  date and/or meter threshold). Dashboard and due logic use it until the first
+  completion is logged (then the override is cleared). Migration `Version1230`
+  adds nullable `next_due_on` and `next_due_canonical` on `maint_work_defs`.
+
+### Changed
+
+- Costs tab: clicking a cost row opens that entry for editing, and the
+  three-dot menu includes *Edit* (uses existing `PATCH /costs/{uuid}`).
+- Applying a profile (or copying setup) skips meters, task groups, tasks and
+  fuel regimes whose keys/names already exist on the item instead of failing
+  with “key already exists”. Preview lists what will be added vs skipped.
+- Saving a fuel fill-up whose odometer would lower the monotonic maintenance
+  meter keeps the ticket and leaves the meter unchanged (same soft-skip as
+  *Record odometer readings*).
+
+### Notes
+
+- Dashboard *Log fuel* was already delivered in 0.1.20; this release keeps it.
+- Fuel fill-ups already update the vehicle odometer meter when the reading is
+  higher (0.1.20); this release only softens the lower-reading path.
+
 ## [0.1.22] - 2026-10-30
 
 ### Added

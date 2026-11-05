@@ -2534,7 +2534,12 @@ assert_contains "$(ocs_as "$nb" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel
 assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t3" 2026-09-10T08:00:00Z 10600 6 false "$fuel_empty")")" '"statuscode":201' 'partial fill-up created'
 assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t4" 2026-09-14T08:00:00Z 10800 8 true "$fuel_tow")")" '"statuscode":201' 'mixed-regime fill-up created'
 assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t5" 2026-09-20T08:00:00Z 11100 12 true "$fuel_tow" ',"totalCost":"48.00"')")" '"statuscode":201' 'towing fill-up created'
-assert_contains "$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t6" 2026-09-25T08:00:00Z 9000 5 true "$fuel_tow")")" '"statuscode":400' 'decreasing odometer refused'
+fuel_low=$(ocs_as "$na" POST "/assets/${fuel_asset}/fuel?${nws}" "$(fuel_ticket "$fuel_t6" 2026-09-25T08:00:00Z 9000 5 true "$fuel_tow")")
+assert_contains "$fuel_low" '"statuscode":201' 'decreasing odometer still saves the fill-up'
+assert_contains "$fuel_low" '"odometer":"9000"' 'decreasing odometer stays on the ticket'
+assert_contains "$fuel_low" '"meterUuid":null' 'decreasing odometer does not lower the meter'
+assert_contains "$fuel_low" '"readingUuid":null' 'decreasing odometer creates no meter reading'
+assert_not_contains "$(ocs_as "$na" GET "/meters/${fuel_meter}/readings?${nws}")" '"originalValue":"9000"' 'maintenance meter unchanged by a lower fill-up'
 assert_contains "$(ocs_as "$nb" PATCH "/fuel/${fuel_t2}?${nws}" '{"expectedRevision":1,"ticket":{"notes":"x"}}')" '"statuscode":403' 'contributor cannot edit fill-ups'
 assert_contains "$(ocs_as "$na" PATCH "/fuel/${fuel_t2}?${nws}" '{"expectedRevision":7,"ticket":{"notes":"x"}}')" '"statuscode":412' 'fill-up stale revision'
 assert_contains "$(ocs_as "$na" PATCH "/fuel/${fuel_t1}?${nws}" '{"expectedRevision":1,"ticket":{"totalCost":"45.50"}}')" '"totalCost":"45.50"' 'fill-up price edit updates the cost'

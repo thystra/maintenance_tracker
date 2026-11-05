@@ -61,6 +61,12 @@ export async function createCost(assetUuid: string, cost: CreateCost): Promise<C
 	return data(await axios.post<OcsEnvelope<CostEntry>>(endpoint(`/assets/${encodeURIComponent(assetUuid)}/costs`), { cost }, requestOptions))
 }
 
+export type UpdateCost = Omit<CreateCost, 'uuid' | 'activityUuid' | 'lineType'>
+
+export async function updateCost(uuid: string, expectedRevision: number, cost: UpdateCost): Promise<CostEntry> {
+	return data(await axios.patch<OcsEnvelope<CostEntry>>(endpoint(`/costs/${encodeURIComponent(uuid)}`), { expectedRevision, cost }, requestOptions))
+}
+
 export async function archiveCost(uuid: string, expectedRevision: number): Promise<CostEntry> {
 	return data(await axios.delete<OcsEnvelope<CostEntry>>(endpoint(`/costs/${encodeURIComponent(uuid)}`), { ...requestOptions, data: { expectedRevision } }))
 }

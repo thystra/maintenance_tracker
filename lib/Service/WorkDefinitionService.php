@@ -30,6 +30,7 @@ final class WorkDefinitionService {
 		private ComponentService $components,
 		private WorkGroupService $groups,
 		private MeterService $meters,
+		private MeterValueConverter $values,
 		private WorkDefinitionMapper $mapper,
 		private WorkScheduleRuleMapper $rules,
 		private WorkSchedulePolicy $schedulePolicy,
@@ -152,7 +153,7 @@ final class WorkDefinitionService {
 		}
 		$this->assertKnownFields(
 			$input,
-			['groupUuid', 'key', 'title', 'kind', 'instructions', 'notes', 'status', 'schedule'],
+			['groupUuid', 'key', 'title', 'kind', 'instructions', 'notes', 'status', 'schedule', 'nextDue'],
 			'work-definition update',
 		);
 		$definition = $this->find($context, $uuid);
@@ -189,6 +190,9 @@ final class WorkDefinitionService {
 			$schedule = $this->normalizeSchedule($context, $definition->getAssetId(), $input['schedule']);
 			$definition->setScheduleType($schedule['type']);
 			$definition->setScheduleCombination($schedule['combination']);
+		}
+		if (array_key_exists('nextDue', $input)) {
+			$this->applyNextDue($context, $definition, $input['nextDue']);
 		}
 
 		$definition->setRevision($expectedRevision + 1);
@@ -237,6 +241,23 @@ final class WorkDefinitionService {
 		return $this->toApi($context, $definition);
 	}
 
+
+	/** Clear stored next-due overrides after the first completion is logged. */
+	public function clearNextDueOverrides(WorkspaceContext $context, string $uuid): void {
+		$definition = $this->find($context, $uuid);
+		if ($definition->getNextDueOn() === null && $definition->getNextDueCanonical() === null) {
+			return;
+		}
+		$expected = $definition->getRevision();
+		$definition->setNextDueOn(null);
+		$definition->setNextDueCanonical(null);
+		$definition->setRevision($expected + 1);
+		$definition->setUpdatedAt($this->timeFactory->getTime());
+		if (!$this->mapper->updateWithExpectedRevision($definition, $expected)) {
+			throw new RevisionConflictException('The work definition has changed since it was last read');
+		}
+	}
+
 	/** @return array<string,mixed> */
 	public function toApi(WorkspaceContext $context, WorkDefinition $definition): array {
 		$componentUuid = $definition->getComponentId() === null
@@ -256,10 +277,88 @@ final class WorkDefinitionService {
 			'notes' => $definition->getNotes(),
 			'status' => $definition->getStatus(),
 			'schedule' => $this->scheduleToApi($context, $definition),
+			'nextDue' => $this->nextDueToApi($definition),
 			'revision' => $definition->getRevision(),
 			'createdAt' => gmdate('Y-m-d\TH:i:s\Z', $definition->getCreatedAt()),
 			'updatedAt' => gmdate('Y-m-d\TH:i:s\Z', $definition->getUpdatedAt()),
 			'deletedAt' => $definition->getDeletedAt() === null ? null : gmdate('Y-m-d\TH:i:s\Z', $definition->getDeletedAt()),
+		];
+	}
+
+
+	/**
+	 * @param mixed $nextDue
+	 */
+	private function applyNextDue(WorkspaceContext $context, WorkDefinition $definition, mixed $nextDue): void {
+		if ($nextDue === null) {
+			$definition->setNextDueOn(null);
+			$definition->setNextDueCanonical(null);
+			return;
+		}
+		if (!is_array($nextDue)) {
+			throw new ValidationException('nextDue must be an object or null');
+		}
+		foreach (array_keys($nextDue) as $key) {
+			if (!in_array($key, ['dueOn', 'dueCanonicalValue', 'dueValue', 'dueUnit'], true)) {
+				throw new ValidationException('Unknown nextDue field: ' . (string)$key);
+			}
+		}
+		if (array_key_exists('dueOn', $nextDue)) {
+			$dueOn = $nextDue['dueOn'];
+			if ($dueOn === null || $dueOn === '') {
+				$definition->setNextDueOn(null);
+			} elseif (!is_string($dueOn) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueOn) !== 1) {
+				throw new ValidationException('nextDue.dueOn must be a Y-m-d date');
+			} else {
+				$definition->setNextDueOn($dueOn);
+			}
+		}
+		if (array_key_exists('dueCanonicalValue', $nextDue)) {
+			$canonical = $nextDue['dueCanonicalValue'];
+			if ($canonical === null) {
+				$definition->setNextDueCanonical(null);
+			} elseif ((!is_int($canonical) && !(is_string($canonical) && preg_match('/^(0|[1-9]\d*)$/', $canonical) === 1)) || (int)$canonical < 0) {
+				throw new ValidationException('nextDue.dueCanonicalValue must be a non-negative integer');
+			} else {
+				$definition->setNextDueCanonical((int)$canonical);
+			}
+			return;
+		}
+		if (($nextDue['dueValue'] ?? null) !== null) {
+			$meterId = null;
+			foreach ($this->rules->findForDefinition($definition->getWorkspaceId(), $definition->getId()) as $rule) {
+				if ($rule->getRuleType() === 'meter' && $rule->getMeterId() !== null) {
+					$meterId = $rule->getMeterId();
+					break;
+				}
+			}
+			if ($meterId === null) {
+				throw new ValidationException('nextDue.dueValue requires a meter schedule on the task');
+			}
+			$meter = $this->meters->findById($context, $meterId, true);
+			$unit = is_string($nextDue['dueUnit'] ?? null) && $nextDue['dueUnit'] !== ''
+				? (string)$nextDue['dueUnit']
+				: $meter->getDisplayUnit();
+			$converted = $this->values->toCanonical($meter->getDimension(), $nextDue['dueValue'], $unit);
+			$definition->setNextDueCanonical($converted['canonicalValue']);
+			return;
+		}
+		if (array_key_exists('dueOn', $nextDue) && !array_key_exists('dueCanonicalValue', $nextDue) && !array_key_exists('dueValue', $nextDue)) {
+			// Date-only update leaves meter override unchanged unless cleared via null dueCanonicalValue.
+			return;
+		}
+	}
+
+	/** @return array{dueOn:?string,dueCanonicalValue:?int}|null */
+	private function nextDueToApi(WorkDefinition $definition): ?array {
+		$dueOn = $definition->getNextDueOn();
+		$canonical = $definition->getNextDueCanonical();
+		if ($dueOn === null && $canonical === null) {
+			return null;
+		}
+		return [
+			'dueOn' => $dueOn,
+			'dueCanonicalValue' => $canonical,
 		];
 	}
 

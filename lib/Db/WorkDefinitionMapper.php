@@ -86,6 +86,8 @@ final class WorkDefinitionMapper extends QBMapper {
 			->set('status', $query->createNamedParameter($definition->getStatus(), IQueryBuilder::PARAM_STR))
 			->set('schedule_type', $query->createNamedParameter($definition->getScheduleType(), IQueryBuilder::PARAM_STR))
 			->set('schedule_combination', $this->nullableStringParameter($query, $definition->getScheduleCombination()))
+			->set('next_due_on', $this->nullableStringParameter($query, $definition->getNextDueOn()))
+			->set('next_due_canonical', $this->nullableIntParameter($query, $definition->getNextDueCanonical()))
 			->set('revision', $query->createNamedParameter($definition->getRevision(), IQueryBuilder::PARAM_INT))
 			->set('updated_at', $query->createNamedParameter($definition->getUpdatedAt(), IQueryBuilder::PARAM_INT))
 			->set('deleted_at', $this->nullableIntParameter($query, $definition->getDeletedAt()))

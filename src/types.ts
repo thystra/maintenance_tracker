@@ -179,6 +179,17 @@ export interface BusinessDaysScheduleRule { type: 'business_days', interval: { v
 export interface MeterScheduleRule { type: 'meter', meterUuid: string, interval: { value: string | number, unit: string } }
 export type WorkScheduleRule = CalendarScheduleRule | BusinessDaysScheduleRule | MeterScheduleRule
 export type WorkSchedule = 'none' | { combination: 'any', rules: WorkScheduleRule[] }
+export interface WorkDefinitionNextDue {
+	dueOn: string | null
+	dueCanonicalValue: number | null
+}
+/** Writable next-due payload: dueValue/dueUnit are converted server-side. */
+export interface WorkDefinitionNextDueInput {
+	dueOn?: string | null
+	dueCanonicalValue?: number | null
+	dueValue?: string | null
+	dueUnit?: string | null
+}
 export interface WorkDefinition {
 	uuid: string
 	componentUuid: string | null
@@ -190,6 +201,7 @@ export interface WorkDefinition {
 	notes: string | null
 	status: AssetStatus
 	schedule: WorkSchedule
+	nextDue: WorkDefinitionNextDue | null
 	revision: number
 	createdAt: string
 	updatedAt: string
@@ -198,6 +210,7 @@ export interface WorkDefinition {
 export interface WorkDefinitionList { workspace: string, items: WorkDefinition[] }
 export interface CreateWorkDefinition {
 	uuid?: string
+	nextDue?: WorkDefinitionNextDueInput | null
 	componentUuid?: string | null
 	groupUuid?: string | null
 	key: string
@@ -281,6 +294,7 @@ export interface ProfilePreview {
 	conflicts: string[]
 	warnings: string[]
 	notices?: string[]
+	skipped?: string[]
 	materializes: ProfileSummary
 }
 export interface ProfileBinding { sourceType: 'component' | 'meter' | 'work_group' | 'work_definition' | 'part' | 'offer' | 'specification' | 'fuel_regime', sourceKey: string, ordinal: number, targetUuid: string }
