@@ -63,21 +63,35 @@ See Nextcloud's [publishing](https://docs.nextcloud.com/server/stable/developer_
 and [code signing](https://docs.nextcloud.com/server/stable/developer_manual/app_publishing_maintenance/code_signing.html)
 documentation for details.
 
-### 3. Add the key to Forgejo
+### 3. Add secrets and the App Store publish switch to Forgejo
 
-In the Forgejo repository open **Settings → Actions → Secrets → Add secret**:
+In the Forgejo repository open **Settings → Actions → Secrets → Add secret**
+for each of these (three separate secrets; do not reuse values):
 
-- **Name:** `APP_SIGNING_KEY`
-- **Value:** the complete contents of `maintenance_tracker.key`, including the
-  `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines.
+| Secret | Value | Purpose |
+| --- | --- | --- |
+| `APP_SIGNING_KEY` | Full PEM of `maintenance_tracker.key`, including the `BEGIN`/`END` lines | Builds `maintenance_tracker.tar.gz.sig` for the App Store |
+| `RELEASE_TOKEN` | Optional Forgejo personal access token with *repository: read and write* | Only if the job token returns `403` creating the Forgejo release |
+| `APPSTORE_TOKEN` | Token from [apps.nextcloud.com](https://apps.nextcloud.com) (account → API token; GitHub-login accounts must use a token) | Authenticates `POST /api/v1/apps/releases` |
 
-Without this secret the release workflow still publishes, but the archive has no
-`.sig` file and cannot be uploaded to the App Store.
+Without `APP_SIGNING_KEY` the release workflow still creates the Forgejo
+release, but the archive has no `.sig` and cannot be submitted to the App
+Store.
 
-The workflow creates the Forgejo release with the job's built-in token. If that
-fails with a permission error (`403`), create an access token under
-**your user Settings → Applications** with *repository: read and write*
-permission, and add it as a second secret named `RELEASE_TOKEN`.
+App Store publish from the workflow is **off by default**. After the secrets
+above are in place, also add a repository **variable** (not a secret) under
+**Settings → Actions → Variables**:
+
+- **Name:** `APPSTORE_PUBLISH`
+- **Value:** `true` only when you want a `v*` tag push to also submit the
+  release to the App Store automatically.
+
+Leave `APPSTORE_PUBLISH` unset (or set it to anything other than `true`) to
+keep tag pushes Forgejo-only. The publish step requires *both*
+`APPSTORE_PUBLISH=true` *and* a non-empty `APPSTORE_TOKEN`; if the variable is
+true and the token is missing, the workflow fails rather than silently
+skipping. Turn the variable back off after a release if you want the next tag
+to stay Forgejo-only.
 
 ## Each release
 
@@ -130,7 +144,10 @@ permission, and add it as a second secret named `RELEASE_TOKEN`.
    section for it, runs all checks, builds `maintenance_tracker.tar.gz`, signs
    it when `APP_SIGNING_KEY` is set, and creates a Forgejo release with the
    archive, its `.sha256`, and its `.sig`, using the changelog section as release
-   notes. Versions below 1.0 are marked as pre-releases.
+   notes. Versions below 1.0 are marked as pre-releases. When the repository
+   variable `APPSTORE_PUBLISH` is `true` and secret `APPSTORE_TOKEN` is set, it
+   then submits that signed archive to the Nextcloud App Store (see step 6);
+   otherwise App Store upload stays manual.
 
    If you tagged the wrong commit and nothing has been published yet, delete the
    tag locally and on Forgejo before tagging again:
@@ -140,7 +157,20 @@ permission, and add it as a second secret named `RELEASE_TOKEN`.
    git push forgejo :refs/tags/v0.2.0
    ```
 
-6. **Upload to the App Store** (manual). At
+6. **Upload to the App Store.** The App Store must already have the app
+   registered (one-time setup above). It downloads the archive over HTTPS,
+   verifies the SHA-512 signature against your certificate, and reads version
+   and compatibility from `appinfo/info.xml`.
+
+   **Automatic (opt-in).** If `APPSTORE_PUBLISH=true` and `APPSTORE_TOKEN` are
+   set, the Release workflow's final step runs
+   `scripts/publish-appstore.sh` against
+   `POST https://apps.nextcloud.com/api/v1/apps/releases` with the public
+   Forgejo asset URL
+   (`…/releases/download/vX.Y.Z/maintenance_tracker.tar.gz`) and the `.sig`
+   file. Leave the variable unset to skip this step.
+
+   **Manual UI.** At
    <https://apps.nextcloud.com/developer/apps/releases/new> enter:
 
    - **Download URL:** the link to `maintenance_tracker.tar.gz` on the Forgejo
@@ -148,8 +178,16 @@ permission, and add it as a second secret named `RELEASE_TOKEN`.
    - **Signature:** the contents of `maintenance_tracker.tar.gz.sig`;
    - leave **Nightly** unchecked.
 
-   The App Store downloads the archive, verifies the signature against your
-   certificate, and reads the version and compatibility from `appinfo/info.xml`.
+   **Manual API** (same payload the workflow uses):
+
+   ```bash
+   export APPSTORE_TOKEN='…'   # from apps.nextcloud.com account → API token
+   bash scripts/publish-appstore.sh      --download "https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/releases/download/v0.2.0/maintenance_tracker.tar.gz"      --signature build/artifacts/maintenance_tracker.tar.gz.sig
+   ```
+
+   Use `--dry-run` to print the request without submitting. Do not point the
+   download URL at a private or authentication-gated link; the App Store
+   fetches it anonymously.
 
 7. **Add the new tag to the upgrade test.** In `.forgejo/workflows/ci.yml`,
    update the `NC_UPGRADE_FROM` line so it holds the tag you just pushed plus the

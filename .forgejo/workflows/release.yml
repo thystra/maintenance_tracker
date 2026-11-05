@@ -108,3 +108,30 @@ jobs:
               -H "Authorization: token $TOKEN" -F "attachment=@$file" > /dev/null
             echo "Attached $(basename "$file")"
           done
+
+      # App Store publish is opt-in. Requires BOTH:
+      #   - repository secret APPSTORE_TOKEN (apps.nextcloud.com API token)
+      #   - repository variable APPSTORE_PUBLISH=true
+      # Leaving either unset keeps tag pushes Forgejo-only (safe default).
+      - name: Publish to the Nextcloud App Store
+        if: ${{ vars.APPSTORE_PUBLISH == 'true' }}
+        env:
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+          TAG: ${{ forgejo.ref_name }}
+          SERVER: ${{ forgejo.server_url }}
+          REPO: ${{ forgejo.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPSTORE_TOKEN:-}" ]; then
+            echo '::error::APPSTORE_PUBLISH is true but APPSTORE_TOKEN is not set. Add the App Store API token as a repository secret (separate from RELEASE_TOKEN / APP_SIGNING_KEY), or set APPSTORE_PUBLISH to false.'
+            exit 1
+          fi
+          archive=build/artifacts/maintenance_tracker.tar.gz
+          sig="$archive.sig"
+          test -f "$archive" || { echo "Missing $archive" >&2; exit 1; }
+          test -f "$sig" || { echo "Missing $sig (APP_SIGNING_KEY must be set to publish)." >&2; exit 1; }
+          # Public download URL for the Forgejo release asset just uploaded.
+          download="$SERVER/$REPO/releases/download/$TAG/$(basename "$archive")"
+          echo "Publishing $download to the App Store"
+          APPSTORE_TOKEN="$APPSTORE_TOKEN" bash scripts/publish-appstore.sh \
+            --download "$download" --signature "$sig"
