@@ -258,8 +258,11 @@ false), `fuelType`, `station` (≤255), `regimeUuid` (default: the default
 regime), `totalCost` (decimal) + optional `currency`, and `notes` (≤2000).
 
 The odometer creates a reading of source type `fuel` on `meterUuid` or on the
-item's odometer meter, so schedules see the distance; monotonic meters refuse
-a decreasing value with 400. The odometer meter is the distance meter keyed
+item's odometer meter, so schedules see the distance. When that reading would
+decrease (or break) a monotonic meter, the fill-up is still saved and the
+odometer stays on the ticket only (`meterUuid`/`readingUuid` null)—the same
+soft-skip as `POST .../fuel-odometer`—instead of returning 400. Direct meter
+readings still refuse a decrease with 400. The odometer meter is the distance meter keyed
 `odometer`, else the item's first distance meter. Since 0.1.20, when the item
 has no distance meter and `createsOdometer` is true (no `meterUuid` key in the
 body), the fill-up first creates a monotonic distance meter *Odometer* (key

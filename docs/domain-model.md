@@ -295,7 +295,9 @@ vehicle extension:
 
 Odometer meter (0.1.20)
 : A fill-up's odometer is recorded as a reading on the item's odometer meter
-  (the distance meter keyed `odometer`, else its first distance meter). When a
+  (the distance meter keyed `odometer`, else its first distance meter). If the
+  value would decrease the monotonic meter, the fill-up is kept and the
+  odometer stays on the ticket only (0.1.23; same soft-skip as linking). When a
   fuel-enabled item has no distance meter and the person logging may manage
   meters (Owner, Manager), the first fill-up creates an ordinary meter:
   *Odometer*, key `odometer` (`fuel-odometer` if that key is taken), dimension
