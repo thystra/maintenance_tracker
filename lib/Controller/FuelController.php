@@ -154,6 +154,8 @@ final class FuelController extends OCSController {
 	/**
 	 * Add a fuel ticket
 	 *
+	 * An odometer that would decrease a monotonic meter stays on the ticket only (meterUuid/readingUuid null); the fill-up is still created.
+	 *
 	 * @param string $assetUuid UUID of the item
 	 * @param array<string, mixed> $ticket Ticket fields: uuid, filledAt, odometer (+odometerUnit) or readingUuid, volume (+volumeUnit), fullFill, missedPrevious, fuelType, station, regimeUuid, totalCost, currency, notes
 	 * @param string|null $workspace UUID of the workspace; defaults to the caller's personal workspace

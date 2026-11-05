@@ -5,10 +5,10 @@
 
 <script setup lang="ts">
 // What an item has cost: totals per currency, the entries, and a dialog
-// to add one. Workspace-wide currency and tax options live in Settings.
+// to add or edit one. Workspace-wide currency and tax options live in Settings.
 import type { CostCategory, CostEntry, CostSettings, CostTotal, Vendor } from '../catalogTypes.ts'
 
-import { mdiDeleteOutline, mdiPaperclip, mdiPlus } from '@mdi/js'
+import { mdiDeleteOutline, mdiPaperclip, mdiPencilOutline, mdiPlus } from '@mdi/js'
 import { computed, onMounted, reactive, ref } from 'vue'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -22,7 +22,7 @@ import EvidencePanel from './EvidencePanel.vue'
 import SelectField from './SelectField.vue'
 import { errorMessage, formatDate, today } from '../format.ts'
 import { n, t } from '../l10n.ts'
-import { archiveCost, createCost, getAssetCosts, getVendors } from '../services/catalogApi.ts'
+import { archiveCost, createCost, getAssetCosts, getVendors, updateCost } from '../services/catalogApi.ts'
 import { can } from '../store.ts'
 
 const props = defineProps<{ assetUuid: string }>()
@@ -34,7 +34,8 @@ const vendors = ref<Vendor[]>([])
 const error = ref('')
 const formError = ref('')
 const busy = ref(false)
-const addOpen = ref(false)
+const formOpen = ref(false)
+const editing = ref<CostEntry | null>(null)
 const filesFor = ref<string | null>(null)
 const removing = ref<CostEntry | null>(null)
 const draft = reactive({ incurredOn: today(), description: '', amount: '', currency: '', lineType: 'charge' as string | null, category: 'parts' as string | null, vendorUuid: null as string | null, notes: '' })
@@ -56,6 +57,7 @@ const lineOptions = [
 	{ value: 'tax', label: t('maintenance_tracker', 'Tax') },
 ]
 const vendorOptions = computed(() => vendors.value.map((vendor) => ({ value: vendor.uuid, label: vendor.name })))
+const isEdit = computed(() => editing.value !== null)
 
 async function load(): Promise<void> {
 	try {
@@ -68,15 +70,54 @@ async function load(): Promise<void> {
 	}
 }
 
-async function openAdd(): Promise<void> {
-	Object.assign(draft, { incurredOn: today(), description: '', amount: '', currency: settings.value?.defaultCurrency ?? '', lineType: 'charge', category: 'parts', vendorUuid: null, notes: '' })
-	formError.value = ''
-	addOpen.value = true
+async function ensureVendors(): Promise<void> {
 	try {
 		vendors.value = (await getVendors()).items
 	} catch {
 		vendors.value = []
 	}
+}
+
+async function openAdd(): Promise<void> {
+	editing.value = null
+	Object.assign(draft, { incurredOn: today(), description: '', amount: '', currency: settings.value?.defaultCurrency ?? '', lineType: 'charge', category: 'parts', vendorUuid: null, notes: '' })
+	formError.value = ''
+	formOpen.value = true
+	await ensureVendors()
+}
+
+async function openEdit(entry: CostEntry): Promise<void> {
+	if (!can.manageInventory) {
+		filesFor.value = filesFor.value === entry.uuid ? null : entry.uuid
+		return
+	}
+	editing.value = entry
+	Object.assign(draft, {
+		incurredOn: entry.incurredOn,
+		description: entry.description,
+		amount: entry.amount,
+		currency: entry.currency,
+		lineType: entry.lineType,
+		category: entry.category === 'tax' ? 'other' : entry.category,
+		vendorUuid: entry.vendorUuid,
+		notes: entry.notes ?? '',
+	})
+	formError.value = ''
+	formOpen.value = true
+	await ensureVendors()
+}
+
+/**
+ * NcListItem without a `to` still renders an interactive control that can
+ * navigate the hash router to the dashboard; open the entry instead.
+ *
+ * @param entry The cost row that was activated.
+ * @param event The original click/keyboard activation.
+ */
+function activateRow(entry: CostEntry, event?: Event): void {
+	event?.preventDefault()
+	event?.stopPropagation()
+	void openEdit(entry)
 }
 
 async function save(): Promise<false | void> {
@@ -88,18 +129,26 @@ async function save(): Promise<false | void> {
 	formError.value = ''
 	try {
 		const tax = draft.lineType === 'tax'
-		await createCost(props.assetUuid, {
-			uuid: crypto.randomUUID(),
+		const payload = {
 			incurredOn: draft.incurredOn,
 			description: draft.description.trim(),
 			amount: draft.amount.trim(),
 			currency: settings.value?.multiCurrency && draft.currency.trim() !== '' ? draft.currency.trim().toUpperCase() : undefined,
-			lineType: tax ? 'tax' : 'charge',
-			category: tax ? 'tax' : (draft.category ?? 'other') as CostCategory,
+			category: (tax ? 'tax' : (draft.category ?? 'other')) as CostCategory,
 			vendorUuid: draft.vendorUuid,
 			notes: draft.notes.trim() || null,
-		})
-		addOpen.value = false
+		}
+		if (editing.value !== null) {
+			await updateCost(editing.value.uuid, editing.value.revision, payload)
+		} else {
+			await createCost(props.assetUuid, {
+				uuid: crypto.randomUUID(),
+				...payload,
+				lineType: tax ? 'tax' : 'charge',
+			})
+		}
+		formOpen.value = false
+		editing.value = null
 		await load()
 	} catch (reason) {
 		formError.value = errorMessage(reason)
@@ -129,10 +178,17 @@ async function remove(): Promise<void> {
 
 const buttons = computed(() => [
 	{ label: t('maintenance_tracker', 'Cancel'), callback: () => {
-		addOpen.value = false
+		formOpen.value = false
+		editing.value = null
 		return false
 	} },
-	{ label: t('maintenance_tracker', 'Add cost'), type: 'submit' as const, variant: 'primary' as const, disabled: busy.value, callback: () => false },
+	{
+		label: isEdit.value ? t('maintenance_tracker', 'Save') : t('maintenance_tracker', 'Add cost'),
+		type: 'submit' as const,
+		variant: 'primary' as const,
+		disabled: busy.value,
+		callback: () => false,
+	},
 ])
 
 onMounted(load)
@@ -168,7 +224,11 @@ onMounted(load)
 		</NcNoteCard>
 		<ul class="list">
 			<template v-for="entry in items" :key="entry.uuid">
-				<NcListItem :name="entry.description" :forceDisplayActions="true">
+				<NcListItem
+					:name="entry.description"
+					:forceDisplayActions="true"
+					data-test="cost-row"
+					@click="activateRow(entry, $event)">
 					<template #subname>
 						{{ [formatDate(entry.incurredOn), categoryLabels[entry.category], entry.vendorName].filter(Boolean).join(' · ') }}
 					</template>
@@ -176,6 +236,16 @@ onMounted(load)
 						<strong>{{ entry.amount }} {{ entry.currency }}</strong>
 					</template>
 					<template #actions>
+						<NcActionButton
+							v-if="can.manageInventory"
+							closeAfterClick
+							data-test="cost-edit"
+							@click="openEdit(entry)">
+							<template #icon>
+								<NcIconSvgWrapper :path="mdiPencilOutline" />
+							</template>
+							{{ t('maintenance_tracker', 'Edit') }}
+						</NcActionButton>
 						<NcActionButton closeAfterClick @click="filesFor = filesFor === entry.uuid ? null : entry.uuid">
 							<template #icon>
 								<NcIconSvgWrapper :path="mdiPaperclip" />
@@ -200,80 +270,72 @@ onMounted(load)
 		</p>
 
 		<NcDialog
-			:open="addOpen"
-			:name="t('maintenance_tracker', 'Add cost')"
+			:open="formOpen"
+			:name="isEdit ? t('maintenance_tracker', 'Edit cost') : t('maintenance_tracker', 'Add cost')"
 			:buttons="buttons"
-			isForm
-			@submit="save"
-			@update:open="addOpen = $event">
-			<div class="form-stack">
-				<NcNoteCard v-if="formError" type="error">
-					<p role="alert">
-						{{ formError }}
-					</p>
-				</NcNoteCard>
-				<NcTextField
-					v-model="draft.description"
-					:label="t('maintenance_tracker', 'Description')"
-					maxlength="255"
-					required />
+			size="normal"
+			@update:open="(open) => { formOpen = open; if (!open) editing = null }"
+			@submit="save">
+			<NcNoteCard v-if="formError" type="error">
+				<p role="alert">
+					{{ formError }}
+				</p>
+			</NcNoteCard>
+			<form class="form" @submit.prevent="save">
 				<div class="form-row">
+					<label class="field">
+						<span>{{ t('maintenance_tracker', 'Date') }}</span>
+						<input v-model="draft.incurredOn" type="date" required>
+					</label>
 					<NcTextField
 						v-model="draft.amount"
 						:label="t('maintenance_tracker', 'Amount')"
-						inputmode="decimal"
 						required />
 					<NcTextField
 						v-if="settings?.multiCurrency"
 						v-model="draft.currency"
 						:label="t('maintenance_tracker', 'Currency')"
-						maxlength="3" />
-					<label class="native-field">
-						<span>{{ t('maintenance_tracker', 'Date') }}</span>
-						<input v-model="draft.incurredOn" type="date" required>
-					</label>
+						:placeholder="settings.defaultCurrency" />
 				</div>
+				<NcTextField v-model="draft.description" :label="t('maintenance_tracker', 'Description')" required />
 				<SelectField
-					v-if="settings?.taxEnabled"
+					v-if="settings?.taxEnabled && !isEdit"
 					v-model="draft.lineType"
 					:options="lineOptions"
-					:label="t('maintenance_tracker', 'Line')" />
+					:label="t('maintenance_tracker', 'Line type')" />
 				<SelectField
 					v-if="draft.lineType !== 'tax'"
 					v-model="draft.category"
 					:options="categoryOptions"
 					:label="t('maintenance_tracker', 'Category')" />
 				<SelectField
-					v-if="vendors.length > 0"
 					v-model="draft.vendorUuid"
 					:options="vendorOptions"
-					:label="t('maintenance_tracker', 'Vendor (optional)')"
+					:label="t('maintenance_tracker', 'Vendor')"
+					:placeholder="t('maintenance_tracker', 'None')"
 					clearable />
-				<NcTextField v-model="draft.notes" :label="t('maintenance_tracker', 'Notes (optional)')" />
-			</div>
+				<NcTextField v-model="draft.notes" :label="t('maintenance_tracker', 'Notes')" />
+			</form>
 		</NcDialog>
 
 		<ConfirmDialog
 			:open="removing !== null"
 			:name="t('maintenance_tracker', 'Delete cost?')"
 			:message="t('maintenance_tracker', 'Delete the cost “{description}”?', { description: removing?.description ?? '' })"
+			:confirmLabel="t('maintenance_tracker', 'Delete')"
 			:busy="busy"
-			@update:open="removing = $event ? removing : null"
+			@update:open="(open) => { if (!open) removing = null }"
 			@confirm="remove" />
 	</div>
 </template>
 
 <style scoped>
-.panel-hint {
-	margin: 0 0 8px;
-}
-
 .panel-bar {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
-	gap: 8px;
+	gap: 12px;
 	margin-bottom: 8px;
 }
 
@@ -281,7 +343,11 @@ onMounted(load)
 	margin: 0;
 	padding: 0;
 	list-style: none;
-	font-size: 16px;
+}
+
+.panel-hint,
+.hint {
+	margin: 0 0 12px;
 }
 
 .list {
@@ -291,29 +357,29 @@ onMounted(load)
 }
 
 .files {
-	padding: 8px 16px 16px 52px;
+	margin: 0 0 8px 12px;
+	padding: 0;
+	list-style: none;
 }
 
-.hint {
-	margin-top: 12px;
-}
-
-.form-stack {
+.form {
 	display: grid;
 	gap: 12px;
-	padding-bottom: 8px;
 }
 
 .form-row {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 	gap: 12px;
-	align-items: end;
 }
 
-.native-field {
+.field {
 	display: grid;
 	gap: 4px;
+}
+
+.field input {
+	width: 100%;
 }
 
 .muted {

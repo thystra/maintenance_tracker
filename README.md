@@ -63,7 +63,9 @@ Nextcloud database and Files.
   which items a part fits), vendors with website, address, phone, e-mail and
   contact person, compatible parts per item, and portable fitment compatibility packs in JSON or a spreadsheet-
   friendly CSV/ZIP format.
-- **Costs** – a cost ledger per item with exact amounts. By default one currency
+- **Costs** – a cost ledger per item with exact amounts; open a row to edit it.
+- **About** – Settings → About shows the installed app version from the server.
+- **Next due** – for a task that has never been logged, set the next due date or meter reading from the task editor. By default one currency
   (USD) without tax lines; a workspace owner can choose the default currency and
   allow tax lines and multiple currencies. Currencies are never converted; totals
   are shown per currency.

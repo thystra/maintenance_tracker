@@ -212,8 +212,16 @@ onMounted(load)
 			</div>
 			<div v-if="preview" class="preview" aria-live="polite">
 				<p>
-					{{ t('maintenance_tracker', 'Adds {tasks} tasks, {meters} meters, {components} components and {groups} task groups.', { tasks: preview.materializes.workDefinitions, meters: preview.materializes.meters, components: preview.materializes.components, groups: preview.materializes.workGroups }) }}
+					{{ t('maintenance_tracker', 'Will add {tasks} tasks, {meters} meters, {components} components and {groups} task groups.', { tasks: preview.materializes.workDefinitions, meters: preview.materializes.meters, components: preview.materializes.components, groups: preview.materializes.workGroups }) }}
 				</p>
+				<p v-if="(preview.skipped?.length ?? 0) > 0" class="muted">
+					{{ t('maintenance_tracker', 'Already on this item and will be skipped: {count}.', { count: preview.skipped?.length ?? 0 }) }}
+				</p>
+				<ul v-if="(preview.skipped?.length ?? 0) > 0" class="muted">
+					<li v-for="skip in preview.skipped" :key="`s-${skip}`">
+						{{ skip }}
+					</li>
+				</ul>
 				<p v-if="(preview.materializes.specifications ?? 0) > 0 || (preview.materializes.fuelRegimes ?? 0) > 0">
 					{{ t('maintenance_tracker', 'Also adds {specs} specs and {regimes} fuel regimes.', { specs: preview.materializes.specifications ?? 0, regimes: preview.materializes.fuelRegimes ?? 0 }) }}
 				</p>

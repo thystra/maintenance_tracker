@@ -639,13 +639,25 @@ final class FuelService {
 		if ($meter === null) {
 			return ['odometer_value' => $value['originalValue'], 'odometer_unit' => $value['originalUnit'], 'odometer_mm' => $value['canonicalValue'], 'meter_id' => null, 'reading_id' => null];
 		}
-		$reading = $this->readings->create($context, $meter->getUuid(), [
-			'uuid' => $this->uuids->generate(),
-			'observedAt' => gmdate('Y-m-d\TH:i:s\Z', $filledAt),
-			'value' => $value['originalValue'],
-			'unit' => $value['originalUnit'],
-			'source' => ['type' => 'fuel', 'reference' => $ticketUuid],
-		]);
+		try {
+			$reading = $this->readings->create($context, $meter->getUuid(), [
+				'uuid' => $this->uuids->generate(),
+				'observedAt' => gmdate('Y-m-d\TH:i:s\Z', $filledAt),
+				'value' => $value['originalValue'],
+				'unit' => $value['originalUnit'],
+				'source' => ['type' => 'fuel', 'reference' => $ticketUuid],
+			]);
+		} catch (ValidationException $exception) {
+			// Never lower a monotonic maintenance meter silently. Keep the
+			// fill-up's odometer on the ticket only (same as linkOdometer skips).
+			if (!str_contains($exception->getMessage(), 'decrease') && !str_contains($exception->getMessage(), 'exceed a later')) {
+				throw $exception;
+			}
+			return [
+				'odometer_value' => $value['originalValue'], 'odometer_unit' => $value['originalUnit'], 'odometer_mm' => $value['canonicalValue'],
+				'meter_id' => null, 'reading_id' => null,
+			];
+		}
 		return [
 			'odometer_value' => $value['originalValue'], 'odometer_unit' => $value['originalUnit'], 'odometer_mm' => $value['canonicalValue'],
 			'meter_id' => $meter->getId(), 'reading_id' => $this->readings->find($context, (string)$reading['uuid'])->getId(),

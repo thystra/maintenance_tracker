@@ -39,6 +39,8 @@ const draft = reactive({
 	componentUuid: null as string | null,
 	groupUuid: null as string | null,
 	instructions: '',
+	nextDueOn: '',
+	nextDueMeter: '',
 })
 const error = ref('')
 const busy = ref(false)
@@ -95,6 +97,8 @@ watch(() => props.open, (open) => {
 		componentUuid: task?.componentUuid ?? null,
 		groupUuid: task?.groupUuid ?? null,
 		instructions: task?.instructions ?? '',
+		nextDueOn: task?.nextDue?.dueOn ?? '',
+		nextDueMeter: '',
 	})
 }, { immediate: true })
 
@@ -128,11 +132,32 @@ async function submit(): Promise<void> {
 	busy.value = true
 	error.value = ''
 	try {
+		const nextDue = (() => {
+			if (props.task === null || props.task === undefined || draft.repeat === 'none') {
+				return undefined
+			}
+			const dueOn = draft.nextDueOn.trim() === '' ? null : draft.nextDueOn.trim()
+			const dueValue = draft.nextDueMeter.trim() === '' ? null : draft.nextDueMeter.trim()
+			if (dueOn === null && dueValue === null) {
+				return props.task.nextDue ? null : undefined
+			}
+			const payload: { dueOn: string | null, dueValue?: string, dueUnit?: string, dueCanonicalValue?: number | null } = { dueOn }
+			if (dueValue !== null) {
+				payload.dueValue = dueValue
+				if (selectedMeter.value !== null) {
+					payload.dueUnit = selectedMeter.value.displayUnit
+				}
+			} else if (props.task.nextDue?.dueCanonicalValue !== null && props.task.nextDue?.dueCanonicalValue !== undefined) {
+				payload.dueCanonicalValue = null
+			}
+			return payload
+		})()
 		const common = {
 			title: draft.title.trim(),
 			kind: draft.kind ?? 'maintenance',
 			groupUuid: draft.groupUuid,
 			instructions: draft.instructions.trim() || null,
+			...(nextDue !== undefined ? { nextDue } : {}),
 		}
 		const saved = props.task
 			? await updateWorkDefinition(props.task.uuid, props.task.revision, isBusinessDays.value ? common : { ...common, schedule: schedule() })
@@ -209,12 +234,37 @@ const buttons = computed(() => [
 				:options="groupOptions"
 				:label="t('maintenance_tracker', 'Group (optional)')"
 				clearable />
+			<div v-if="task && draft.repeat !== 'none'" class="next-due" data-test="task-next-due">
+				<p class="muted">
+					{{ t('maintenance_tracker', 'If this task has never been logged, set when it is next due. The dashboard uses these values until the first completion is recorded.') }}
+				</p>
+				<div class="form-row">
+					<label v-if="usesTime" class="field">
+						<span>{{ t('maintenance_tracker', 'Next due date') }}</span>
+						<input v-model="draft.nextDueOn" type="date" data-test="task-next-due-date">
+					</label>
+					<NcTextField
+						v-if="usesMeter"
+						v-model="draft.nextDueMeter"
+						:label="selectedMeter ? t('maintenance_tracker', 'Next due ({unit})', { unit: selectedMeter.displayUnit }) : t('maintenance_tracker', 'Next due meter reading')"
+						inputmode="decimal" />
+				</div>
+			</div>
 			<NcTextArea v-model="draft.instructions" :label="t('maintenance_tracker', 'Instructions (optional)')" resize="vertical" />
 		</div>
 	</NcDialog>
 </template>
 
 <style scoped>
+.field {
+	display: grid;
+	gap: 4px;
+}
+
+.field input {
+	width: 100%;
+}
+
 .form-stack {
 	display: grid;
 	gap: 12px;
