@@ -59,8 +59,11 @@ final class ProfileInstallationService {
 		$v = $this->validator->validate($input);
 		$source = $this->catalog->classify($v['profile'], $v['contentHash']);
 		$conflicts = $this->conflicts($context, $asset, $v['profile']);
+		$skips = $this->setupSkips($context, $asset, $v['profile']);
+		$willAdd = $this->setupWillAdd($context, $asset, $v['profile']);
 		$warnings = [];
 		$applicable = $this->applicable($asset, $v['profile'], $warnings);
+		$notices = array_merge($this->notices($context, $asset, $v['profile']), $skips);
 		return [
 			'assetUuid' => $asset->getUuid(),
 			'profile' => $this->metadata($v['profile'], $v['contentHash'], $v['summary'], $source),
@@ -68,8 +71,9 @@ final class ProfileInstallationService {
 			'installable' => $applicable && $conflicts === [],
 			'conflicts' => $conflicts,
 			'warnings' => $warnings,
-			'notices' => $this->notices($context, $asset, $v['profile']),
-			'materializes' => $v['summary'],
+			'notices' => $notices,
+			'skipped' => $skips,
+			'materializes' => $willAdd,
 		];
 	}
 
@@ -230,17 +234,89 @@ final class ProfileInstallationService {
 
 	/** @param list<array<string,mixed>> $templates @return array<string,string> */
 	private function materializeMeters(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $templates): array {
-		$created=[];foreach($templates as $t){$row=$this->meters->create($context,$asset->getUuid(),['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'name'=>$t['name'],'dimension'=>$t['dimension'],'displayUnit'=>$t['displayUnit'],'monotonic'=>$t['monotonic']]);$created[$t['key']]=$row['uuid'];$this->bind($context,$assetProfileId,'meter',$t['key'],1,$row['uuid']);}return $created;
+		$existing = [];
+		foreach ($this->meters->list($context, $asset->getUuid()) as $row) {
+			$existing[$row['key']] = $row['uuid'];
+		}
+		$created = [];
+		foreach ($templates as $t) {
+			if (isset($existing[$t['key']])) {
+				$created[$t['key']] = $existing[$t['key']];
+				continue;
+			}
+			$row = $this->meters->create($context, $asset->getUuid(), [
+				'uuid' => $this->uuidGenerator->generate(),
+				'key' => $t['key'],
+				'name' => $t['name'],
+				'dimension' => $t['dimension'],
+				'displayUnit' => $t['displayUnit'],
+				'monotonic' => $t['monotonic'],
+			]);
+			$created[$t['key']] = $row['uuid'];
+			$this->bind($context, $assetProfileId, 'meter', $t['key'], 1, $row['uuid']);
+		}
+		return $created;
 	}
 
 	/** @param list<array<string,mixed>> $templates @return array<string,string> */
 	private function materializeGroups(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $templates): array {
-		$created=[];foreach($templates as $t){$payload=['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'name'=>$t['name'],'sortOrder'=>$t['sortOrder']];if(isset($t['description']))$payload['description']=$t['description'];$row=$this->groups->create($context,$asset->getUuid(),$payload);$created[$t['key']]=$row['uuid'];$this->bind($context,$assetProfileId,'work_group',$t['key'],1,$row['uuid']);}return $created;
+		$existing = [];
+		foreach ($this->groups->list($context, $asset->getUuid()) as $row) {
+			$existing[$row['key']] = $row['uuid'];
+		}
+		$created = [];
+		foreach ($templates as $t) {
+			if (isset($existing[$t['key']])) {
+				$created[$t['key']] = $existing[$t['key']];
+				continue;
+			}
+			$payload = ['uuid' => $this->uuidGenerator->generate(), 'key' => $t['key'], 'name' => $t['name'], 'sortOrder' => $t['sortOrder']];
+			if (isset($t['description'])) {
+				$payload['description'] = $t['description'];
+			}
+			$row = $this->groups->create($context, $asset->getUuid(), $payload);
+			$created[$t['key']] = $row['uuid'];
+			$this->bind($context, $assetProfileId, 'work_group', $t['key'], 1, $row['uuid']);
+		}
+		return $created;
 	}
 
 	/** @param list<array<string,mixed>> $templates @param array<string,list<string>> $componentUuids @param array<string,string> $meterUuids @param array<string,string> $groupUuids */
 	private function materializeDefinitions(WorkspaceContext $context, Asset $asset, ?int $assetProfileId, array $templates, array $componentUuids, array $meterUuids, array $groupUuids): array {
-		$created=[];foreach($templates as $t){$payload=['uuid'=>$this->uuidGenerator->generate(),'key'=>$t['key'],'title'=>$t['title'],'kind'=>$t['kind'],'status'=>$t['enabledByDefault']?'active':'suppressed','schedule'=>$this->runtimeSchedule($t['schedule'],$meterUuids)];if(isset($t['groupKey']))$payload['groupUuid']=$groupUuids[$t['groupKey']];if(isset($t['componentKey']))$payload['componentUuid']=$componentUuids[$t['componentKey']][0];if(isset($t['instructions']))$payload['instructions']=$t['instructions'];if(isset($t['notes']))$payload['notes']=$t['notes'];$row=$this->definitions->create($context,$asset->getUuid(),$payload);$this->bind($context,$assetProfileId,'work_definition',$t['key'],1,$row['uuid']);$created[$t['key']]=$row['uuid'];}
+		$existing = [];
+		foreach ($this->definitions->list($context, $asset->getUuid()) as $row) {
+			$existing[$row['key']] = $row['uuid'];
+		}
+		$created = [];
+		foreach ($templates as $t) {
+			if (isset($existing[$t['key']])) {
+				$created[$t['key']] = $existing[$t['key']];
+				continue;
+			}
+			$payload = [
+				'uuid' => $this->uuidGenerator->generate(),
+				'key' => $t['key'],
+				'title' => $t['title'],
+				'kind' => $t['kind'],
+				'status' => $t['enabledByDefault'] ? 'active' : 'suppressed',
+				'schedule' => $this->runtimeSchedule($t['schedule'], $meterUuids),
+			];
+			if (isset($t['groupKey'])) {
+				$payload['groupUuid'] = $groupUuids[$t['groupKey']];
+			}
+			if (isset($t['componentKey'])) {
+				$payload['componentUuid'] = $componentUuids[$t['componentKey']][0];
+			}
+			if (isset($t['instructions'])) {
+				$payload['instructions'] = $t['instructions'];
+			}
+			if (isset($t['notes'])) {
+				$payload['notes'] = $t['notes'];
+			}
+			$row = $this->definitions->create($context, $asset->getUuid(), $payload);
+			$this->bind($context, $assetProfileId, 'work_definition', $t['key'], 1, $row['uuid']);
+			$created[$t['key']] = $row['uuid'];
+		}
 		return $created;
 	}
 
@@ -354,12 +430,27 @@ final class ProfileInstallationService {
 				$this->fuel->updateSettings($context, $asset->getUuid(), 0, $fuel['settings']);
 			}
 		}
-		$hadRegimes = $this->fuel->regimes($context, $asset->getUuid()) !== [];
-		foreach ($fuel['regimes'] as $r) {
-			$row = $this->fuel->createRegime($context, $asset->getUuid(), ['uuid' => $this->uuidGenerator->generate(), 'name' => $r['name'], 'isDefault' => !$hadRegimes && $r['isDefault']]);
-			$this->bind($context, $assetProfileId, 'fuel_regime', $r['key'], 1, (string)$row['uuid']);
+		$existingNames = [];
+		foreach ($this->fuel->regimes($context, $asset->getUuid()) as $existing) {
+			$existingNames[mb_strtolower((string)$existing['name'])] = true;
 		}
-		return count($fuel['regimes']);
+		$hadRegimes = $existingNames !== [];
+		$created = 0;
+		foreach ($fuel['regimes'] as $r) {
+			if (isset($existingNames[mb_strtolower($r['name'])])) {
+				continue;
+			}
+			$row = $this->fuel->createRegime($context, $asset->getUuid(), [
+				'uuid' => $this->uuidGenerator->generate(),
+				'name' => $r['name'],
+				'isDefault' => !$hadRegimes && $r['isDefault'],
+			]);
+			$this->bind($context, $assetProfileId, 'fuel_regime', $r['key'], 1, (string)$row['uuid']);
+			$existingNames[mb_strtolower($r['name'])] = true;
+			$created++;
+			$hadRegimes = true;
+		}
+		return $created;
 	}
 
 	/** @param array<string,mixed> $profile @return list<string> */
@@ -393,19 +484,104 @@ final class ProfileInstallationService {
 	 * @param array<string,mixed> $profile
 	 * @return list<string>
 	 */
+	/**
+	 * Hard conflicts that still block install/copy. Overlapping meter, group,
+	 * work-definition and regime keys are no longer hard conflicts: they are
+	 * skipped (or reused) and reported through setupSkips()/preview.
+	 *
+	 * @param array<string,mixed> $profile
+	 * @return list<string>
+	 */
 	public function setupConflicts(WorkspaceContext $context, Asset $asset, array $profile): array {
+		return $this->partConflicts($profile['parts']);
+	}
+
+	/**
+	 * Keys already present on the asset that will be skipped on apply.
+	 *
+	 * @param array<string,mixed> $profile
+	 * @return list<string>
+	 */
+	public function setupSkips(WorkspaceContext $context, Asset $asset, array $profile): array {
 		$out = [];
 		$meterKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->meters->list($context, $asset->getUuid())), true);
 		$groupKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->groups->list($context, $asset->getUuid())), true);
 		$defKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->definitions->list($context, $asset->getUuid())), true);
-		foreach ($profile['meters'] as $i) if (isset($meterKeys[$i['key']])) $out[] = 'Meter key already exists on asset: ' . $i['key'];
-		foreach ($profile['workGroups'] as $i) if (isset($groupKeys[$i['key']])) $out[] = 'Work-group key already exists on asset: ' . $i['key'];
-		foreach ($profile['workDefinitions'] as $i) if (isset($defKeys[$i['key']])) $out[] = 'Work-definition key already exists on asset: ' . $i['key'];
+		foreach ($profile['meters'] as $i) {
+			if (isset($meterKeys[$i['key']])) {
+				$out[] = 'Meter already present, skipped: ' . $i['key'];
+			}
+		}
+		foreach ($profile['workGroups'] as $i) {
+			if (isset($groupKeys[$i['key']])) {
+				$out[] = 'Task group already present, skipped: ' . $i['key'];
+			}
+		}
+		foreach ($profile['workDefinitions'] as $i) {
+			if (isset($defKeys[$i['key']])) {
+				$out[] = 'Task already present, skipped: ' . $i['key'];
+			}
+		}
 		$regimeNames = [];
-		foreach ($this->fuel->regimes($context, $asset->getUuid()) as $r) $regimeNames[mb_strtolower((string)$r['name'])] = true;
-		foreach ($profile['fuel']['regimes'] ?? [] as $r) if (isset($regimeNames[mb_strtolower($r['name'])])) $out[] = 'Fuel regime already exists on asset: ' . $r['name'];
-		foreach ($this->partConflicts($profile['parts']) as $conflict) $out[] = $conflict;
+		foreach ($this->fuel->regimes($context, $asset->getUuid()) as $r) {
+			$regimeNames[mb_strtolower((string)$r['name'])] = true;
+		}
+		foreach ($profile['fuel']['regimes'] ?? [] as $r) {
+			if (isset($regimeNames[mb_strtolower($r['name'])])) {
+				$out[] = 'Fuel regime already present, skipped: ' . $r['name'];
+			}
+		}
 		return $out;
+	}
+
+	/**
+	 * Counts of profile rows that will actually be created (excluding skips).
+	 *
+	 * @param array<string,mixed> $profile
+	 * @return array<string,int>
+	 */
+	public function setupWillAdd(WorkspaceContext $context, Asset $asset, array $profile): array {
+		$meterKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->meters->list($context, $asset->getUuid())), true);
+		$groupKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->groups->list($context, $asset->getUuid())), true);
+		$defKeys = array_fill_keys(array_map(static fn (array $i): string => $i['key'], $this->definitions->list($context, $asset->getUuid())), true);
+		$regimeNames = [];
+		foreach ($this->fuel->regimes($context, $asset->getUuid()) as $r) {
+			$regimeNames[mb_strtolower((string)$r['name'])] = true;
+		}
+		$meters = 0;
+		foreach ($profile['meters'] as $i) {
+			if (!isset($meterKeys[$i['key']])) {
+				$meters++;
+			}
+		}
+		$groups = 0;
+		foreach ($profile['workGroups'] as $i) {
+			if (!isset($groupKeys[$i['key']])) {
+				$groups++;
+			}
+		}
+		$defs = 0;
+		foreach ($profile['workDefinitions'] as $i) {
+			if (!isset($defKeys[$i['key']])) {
+				$defs++;
+			}
+		}
+		$regimes = 0;
+		foreach ($profile['fuel']['regimes'] ?? [] as $r) {
+			if (!isset($regimeNames[mb_strtolower($r['name'])])) {
+				$regimes++;
+			}
+		}
+		return [
+			'meters' => $meters,
+			'workGroups' => $groups,
+			'workDefinitions' => $defs,
+			'components' => count($profile['components']),
+			'componentTemplates' => count($profile['components']),
+			'parts' => count($profile['parts']),
+			'specifications' => count($profile['specifications'] ?? []),
+			'fuelRegimes' => $regimes,
+		];
 	}
 
 	/** @param array<string,mixed> $profile @param list<string> $warnings */
