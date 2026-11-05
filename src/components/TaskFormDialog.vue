@@ -343,20 +343,37 @@ const buttons = computed(() => [
 						class="limit-row"
 						:data-test="'task-limit-' + index">
 						<SelectField
+							class="limit-kind"
+							wrapLabels
 							:modelValue="limit.kind"
 							:options="limitKindOptions"
 							:label="t('maintenance_tracker', 'Limit')"
 							@update:modelValue="setLimitKind(index, $event)" />
 						<template v-if="limit.kind === 'time'">
-							<NcTextField v-model="limit.every" :label="t('maintenance_tracker', 'Every')" inputmode="numeric" />
-							<SelectField v-model="limit.unit" :options="unitOptions" :label="t('maintenance_tracker', 'Unit')" />
+							<NcTextField
+								v-model="limit.every"
+								class="limit-every"
+								:label="t('maintenance_tracker', 'Every')"
+								inputmode="numeric" />
+							<SelectField
+								v-model="limit.unit"
+								class="limit-unit"
+								wrapLabels
+								:options="unitOptions"
+								:label="t('maintenance_tracker', 'Unit')" />
 						</template>
 						<template v-else>
-							<SelectField v-model="limit.meterUuid" :options="meterOptions" :label="t('maintenance_tracker', 'Meter')" />
 							<NcTextField
 								v-model="limit.meterEvery"
+								class="limit-every"
 								:label="meterEveryLabel(limit)"
 								inputmode="decimal" />
+							<SelectField
+								v-model="limit.meterUuid"
+								class="limit-unit"
+								wrapLabels
+								:options="meterOptions"
+								:label="t('maintenance_tracker', 'Meter')" />
 						</template>
 						<NcButton
 							variant="tertiary"
@@ -447,6 +464,8 @@ const buttons = computed(() => [
 }
 
 .limits {
+	container-type: inline-size;
+	min-width: 0;
 	margin: 0;
 	padding: 8px 10px 10px;
 	border: 1px dashed var(--color-border-dark);
@@ -458,18 +477,26 @@ const buttons = computed(() => [
 }
 
 .limit-row {
-	display: flex;
-	flex-wrap: wrap;
+	display: grid;
+	/* Give the descriptive Limit most of the space. Every fits six digits
+	   plus a separator and the field's padding, without widening the dialog. */
+	grid-template-columns: minmax(0, 2fr) calc(7ch + 36px) minmax(0, 1fr) auto;
 	gap: 8px;
-	align-items: flex-end;
+	align-items: end;
 	margin-bottom: 8px;
 }
 
 .limit-row > * {
-	flex: 1 1 140px;
+	min-width: 0;
 }
 
-.limit-row > .limit-remove {
-	flex: 0 0 auto;
+@container (width < 440px) {
+	.limit-row {
+		grid-template-columns: calc(7ch + 36px) minmax(0, 1fr) auto;
+	}
+
+	.limit-kind {
+		grid-column: 1 / -1;
+	}
 }
 </style>

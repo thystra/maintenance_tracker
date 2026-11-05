@@ -20,6 +20,16 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.26] - 2026-11-05
+
+### Fixed
+
+- Add/Edit task repeat limits show full Limit and meter labels in the closed
+  field and dropdown, wrapping rather than ellipsising. The Every field now
+  fits six digits plus a separator; narrow dialogs put Limit on its own line
+  and keep Every, Unit/Meter and Remove together. Scheduling semantics and
+  stored units are unchanged.
+
 ## [0.1.25] - 2026-11-05
 
 ### Changed

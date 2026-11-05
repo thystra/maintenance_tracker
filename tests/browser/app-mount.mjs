@@ -468,6 +468,107 @@ try {
 		await shot('56-item-readings-after-header-log')
 	})
 
+	await step('task repeat limit layout', async () => {
+		const timeLabel = 'Every so often (time)'
+		const meterLabel = 'By meter reading (distance, hours, uses)'
+		const firstRow = () => dialog().locator('[data-test="task-limit-0"]')
+		const kind = () => firstRow().getByLabel('Limit', { exact: true })
+		const fullLabel = async (label, expected) => {
+			if ((await label.textContent()).trim() !== expected) {
+				throw new Error(`repeat label was shortened: ${expected}`)
+			}
+			if (!await label.evaluate((element) => {
+				if (element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1) {
+					return false
+				}
+				// Ordinary fixture words such as months and Odometer should not
+				// break midword just because the empty search input takes space.
+				for (const word of element.textContent.matchAll(/\S+/g)) {
+					const range = document.createRange()
+					range.setStart(element.firstChild, word.index)
+					range.setEnd(element.firstChild, word.index + word[0].length)
+					if (range.getClientRects().length > 1) {
+						return false
+					}
+				}
+				return true
+			})) {
+				throw new Error(`repeat label was clipped or a word was split: ${expected}`)
+			}
+		}
+		const fits = async () => {
+			const failure = await firstRow().evaluate((row) => {
+				const bounds = row.getBoundingClientRect()
+				for (const child of row.children) {
+					const rect = child.getBoundingClientRect()
+					if (rect.left < bounds.left - 1 || rect.right > bounds.right + 1) {
+						return 'a repeat field overflows its row'
+					}
+				}
+				const every = row.querySelector('.limit-every input')
+				const style = getComputedStyle(every)
+				const canvas = document.createElement('canvas').getContext('2d')
+				canvas.font = style.font
+				const available = every.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+				if (canvas.measureText('100,000').width > available || every.getBoundingClientRect().width > 125) {
+					return 'Every must fit six digits and a separator without taking excess width'
+				}
+				return null
+			})
+			if (failure) {
+				throw new Error(failure)
+			}
+		}
+		await nav('Items').click()
+		await heading('Items').waitFor({ state: 'visible', timeout: 10000 })
+		await page.locator('#maintenance-main .list-item', { hasText: `Quick car ${stamp}` }).first().click()
+		await page.getByRole('tab', { name: 'Tasks', exact: true }).click()
+		await page.locator('#maintenance-main').getByRole('button', { name: 'Add task' }).click()
+		try {
+			for (const width of [1360, 390, 320]) {
+				await page.setViewportSize({ width, height: 1100 })
+				await fullLabel(firstRow().locator('.limit-kind .vs__selected .select-field__label'), timeLabel)
+				await fullLabel(firstRow().locator('.limit-unit .vs__selected .select-field__label'), 'months')
+				await fits()
+				await kind().click()
+				for (const text of [timeLabel, meterLabel]) {
+					const option = page.getByRole('option', { name: text, exact: true })
+					await option.waitFor({ state: 'visible' })
+					await fullLabel(option.locator('.select-field__label'), text)
+				}
+				await shot(`61-task-limit-options-${width}`)
+				await page.getByRole('option', { name: meterLabel, exact: true }).click()
+				await fullLabel(firstRow().locator('.limit-kind .vs__selected .select-field__label'), meterLabel)
+				await fullLabel(firstRow().locator('.limit-unit .vs__selected .select-field__label'), 'Odometer (mi)')
+				await firstRow().getByLabel('Every (mi)', { exact: true }).fill('100000')
+				await fits()
+				await shot(`62-task-meter-limit-${width}`)
+				await kind().click()
+				await page.getByRole('option', { name: timeLabel, exact: true }).click()
+			}
+			await dialog().locator('[data-test="task-limit-add"]').click()
+			await dialog().locator('[data-test="task-limit-1"]').waitFor()
+			await dialog().getByRole('button', { name: 'Remove limit 2', exact: true }).click()
+			await dialog().getByRole('button', { name: 'Cancel', exact: true }).click()
+			await page.getByRole('dialog').waitFor({ state: 'detached' })
+			await page.setViewportSize({ width: 1360, height: 1100 })
+			const task = page.locator('#maintenance-main .list-item', { hasText: `Odometer task ${stamp}` })
+			await task.getByRole('button', { name: 'Actions', exact: true }).click()
+			await page.getByRole('menuitem', { name: 'Edit', exact: true }).click()
+			await page.getByRole('dialog', { name: 'Edit task', exact: true }).waitFor()
+			await fullLabel(firstRow().locator('.limit-kind .vs__selected .select-field__label'), meterLabel)
+			await fits()
+			await shot('63-edit-task-limit')
+			await page.setViewportSize({ width: 320, height: 1100 })
+			await fits()
+			await shot('64-edit-task-limit-mobile')
+			await dialog().getByRole('button', { name: 'Cancel', exact: true }).click()
+			await page.getByRole('dialog').waitFor({ state: 'detached' })
+		} finally {
+			await page.setViewportSize({ width: 1360, height: 1100 })
+		}
+	})
+
 	await step('settings sections', async () => {
 		await nav('Settings').click()
 		await heading('Settings').waitFor({ state: 'visible', timeout: 10000 })
