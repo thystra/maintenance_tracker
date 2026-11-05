@@ -282,9 +282,19 @@ onMounted(load)
 					:helperText="t('maintenance_tracker', 'For example “Odometer” or “Engine hours”.')"
 					maxlength="255"
 					required />
-				<div class="form-row">
-					<SelectField v-model="meterDraft.dimension" :options="dimensionOptions" :label="t('maintenance_tracker', 'Measures')" />
-					<SelectField v-model="meterDraft.unit" :options="unitOptions" :label="t('maintenance_tracker', 'Unit')" />
+				<!-- Measures labels are long; keep this control full-width so
+				     NcSelect/NcEllipsisedOption can show Distance / Running time /
+				     Usage count without mid-word truncation beside Unit. -->
+				<div class="meter-type-fields">
+					<SelectField
+						v-model="meterDraft.dimension"
+						:options="dimensionOptions"
+						:label="t('maintenance_tracker', 'Measures')" />
+					<SelectField
+						v-model="meterDraft.unit"
+						:options="unitOptions"
+						:label="t('maintenance_tracker', 'Unit')"
+						class="meter-unit-field" />
 				</div>
 				<SelectField
 					v-if="components.length > 0"
@@ -360,6 +370,24 @@ td {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 	gap: 12px;
+}
+
+.meter-type-fields {
+	display: grid;
+	gap: 12px;
+	grid-template-columns: 1fr;
+}
+
+/* Wide enough for “Running time (hour meter)” beside a compact Unit column. */
+@media (min-width: 28rem) {
+	.meter-type-fields {
+		grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 7.5rem);
+		align-items: end;
+	}
+}
+
+.meter-unit-field :deep(.v-select.select) {
+	min-width: 0;
 }
 
 .native-field {

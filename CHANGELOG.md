@@ -20,6 +20,14 @@ Every change set now bumps the app version by one patch level (in
 `package-lock.json`, checked by `npm run validate:project`) and gets its own
 section below, so upgrades run new migrations. Versions are not tagged.
 
+## [0.1.24] - 2026-11-05
+
+### Fixed
+
+- Add meter dialog: the *Measures* dropdown is full-width (Unit sits beside it
+  only on wider dialogs), so labels such as “Distance (odometer)” and
+  “Running time (hour meter)” stay readable instead of truncating mid-word.
+
 ## [0.1.23] - 2026-11-05
 
 ### Added
