@@ -31,7 +31,15 @@ final class ReminderDeliveryPolicy {
 	/** @param array<string,mixed> $item */
 	public function baseline(array $item): ?string {
 		$uuid = $item['lastActivityUuid'] ?? null;
-		return is_string($uuid) && $uuid !== '' ? $uuid : null;
+		if (is_string($uuid) && $uuid !== '') {
+			return $uuid;
+		}
+		// Synthetic baseline for next-due overrides (no completion logged yet).
+		if (($item['reason'] ?? null) === 'next_due_override') {
+			$definitionUuid = $this->definitionUuid($item);
+			return $definitionUuid === null ? null : 'next-due:' . $definitionUuid;
+		}
+		return null;
 	}
 
 	/** @param array<string,mixed> $item */

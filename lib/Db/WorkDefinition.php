@@ -47,6 +47,10 @@ use OCP\DB\Types;
  * @method void setUpdatedAt(int $value)
  * @method int|null getDeletedAt()
  * @method void setDeletedAt(?int $value)
+ * @method string|null getNextDueOn()
+ * @method void setNextDueOn(?string $value)
+ * @method int|null getNextDueCanonical()
+ * @method void setNextDueCanonical(?int $value)
  */
 final class WorkDefinition extends Entity {
 	protected int $workspaceId = 0;
@@ -68,6 +72,8 @@ final class WorkDefinition extends Entity {
 	protected int $createdAt = 0;
 	protected int $updatedAt = 0;
 	protected ?int $deletedAt = null;
+	protected ?string $nextDueOn = null;
+	protected ?int $nextDueCanonical = null;
 
 	public function __construct() {
 		$this->addType('workspaceId', Types::BIGINT);
@@ -87,5 +93,7 @@ final class WorkDefinition extends Entity {
 		$this->addType('createdAt', Types::BIGINT);
 		$this->addType('updatedAt', Types::BIGINT);
 		$this->addType('deletedAt', Types::BIGINT);
+		$this->addType('nextDueOn', Types::STRING);
+		$this->addType('nextDueCanonical', Types::BIGINT);
 	}
 }

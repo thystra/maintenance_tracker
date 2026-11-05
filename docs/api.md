@@ -620,6 +620,8 @@ Business-day rules use `type: business_days`, interval unit `business_day`, and 
 
 Read, update, or archive a definition. Mutations use `expectedRevision`. Component target is immutable; schedule may be replaced explicitly on update.
 
+Since 0.1.23, `PATCH` accepts optional `nextDue` (`null` to clear, or `{ dueOn?, dueCanonicalValue?, dueValue?, dueUnit? }`) so a task with no logged completion can store when it is next due. Calendar/business-day schedules use `dueOn` (`Y-m-d`); meter schedules use `dueCanonicalValue` or display `dueValue`/`dueUnit`. The maintenance-status projection uses the override until the first linked activity is logged (then the override is cleared). Responses include `nextDue` (`null` or `{ dueOn, dueCanonicalValue }`).
+
 ## Profile installation — v0.1.9
 
 Profile installation accepts the current profile-v2 document shape only. Profile v1
@@ -667,9 +669,12 @@ profile-contract violations are rejected.
 
 Body: `{ "profile": { ... } }`. Preview revalidates the document and reports
 `applicable`, `installable`, `conflicts`, `warnings`, `notices` (since 0.1.17, for
-example fuel settings that will be left alone) and `materializes` counts without
-writing anything. Existing profile installation/profile metadata, meter/work-group/
-work-definition key collisions, and applicability mismatches are surfaced here.
+example fuel settings that will be left alone), `skipped` (since 0.1.23: meters,
+task groups, tasks and fuel regimes whose keys/names already exist on the item)
+and `materializes` counts (since 0.1.23 these counts exclude skipped keys) without
+writing anything. Existing profile installation/profile metadata and applicability
+mismatches remain hard conflicts; overlapping setup keys are skipped rather than
+blocking install.
 Since v0.1.10, profile-v2 `parts` materialize into the canonical workspace part catalog
 by manufacturer/part-number identity (an existing or archived identity is reused), each
 part key is recorded as a `part` source binding, and `compatiblePartKeys` on components

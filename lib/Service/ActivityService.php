@@ -82,6 +82,11 @@ final class ActivityService {
 			foreach ($meterInputs as $position => $meterInput) $this->meterSnapshots->append($this->buildMeterSnapshot($context, $a, $asset->getId(), $meterInput, $position));
 			$this->activityParts->appendAll($context, $a, $partInputs);
 			$this->journal->record($a->getWorkspaceId(), 'activity', $uuid, 'upsert', 1, $now);
+			foreach ($input['items'] as $itemInput) {
+				if (is_array($itemInput) && ($itemInput['definitionUuid'] ?? null) !== null) {
+					$this->definitions->clearNextDueOverrides($context, (string)$itemInput['definitionUuid']);
+				}
+			}
 			return $this->toApi($context, $a);
 		} catch (DatabaseException $e) {
 			if ($e->getReason() === DatabaseException::REASON_UNIQUE_CONSTRAINT_VIOLATION) throw new RevisionConflictException('An activity or child UUID already exists', 0, $e);
