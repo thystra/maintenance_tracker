@@ -412,12 +412,26 @@ PY2
 expect_rejected 'persisted maintenance due state' 'Maintenance due state must remain derived and must not persist mutable status rows.' "$tmp/maintenance-status-persisted.out"
 
 copy_fixture
+python3 - "$tmp/fixture/lib/Service/DueStatePolicy.php" <<'PY2'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+old="if (in_array('unknown', $states, true)) {\n\t\t\treturn 'unknown';"
+if s.count(old) != 1: raise SystemExit('combineAny unknown-state fixture marker missing or ambiguous')
+p.write_text(s.replace(old, "if (in_array('unknown', $states, true)) {\n\t\t\treturn 'upcoming';", 1))
+PY2
+expect_rejected 'unknown schedule rule reported as upcoming' 'combination:any status aggregation must prioritize overdue/due before unknown and must not falsely report upcoming with incomplete rule data.' "$tmp/maintenance-status-unknown.out"
+
+copy_fixture
 python3 - "$tmp/fixture/lib/Service/MaintenanceStatusService.php" <<'PY2'
 from pathlib import Path
 import sys
-p=Path(sys.argv[1]); s=p.read_text(); s=s.replace("if (in_array('unknown', $states, true)) {\n\t\t\treturn 'unknown';", "if (in_array('unknown', $states, true)) {\n\t\t\treturn 'upcoming';",1); p.write_text(s)
+p=Path(sys.argv[1]); s=p.read_text()
+old='return $this->policy->combineAny($states);'
+if s.count(old) != 1: raise SystemExit('combineAny delegation fixture marker missing or ambiguous')
+p.write_text(s.replace(old, "return 'upcoming';", 1))
 PY2
-expect_rejected 'unknown schedule rule reported as upcoming' 'combination:any status aggregation must prioritize overdue/due before unknown and must not falsely report upcoming with incomplete rule data.' "$tmp/maintenance-status-unknown.out"
+expect_rejected 'maintenance status bypassing the any-rule policy' 'combination:any status aggregation must prioritize overdue/due before unknown and must not falsely report upcoming with incomplete rule data.' "$tmp/maintenance-status-combine-any.out"
 
 copy_fixture
 sed -i 's#assets/{assetUuid}/maintenance-status#assets/{assetUuid}/maintenance-summary#' "$tmp/fixture/lib/Controller/MaintenanceStatusController.php"
