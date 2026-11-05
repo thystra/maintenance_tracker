@@ -28,6 +28,7 @@ import { assetClassLabel, dueText, errorMessage, forecastLabel, formatDate } fro
 import { formatEconomy } from '../fuelFormat.ts'
 import { n, t } from '../l10n.ts'
 import { getAudit, getWorkspaceForecast } from '../services/api.ts'
+import { getCapabilities } from '../services/api.ts'
 import { getFuelSummary, getFuelVehicles } from '../services/fuelApi.ts'
 import { activeWorkspace, assetName, can, childGroups, groupSubtree, loadAssets, loadGroups, loadWorkspaces, state } from '../store.ts'
 
@@ -44,6 +45,7 @@ const logDefinition = ref<string | null>(null)
 const fuelVehicles = ref<FuelVehicle[]>([])
 const fuelOpen = ref(false)
 const fuelAsset = ref<string | null>(null)
+const appVersion = ref('')
 
 const attention = computed(() => (forecast.value?.items ?? []).filter((item) => ['overdue', 'due', 'due_soon'].includes(item.state)))
 const upcoming = computed(() => (forecast.value?.items ?? []).filter((item) => item.state === 'not_due' && item.dueOn !== null && (item.remainingDays ?? 999) <= 60).slice(0, 8))
@@ -151,6 +153,11 @@ async function load(): Promise<void> {
 		} catch {
 			audit.value = []
 		}
+	}
+	try {
+		appVersion.value = (await getCapabilities()).appVersion
+	} catch {
+		appVersion.value = ''
 	}
 	loading.value = false
 }
@@ -427,6 +434,10 @@ onMounted(load)
 			v-model:open="fuelOpen"
 			:assetUuid="fuelAsset"
 			@saved="fuelSaved" />
+
+		<p v-if="appVersion" class="dashboard__version muted" data-test="dashboard-app-version">
+			{{ t('maintenance_tracker', 'Maintenance Tracker {version}', { version: appVersion }) }}
+		</p>
 	</div>
 </template>
 
@@ -528,5 +539,11 @@ a.summary__card:focus-visible {
 
 .dashboard__empty {
 	margin-top: 10vh;
+}
+
+.dashboard__version {
+	margin: 24px 0 0;
+	font-size: 13px;
+	text-align: center;
 }
 </style>

@@ -12,6 +12,7 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import PageHeader from '../components/PageHeader.vue'
 import CategoriesSettings from '../components/settings/CategoriesSettings.vue'
 import CostSettings from '../components/settings/CostSettings.vue'
+import AboutSettings from '../components/settings/AboutSettings.vue'
 import DataSettings from '../components/settings/DataSettings.vue'
 import ForecastSettings from '../components/settings/ForecastSettings.vue'
 import MembersSettings from '../components/settings/MembersSettings.vue'
@@ -29,6 +30,7 @@ const sections = [
 	{ id: 'reminders', label: t('maintenance_tracker', 'Reminders and calendar'), description: t('maintenance_tracker', 'Your notifications and calendar entries.'), component: RemindersSettings },
 	{ id: 'categories', label: t('maintenance_tracker', 'Categories'), description: t('maintenance_tracker', 'How items are grouped.'), component: CategoriesSettings },
 	{ id: 'data', label: t('maintenance_tracker', 'Export and restore'), description: t('maintenance_tracker', 'Download your data or restore a backup.'), component: DataSettings },
+	{ id: 'about', label: t('maintenance_tracker', 'About'), description: t('maintenance_tracker', 'App name, version and API details.'), component: AboutSettings },
 ]
 
 const active = computed(() => sections.find((section) => section.id === props.section) ?? sections[0]!)
