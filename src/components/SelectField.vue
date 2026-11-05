@@ -49,6 +49,22 @@ const optionLabelKey = 'label'
 <style scoped>
 .select-field {
 	width: 100%;
-	min-width: 0 !important;
+	max-width: 100%;
+	/* Allow the grid/flex parent to shrink on narrow dialogs, but do not
+	   override NcSelect’s own min-width with !important — that crushed the
+	   Measures control beside Unit to ~180px and mid-truncated options. */
+	min-width: 0;
+}
+
+.select-field :deep(.v-select.select) {
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+}
+
+/* Keep long option labels readable when the menu has room. */
+.select-field :deep(.vs__dropdown-menu) {
+	width: max(100%, max-content);
+	max-width: min(90vw, 24rem);
 }
 </style>
