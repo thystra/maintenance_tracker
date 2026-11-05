@@ -6,6 +6,10 @@
 import { access, readdir, readFile } from 'node:fs/promises'
 
 const projectUrl = 'https://forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud'
+// Public App Store / registration links use the GitHub mirror (Forgejo is not
+// open for outside accounts). Schema $id and profile provenance stay on Forgejo.
+const githubMirrorUrl = 'https://github.com/thystra/maintenance_tracker'
+const githubProfileUrl = 'https://github.com/thystra'
 const failures = []
 
 const read = async (path) => readFile(path, 'utf8')
@@ -140,13 +144,16 @@ expect(
 	'App version must match appinfo/info.xml, Application::APP_VERSION, package.json, and package-lock.json.',
 )
 expect(
-	composer.authors?.[0]?.homepage === 'https://forgejo.argentwolf.org/alan',
-	'Composer author homepage must use the Forgejo profile.',
+	composer.authors?.[0]?.homepage === githubProfileUrl,
+	'Composer author homepage must use the public GitHub profile.',
 )
-expect(info.includes(`<website>${projectUrl}</website>`), 'Nextcloud app website must use the authoritative Forgejo repository.')
-expect(info.includes(`<repository>${projectUrl}</repository>`), 'Nextcloud app repository must use the authoritative Forgejo repository.')
-expect(info.includes('<bugs>https://github.com/thystra/maintenance_tracker/issues</bugs>'), 'Nextcloud app issue URL must use the GitHub mirror issues, where bugs and support are handled.')
-expect(info.includes(`${projectUrl}/src/branch/main/docs/privacy-policy.md`) && (await read('docs/privacy-policy.md')).includes('does not receive'), 'The app description must link the privacy policy, which must state that the developer receives no data.')
+expect(info.includes(`<website>${githubMirrorUrl}</website>`), 'Nextcloud app website must use the public GitHub mirror (Forgejo is not open for outside registration).')
+expect(info.includes(`<repository>${githubMirrorUrl}</repository>`), 'Nextcloud app repository metadata must use the public GitHub mirror.')
+expect(info.includes(`<bugs>${githubMirrorUrl}/issues</bugs>`), 'Nextcloud app issue URL must use the GitHub mirror issues, where bugs and support are handled.')
+expect(info.includes(`<author homepage="${githubProfileUrl}">`), 'Nextcloud app author homepage must use the public GitHub profile.')
+expect(info.includes(`<user>${githubMirrorUrl}/blob/main/README.md</user>`), 'User documentation URL must point at the GitHub README.')
+expect(info.includes(`<admin>${githubMirrorUrl}/blob/main/README.md#configuration</admin>`), 'Admin documentation URL must point at the GitHub README configuration section.')
+expect(info.includes(`${githubMirrorUrl}/blob/main/docs/privacy-policy.md`) && (await read('docs/privacy-policy.md')).includes('does not receive'), 'The app description must link the privacy policy on GitHub, which must state that the developer receives no data.')
 expect(genericProfile.provenance?.sourceUrl === projectUrl, 'Bundled first-party profile provenance must use the authoritative repository URL.')
 expect(profileSchema.$id === `${projectUrl}/src/branch/main/schemas/profile-v1.schema.json`, 'Profile schema identity must use the authoritative Forgejo repository URL.')
 expect(profileSchemaV2.$id === `${projectUrl}/src/branch/main/schemas/profile-v2.schema.json`, 'Profile-v2 schema identity must use the authoritative Forgejo repository URL.')
