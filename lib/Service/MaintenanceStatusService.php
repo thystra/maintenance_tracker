@@ -267,17 +267,9 @@ final class MaintenanceStatusService {
 
 	/** @param list<array<string,mixed>> $rules */
 	private function aggregateState(array $rules): string {
+		/** @var list<string> $states */
 		$states = array_column($rules, 'state');
-		if (in_array('overdue', $states, true)) {
-			return 'overdue';
-		}
-		if (in_array('due', $states, true)) {
-			return 'due';
-		}
-		if (in_array('unknown', $states, true)) {
-			return 'unknown';
-		}
-		return 'upcoming';
+		return $this->policy->combineAny($states);
 	}
 
 	/** @param list<array<string,mixed>> $rules */

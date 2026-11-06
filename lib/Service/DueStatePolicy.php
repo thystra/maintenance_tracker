@@ -75,6 +75,26 @@ final class DueStatePolicy {
 		];
 	}
 
+
+	/**
+	 * OR / earliest-reached semantics for combination:any schedules: the
+	 * most urgent rule wins (overdue > due > unknown > upcoming).
+	 *
+	 * @param list<string> $states Per-rule states from calendar/meter evaluation
+	 */
+	public function combineAny(array $states): string {
+		if (in_array('overdue', $states, true)) {
+			return 'overdue';
+		}
+		if (in_array('due', $states, true)) {
+			return 'due';
+		}
+		if (in_array('unknown', $states, true)) {
+			return 'unknown';
+		}
+		return 'upcoming';
+	}
+
 	/** @return array{state:string,dueOn:string,remainingDays:int} */
 	private function dateResult(DateTimeImmutable $due, int $asOf): array {
 		$today = $this->utcDate($asOf);

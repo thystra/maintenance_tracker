@@ -129,6 +129,28 @@ final class WorkSchedulePolicyTest extends TestCase {
 		], 7, static fn (string $uuid): array => throw new \LogicException($uuid));
 	}
 
+
+	public function testNormalizesLegacyCalendarPlusMeterEitherSchedule(): void {
+		$meter = $this->meter(42, 7, 'distance');
+		$schedule = $this->policy->normalize([
+			'combination' => 'any',
+			'rules' => [
+				['type' => 'calendar', 'interval' => ['value' => 3, 'unit' => 'month']],
+				[
+					'type' => 'meter',
+					'meterUuid' => '9c7f24c0-0d3a-4c6f-9c11-0b6f3e1e5e10',
+					'interval' => ['value' => '5000', 'unit' => 'mi'],
+				],
+			],
+		], 7, static fn (string $uuid): array => $meter);
+		self::assertSame('any', $schedule['combination']);
+		self::assertCount(2, $schedule['rules']);
+		self::assertSame('calendar', $schedule['rules'][0]['type']);
+		self::assertSame('3', $schedule['rules'][0]['intervalValue']);
+		self::assertSame('meter', $schedule['rules'][1]['type']);
+		self::assertSame(5000 * 1609344, $schedule['rules'][1]['canonicalValue']);
+	}
+
 	/** @return array{id:int,assetId:int,dimension:string} */
 	private function meter(int $id, int $assetId, string $dimension): array {
 		return [
