@@ -38,6 +38,10 @@ Privacy policy: https://github.com/thystra/maintenance_tracker/blob/main/docs/pr
 	<website>https://github.com/thystra/maintenance_tracker</website>
 	<bugs>https://github.com/thystra/maintenance_tracker/issues</bugs>
 	<repository>https://github.com/thystra/maintenance_tracker</repository>
+	<screenshot>https://raw.githubusercontent.com/thystra/maintenance_tracker/main/docs/screenshots/maintenance_dashboard.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/thystra/maintenance_tracker/main/docs/screenshots/car_detail.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/thystra/maintenance_tracker/main/docs/screenshots/car_tasks.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/thystra/maintenance_tracker/main/docs/screenshots/Fuel_dashboard.png</screenshot>
 	<dependencies>
 		<php min-version="8.2" max-version="8.5" min-int-size="64"/>
 		<database>pgsql</database>
