@@ -9,6 +9,10 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Release workflow uses separate qualified Node/npm/Python and PHP toolchains,
+  verifies all packaging tools, and supports safe retries of existing version
+  tags from main without retagging. Existing release assets must match exactly.
+
 - Public App Store metadata (`website`, `repository`, documentation, privacy
   policy link, and author homepage) now points at the GitHub mirror
   ([thystra/maintenance_tracker](https://github.com/thystra/maintenance_tracker)),
