@@ -5,11 +5,11 @@
 set -euo pipefail
 case "${1:-}" in
  frontend)
-  tools=(bash node npm python3 git tar gzip cut grep awk sed mktemp rm mkdir cp chmod cat)
+  tools=(bash node npm python3 git tar gzip cut grep awk sed mktemp rm mkdir cp chmod cat dirname)
   ;;
  php)
   tools=(bash node cut php composer git tar gzip openssl curl sha256sum find touch chmod
-   mktemp rm mkdir cp dirname basename wc cat tr sed awk grep cmp)
+   mktemp rm mkdir cp dirname basename wc cat tr sed awk grep cmp head ls)
   ;;
  *) echo 'Expected frontend or php toolchain.' >&2; exit 2 ;;
 esac
