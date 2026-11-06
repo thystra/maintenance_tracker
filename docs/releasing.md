@@ -4,7 +4,9 @@ This is the step-by-step process for publishing a new version of Maintenance
 Tracker. It assumes you work in a clone of the Forgejo repository with the
 `forgejo` remote; adjust the remote name if yours is called `origin`.
 
-The version number (for example `0.2.0`) appears in three places that must agree:
+The app version (for example `0.2.0`) must agree across `appinfo/info.xml`,
+`Application::APP_VERSION`, `package.json` and both root versions in
+`package-lock.json`. In addition, each release needs:
 
 - `<version>` in `appinfo/info.xml`
 - a `## [0.2.0] - YYYY-MM-DD` section in `CHANGELOG.md`
@@ -149,13 +151,25 @@ to stay Forgejo-only.
    then submits that signed archive to the Nextcloud App Store (see step 6);
    otherwise App Store upload stays manual.
 
-   If you tagged the wrong commit and nothing has been published yet, delete the
-   tag locally and on Forgejo before tagging again:
+   **Retrying a failed release without retagging:** after a workflow repair is
+   merged, open Actions → Release → Run workflow, select branch `main`, and
+   enter the existing tag (for example `v0.1.26`). The workflow validates that
+   tag's version/changelog and main ancestry, then checks out its exact commit
+   in `release-source`. Workflow tools come from the selected main commit;
+   application bytes and archive timestamp come from the tag, not newer main.
+   Never delete, move or re-push an existing version tag to retry a job.
 
-   ```bash
-   git tag -d v0.2.0
-   git push forgejo :refs/tags/v0.2.0
-   ```
+   Manual dispatch defaults to **no App Store submission**. To submit on a
+   manual retry, explicitly enable `publish_appstore` as well as repository
+   variable `APPSTORE_PUBLISH=true`; the signing key and App Store token must
+   both exist. This dispatch still creates/resumes the public Forgejo release.
+   Existing attachments are reused only when byte-identical; mismatched assets
+   fail closed and are never deleted or replaced. If a release's application
+   bytes genuinely need to change, make a new patch version and a new tag.
+
+   For the failed `v0.1.26` toolchain run, dispatching from repaired main with
+   tag `v0.1.26` is preferred: no application version bump is necessary. A new
+   `v0.1.27` is an alternative only if intentionally releasing changed app code.
 
 6. **Upload to the App Store.** The App Store must already have the app
    registered (one-time setup above). It downloads the archive over HTTPS,
@@ -251,3 +265,21 @@ tar -xzf maintenance_tracker.tar.gz -C /path/to/nextcloud/custom_apps
 chown -R www-data:www-data /path/to/nextcloud/custom_apps/maintenance_tracker
 sudo -u www-data php occ app:enable maintenance_tracker   # or occ upgrade for an update
 ```
+
+## Release toolchain qualification
+
+The workflow deliberately separates the existing digest-pinned, qualified Node
+image (Node 24, npm and Python for frontend/validator checks) from the qualified
+PHP 8.2 image (Composer, OpenAPI, packaging and signing). The PHP image includes
+only the Node executable for Actions: it does not include npm or Python. No
+mutable image tags or package-manager bootstrap are used. Both jobs fail early
+with explicit command checks; PHP extensions and GNU tar are checked too.
+
+`tests/release-workflow-selftest.sh` tests tag/ref safety in the Node job;
+its `php` mode tests new/resumed/mismatched Forgejo assets and App Store payloads
+with a mock curl transport, never a real publisher or secret. Local qualification
+also signs a disposable archive with a throwaway key and verifies its SHA-512
+signature. This does not prove live tokens, repository permissions or App Store
+registration, which remain publication-time gates. Optional `occ` code signing
+still requires a separate certificate/Nextcloud installation and is not performed
+by this workflow.

@@ -1,67 +1,66 @@
-# Build, check, sign, and publish a release when a version tag is pushed.
-# See docs/releasing.md for the process and the secrets.
+# Trusted workflow/tools from main may release an unchanged, existing version tag.
 name: Release
-
 on:
   push:
     tags:
       - 'v*'
-
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing vMAJOR.MINOR.PATCH tag on main history (never moved)'
+        required: true
+        type: string
+      publish_appstore:
+        description: 'Also submit to the App Store (requires repository opt-in and secrets)'
+        type: boolean
+        default: false
 permissions:
-  contents: write
-
+  contents: read
 jobs:
-  release:
-    name: Release ${{ forgejo.ref_name }}
+  frontend:
+    name: Validate tagged source and frontend
     runs-on: forgejo-workstation
     timeout-minutes: 30
+    # Qualified Node 24 image already used by CI for npm/browser tooling.
     container:
-      # Same qualified PHP 8.2 + Node 24 image as the CI php job.
-      image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:d957cf0537413a4154e7c8fad4991b3489ed43cd4f4ab82cff0de355868be1a7
-
+      image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-nextcloud@sha256:3eea2dd55afb6004f7d8721a5c9e497cccc1e53ce476e997706aa9222d885d2c
+    outputs:
+      tag: ${{ steps.target.outputs.tag }}
+      version: ${{ steps.target.outputs.version }}
+      commit: ${{ steps.target.outputs.commit }}
     steps:
-      - name: Check out repository
-        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # checkout v5, Node 24
+      - name: Check out trusted workflow tools
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
+          ref: ${{ forgejo.sha }}
+          fetch-depth: 0
           persist-credentials: false
-
-      - name: Verify toolchain
+      - name: Verify Node, npm and Python toolchain
+        run: bash scripts/check-release-toolchain.sh frontend
+      - name: Resolve and validate existing release tag
+        id: target
+        env:
+          RELEASE_EVENT: ${{ forgejo.event_name }}
+          WORKFLOW_REF: ${{ forgejo.ref }}
+          RELEASE_TAG_INPUT: ${{ forgejo.event.inputs.tag }}
+        run: bash scripts/resolve-release-tag.sh
+      - name: Check out exact tagged application source
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ steps.target.outputs.commit }}
+          path: release-source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install frontend dependencies
+        working-directory: release-source
+        run: npm ci
+      - name: Run frontend checks and verify tracked bundles
+        working-directory: release-source
         run: |
           set -euo pipefail
-          test "$(node --version | cut -d. -f1)" = 'v24'
-          for tool in php composer git tar gzip openssl curl sha256sum; do command -v "$tool" >/dev/null || { echo "Missing $tool" >&2; exit 1; }; done
-          tar --version | head -1 | grep -q 'GNU tar'
-
-      - name: Check that the tag matches the app version
-        id: version
-        run: |
-          set -euo pipefail
-          tag='${{ forgejo.ref_name }}'
-          version="$(php -r 'echo (string)simplexml_load_file("appinfo/info.xml")->version;')"
-          if [ "$tag" != "v$version" ]; then
-            echo "Tag $tag does not match appinfo/info.xml version $version (expected v$version)." >&2
-            exit 1
-          fi
-          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no '## [$version]' section." >&2; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Install dependencies
-        run: |
-          set -euo pipefail
-          composer install --no-interaction --no-progress --prefer-dist
-          composer check-platform-reqs --no-dev
-          npm ci
-
-      - name: Run checks
-        run: |
-          set -euo pipefail
-          composer validate --strict
-          composer test
-          composer openapi:install --no-progress
-          composer openapi
-          git diff --exit-code -- openapi.json
           npm run validate:project
           bash tests/validate-project-selftest.sh
+          bash "$GITHUB_WORKSPACE/tests/release-workflow-selftest.sh"
           npm run validate:profiles
           npm run typecheck
           npm run lint
@@ -71,67 +70,90 @@ jobs:
           npm run build
           git diff --check
           git diff --exit-code -- js css
-
+  release:
+    name: Release ${{ needs.frontend.outputs.tag }}
+    needs: frontend
+    runs-on: forgejo-workstation
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    # This qualified PHP image has Node for JS actions, but NOT npm or Python.
+    container:
+      image: forgejo.argentwolf.org/alan/maintenance_tracker_for_nextcloud/ci-php@sha256:d957cf0537413a4154e7c8fad4991b3489ed43cd4f4ab82cff0de355868be1a7
+    steps:
+      - name: Check out trusted workflow tools
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ forgejo.sha }}
+          persist-credentials: false
+      - name: Check out exact tagged application source
+        uses: https://data.forgejo.org/actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ needs.frontend.outputs.commit }}
+          path: release-source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify PHP and all packaging/publishing tools
+        run: bash scripts/check-release-toolchain.sh php
+      - name: Install PHP dependencies and run checks
+        working-directory: release-source
+        run: |
+          set -euo pipefail
+          composer install --no-interaction --no-progress --prefer-dist
+          composer check-platform-reqs --no-dev
+          composer validate --strict
+          composer test
+          composer openapi:install --no-progress
+          composer openapi
+          git diff --exit-code -- openapi.json
+          bash "$GITHUB_WORKSPACE/tests/release-workflow-selftest.sh" php
+      - name: Check App Store prerequisites before creating any release
+        if: ${{ vars.APPSTORE_PUBLISH == 'true' && (forgejo.event_name != 'workflow_dispatch' || forgejo.event.inputs.publish_appstore == 'true') }}
+        env:
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+          APP_SIGNING_KEY_PEM: ${{ secrets.APP_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$APPSTORE_TOKEN" || { echo 'APPSTORE_TOKEN is required to publish.' >&2; exit 1; }
+          test -n "$APP_SIGNING_KEY_PEM" || { echo 'APP_SIGNING_KEY is required to publish.' >&2; exit 1; }
       - name: Build and sign the App Store archive
+        working-directory: release-source
         env:
           APP_SIGNING_KEY_PEM: ${{ secrets.APP_SIGNING_KEY }}
         run: |
           set -euo pipefail
           if [ -n "$APP_SIGNING_KEY_PEM" ]; then
             key="$(mktemp)"
-            chmod 600 "$key"; (printf '%s\n' "$APP_SIGNING_KEY_PEM" > "$key")
-            APP_SIGNING_KEY="$key" bash scripts/build-appstore.sh
-            rm -f "$key"
+            trap 'rm -f "$key"' EXIT
+            chmod 600 "$key"
+            printf '%s\n' "$APP_SIGNING_KEY_PEM" > "$key"
+            unset APP_SIGNING_KEY_PEM
+            APP_SIGNING_KEY="$key" bash "$GITHUB_WORKSPACE/scripts/build-appstore.sh"
           else
             echo '::warning::APP_SIGNING_KEY is not set; the release archive is unsigned.'
-            bash scripts/build-appstore.sh
+            bash "$GITHUB_WORKSPACE/scripts/build-appstore.sh"
           fi
           ls -l build/artifacts
-
-      - name: Create the Forgejo release
+      - name: Create or safely resume the Forgejo release
+        working-directory: release-source
         env:
           TOKEN: ${{ secrets.RELEASE_TOKEN || forgejo.token }}
           API: ${{ forgejo.server_url }}/api/v1/repos/${{ forgejo.repository }}
-          TAG: ${{ forgejo.ref_name }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          # Release notes: the CHANGELOG section for this version.
-          notes="$(awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md)"
-          case "$VERSION" in 0.*) prerelease=true ;; *) prerelease=false ;; esac
-          body="$(php -r 'echo json_encode(["tag_name" => $argv[1], "name" => $argv[1], "body" => $argv[2], "draft" => false, "prerelease" => $argv[3] === "true"]);' "$TAG" "$notes" "$prerelease")"
-          release="$(curl -sS --fail-with-body -X POST "$API/releases" \
-            -H "Authorization: token $TOKEN" -H 'Content-Type: application/json' -d "$body")"
-          id="$(printf '%s' "$release" | php -r 'echo json_decode(stream_get_contents(STDIN), true)["id"];')"
-          for file in build/artifacts/*; do
-            curl -sS --fail-with-body -X POST "$API/releases/$id/assets?name=$(basename "$file")" \
-              -H "Authorization: token $TOKEN" -F "attachment=@$file" > /dev/null
-            echo "Attached $(basename "$file")"
-          done
-
-      # App Store publish is opt-in. Requires BOTH:
-      #   - repository secret APPSTORE_TOKEN (apps.nextcloud.com API token)
-      #   - repository variable APPSTORE_PUBLISH=true
-      # Leaving either unset keeps tag pushes Forgejo-only (safe default).
+          TAG: ${{ needs.frontend.outputs.tag }}
+          VERSION: ${{ needs.frontend.outputs.version }}
+        run: bash "$GITHUB_WORKSPACE/scripts/publish-forgejo-release.sh"
       - name: Publish to the Nextcloud App Store
-        if: ${{ vars.APPSTORE_PUBLISH == 'true' }}
+        if: ${{ vars.APPSTORE_PUBLISH == 'true' && (forgejo.event_name != 'workflow_dispatch' || forgejo.event.inputs.publish_appstore == 'true') }}
+        working-directory: release-source
         env:
           APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
-          TAG: ${{ forgejo.ref_name }}
+          TAG: ${{ needs.frontend.outputs.tag }}
           SERVER: ${{ forgejo.server_url }}
           REPO: ${{ forgejo.repository }}
         run: |
           set -euo pipefail
-          if [ -z "${APPSTORE_TOKEN:-}" ]; then
-            echo '::error::APPSTORE_PUBLISH is true but APPSTORE_TOKEN is not set. Add the App Store API token as a repository secret (separate from RELEASE_TOKEN / APP_SIGNING_KEY), or set APPSTORE_PUBLISH to false.'
-            exit 1
-          fi
           archive=build/artifacts/maintenance_tracker.tar.gz
           sig="$archive.sig"
-          test -f "$archive" || { echo "Missing $archive" >&2; exit 1; }
-          test -f "$sig" || { echo "Missing $sig (APP_SIGNING_KEY must be set to publish)." >&2; exit 1; }
-          # Public download URL for the Forgejo release asset just uploaded.
+          test -f "$archive" && test -f "$sig"
           download="$SERVER/$REPO/releases/download/$TAG/$(basename "$archive")"
-          echo "Publishing $download to the App Store"
-          APPSTORE_TOKEN="$APPSTORE_TOKEN" bash scripts/publish-appstore.sh \
-            --download "$download" --signature "$sig"
+          bash "$GITHUB_WORKSPACE/scripts/publish-appstore.sh" --download "$download" --signature "$sig"
