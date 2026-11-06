@@ -79,6 +79,14 @@ const optionLabelKey = 'label'
 	max-width: min(90vw, 24rem);
 }
 
+/* NcSelect's root is .v-select.select, not a descendant of this wrapper.
+   Only the wrapped task-grid controls opt out of its 260px minimum; leave
+   the meter dialog's default sizing from main unchanged. The extra root
+   specificity also wins when Nextcloud loads its component CSS later. */
+.select-field--wrap.v-select.select {
+	min-width: 0;
+}
+
 .select-field__label {
 	display: block;
 	min-width: 0;

@@ -502,7 +502,7 @@ try {
 				for (const child of row.children) {
 					const rect = child.getBoundingClientRect()
 					if (rect.left < bounds.left - 1 || rect.right > bounds.right + 1) {
-						return 'a repeat field overflows its row'
+						return `a repeat field overflows its row: ${child.className}; min-width ${getComputedStyle(child).minWidth}; field ${rect.width}px, row ${bounds.width}px`
 					}
 				}
 				const every = row.querySelector('.limit-every input')
