@@ -40,6 +40,14 @@ section below, so upgrades run new migrations. Versions are not tagged.
   the dialog no longer hides that behind a single Repeat choice. Business-day
   schedules stay read-only as before.
 
+## [0.1.24] - 2026-11-05
+
+### Fixed
+
+- Add meter dialog: the *Measures* dropdown is full-width (Unit sits beside it
+  only on wider dialogs), so labels such as “Distance (odometer)” and
+  “Running time (hour meter)” stay readable instead of truncating mid-word.
+
 ## [0.1.23] - 2026-11-05
 
 ### Added
