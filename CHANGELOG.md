@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- App Store screenshot gallery for the maintenance dashboard, item overview,
+  repeat-limit tasks, and fuel tracking, using the public GitHub image URLs.
+
 ### Fixed
 
 - npm production advisory audit: bump vite to ^7.3.7 (lockfile 7.3.8) and
@@ -26,7 +31,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
   policy link, and author homepage) now points at the GitHub mirror
   ([thystra/maintenance_tracker](https://github.com/thystra/maintenance_tracker)),
   because Forgejo is not open for outside registration. Bug reports were
-  already on GitHub. Screenshots are not included yet.
+  already on GitHub.
 
 Every change set now bumps the app version by one patch level (in
 `appinfo/info.xml`, `Application::APP_VERSION`, `package.json` and
