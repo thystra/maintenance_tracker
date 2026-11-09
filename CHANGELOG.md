@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- npm production advisory audit: bump vite to ^7.3.7 (lockfile 7.3.8) and
+  override transitive follow-redirects to 1.16.3 so scheduled
+  `npm audit --omit=dev --audit-level=high` passes (GHSA-q3jh-wrc6-jgq8,
+  GHSA-8r9p-f939-6h3c, GHSA-mrwp-f3q8-3g9p, GHSA-587h-7wmj-h5pm and related
+  vite/launch-editor advisories). Left the moderate webdav/minimatch chain
+  alone (force-fix would break @nextcloud/dialogs).
+
 ### Changed
 
 - Release workflow uses separate qualified Node/npm/Python and PHP toolchains,
