@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Every change set now bumps the app version by one patch level (in
+`appinfo/info.xml`, `Application::APP_VERSION`, `package.json` and
+`package-lock.json`, checked by `npm run validate:project`) and gets its own
+section below, so upgrades run new migrations. Versions are not tagged.
+
+## [0.1.27] - 2026-11-09
+
 ### Added
 
 - App Store screenshot gallery for the maintenance dashboard, item overview,
@@ -32,11 +39,6 @@ and this project uses [Semantic Versioning](https://semver.org/).
   ([thystra/maintenance_tracker](https://github.com/thystra/maintenance_tracker)),
   because Forgejo is not open for outside registration. Bug reports were
   already on GitHub.
-
-Every change set now bumps the app version by one patch level (in
-`appinfo/info.xml`, `Application::APP_VERSION`, `package.json` and
-`package-lock.json`, checked by `npm run validate:project`) and gets its own
-section below, so upgrades run new migrations. Versions are not tagged.
 
 ## [0.1.26] - 2026-11-05
 

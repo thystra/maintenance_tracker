@@ -26,7 +26,7 @@ and the interface is English only for now.
 
 Privacy policy: https://github.com/thystra/maintenance_tracker/blob/main/docs/privacy-policy.md
 	]]></description>
-	<version>0.1.26</version>
+	<version>0.1.27</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://github.com/thystra">Alan Johnson</author>
 	<namespace>MaintenanceTracker</namespace>
